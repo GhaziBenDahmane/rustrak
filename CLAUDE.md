@@ -1,25 +1,31 @@
 # Rustrak
 
 Self-hosted error tracking, compatible with Sentry SDKs. A Rust API server with
-a small memory footprint, and an optional Next.js dashboard that can be deployed
-separately or not at all.
+a small memory footprint, which also hands out an optional dashboard compiled
+to static files.
 
 ```
 Sentry SDK  ──▶  Rustrak server  ──▶  PostgreSQL
 (any app)        (Rust/Actix-web)
-                       ▲
-                       │
-                 Rustrak dashboard (optional)
+                  serves /api and, if
+                  one was built, / too
 ```
 
-The split is the point: deploy only the server and connect any Sentry SDK to it.
+**One process and one image.** The dashboard is a Vite SPA compiled into
+`apps/server/static`; the same Actix instance that answers `/api/projects`
+answers `/`. That puts the browser and the API on one origin, which is what
+keeps the session cookie first-party and removes CORS from the dashboard's path.
+
+It stays optional, and that is still the point: an image built with no
+dashboard serves the API and nothing else, and `cargo build` works for anyone
+who never installs Node.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `apps/server` | Rust API server. The product. |
-| `apps/webview-ui` | Next.js dashboard |
+| `apps/dashboard` | `@rustrak/dashboard`, the SPA the server serves |
 | `apps/docs` | Public documentation site (Nextra) |
 | `packages/ui` | `@rustrak/ui`, the design system. Storybook only for now |
 | `packages/client` | `@rustrak/client`, the TypeScript API client |
@@ -54,16 +60,13 @@ CREATE_SUPERUSER="admin@example.com:password" cargo run
 - Rust goes through `rustfmt` and `clippy`. TypeScript through Biome.
 - Commit messages are conventional and in English: `type: description`.
 - Tests come with the change, not after it.
-- `next>@swc/helpers` is pinned to `0.5.15` in the root `pnpm.overrides`.
-  Next 16.3.1 ships `@swc/helpers@0.5.23`, whose `module-sync` exports
-  condition makes `require()` on Node >= 22.10 resolve to `esm/` files that
-  Next's standalone trace never copies, crash-looping the dashboard image
-  (vercel/next.js#93852). Remove the override once Next traces the `esm/`
-  dir; verify by booting `.next/standalone/apps/webview-ui/server.js`.
+- `scripts/bundle-dashboard.sh` is the seam between the two build systems: the
+  dashboard owns `dist/`, the server owns `static/`, and the script copies one
+  to the other. A missing build is not an error anywhere in that chain.
 
 ## Versioning
 
-`@rustrak/server`, `webview-ui`, `@rustrak/client` and `@rustrak/mcp` are a
+`@rustrak/server`, `@rustrak/dashboard`, `@rustrak/client` and `@rustrak/mcp` are a
 `fixed` group in `.changeset/config.json`. They always share one number, even
 when a package has no changes, because that number identifies the **Rustrak
 release** rather than the semver of any single artifact. It is what lets someone

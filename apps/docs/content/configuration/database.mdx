@@ -48,16 +48,6 @@ services:
       - CREATE_SUPERUSER=${CREATE_SUPERUSER}
     restart: unless-stopped
 
-  ui:
-    image: rustrak/rustrak-ui:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - RUSTRAK_API_URL=http://server:8080
-    depends_on:
-      - server
-    restart: unless-stopped
-
 volumes:
   rustrak_data:
 ```
@@ -154,16 +144,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
-
-  ui:
-    image: rustrak/rustrak-ui:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - RUSTRAK_API_URL=http://server:8080
-    depends_on:
-      - server
     restart: unless-stopped
 
 volumes:

@@ -62,14 +62,6 @@ services:
       - CREATE_SUPERUSER=${CREATE_SUPERUSER}
     restart: unless-stopped
 
-  ui:
-    image: rustrak/rustrak-ui:latest
-    ports: ["3000:3000"]
-    environment:
-      - RUSTRAK_API_URL=http://server:8080
-    depends_on: [server]
-    restart: unless-stopped
-
 volumes:
   rustrak_data:
 ```
@@ -80,7 +72,9 @@ export CREATE_SUPERUSER=admin@example.com:changeme123
 docker compose up -d
 ```
 
-Open <http://localhost:3000> and sign in with those credentials.
+Open <http://localhost:8080> and sign in with those credentials. One container
+answers both the dashboard and the API, so there is no second image, no second
+port, and no address to tell one half about the other.
 
 Running at scale? Use the `:postgres` tag and set `DATABASE_URL`. The
 [installation guide](https://rustrak.github.io/rustrak/getting-started/installation)

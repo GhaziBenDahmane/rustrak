@@ -70,16 +70,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  ui:
-    image: rustrak/rustrak-ui:latest
-    ports:
-      - "${UI_PORT:-3000}:3000"
-    environment:
-      - RUSTRAK_API_URL=${RUSTRAK_API_URL}
-    depends_on:
-      - server
-    restart: unless-stopped
-
 volumes:
   postgres_data:
 ```
@@ -89,8 +79,7 @@ volumes:
 | Service | Description |
 |---------|-------------|
 | `postgres` | PostgreSQL 16 database with persistent storage. Includes a healthcheck to ensure it's ready before the server starts. |
-| `server` | The Rustrak API server (Rust/Actix-web). Handles event ingestion and API requests. Uses ~50MB RAM. |
-| `ui` | The Rustrak dashboard (Next.js). |
+| `server` | The Rustrak API server (Rust/Actix-web). Handles event ingestion, API requests, **and the dashboard** — the same process answers `/` and `/api`. Uses ~50MB RAM. |
 
 ### 2. Configure environment variables
 
@@ -120,19 +109,16 @@ SESSION_SECRET_KEY=generate-your-own-with-openssl-rand-hex-32
 # Admin user (required) - format: email:password
 CREATE_SUPERUSER=admin@example.com:changeme123
 
-# ===================
-# Dashboard
-# ===================
-UI_PORT=3000
-# The dashboard reaches the server from inside its own container, so this is
-# the internal address and stays internal behind a proxy.
-RUSTRAK_API_URL=http://server:8080
 ```
 
+> **The dashboard needs no configuration.** It is compiled into the server
+> image and served from `/`, so the browser talks to the same origin the API
+> answers on. There is no API address to tell it about and no second port to
+> open.
+
 > **Reverse proxy?** Behind Traefik, nginx or Caddy you can delete the `ports`
-> blocks from `server` and `ui` entirely and let the proxy reach the containers
-> on the Docker network. Set `PUBLIC_URL` to your public host and leave
-> `RUSTRAK_API_URL` internal. See
+> block from `server` entirely and let the proxy reach the container on the
+> Docker network. Set `PUBLIC_URL` to your public host. See
 > [Reverse proxy](/configuration/production#reverse-proxy).
 
 To generate a secure session secret:
@@ -149,14 +135,15 @@ docker compose up -d
 
 This starts:
 - PostgreSQL on port 5432
-- Rustrak Server on port 8080
-- Rustrak Dashboard on port 3000
+- Rustrak Server on port 8080, answering both the API and the dashboard
 
-Open [http://localhost:3000](http://localhost:3000) and log in with the credentials you set in `CREATE_SUPERUSER`.
+Open [http://localhost:8080](http://localhost:8080) and log in with the credentials you set in `CREATE_SUPERUSER`.
 
 ## Server only (recommended for production)
 
-For production, you often want minimal resource usage on your server. Run only the Rustrak server and access the dashboard from your laptop or deploy it separately on Vercel.
+For production, you often want minimal resource usage on your server. One
+container is the whole install: it ingests events, answers the API, and hands
+out the dashboard.
 
 ### On your server
 
@@ -185,25 +172,19 @@ docker run -d \
   rustrak/rustrak-server:postgres
 ```
 
-The server uses **~50MB RAM** and handles all error ingestion and API requests.
+The server uses **~50MB RAM** and handles all error ingestion, API requests and
+the dashboard.
 
 ### Access the dashboard
 
-**Option A: Self-host the dashboard**
+Open the server's own address — `http://localhost:8080`, or whatever
+`PUBLIC_URL` points at. The dashboard is compiled into the image and served
+from `/`, so nothing else has to run and nothing has to be configured.
 
-```bash
-docker run -d \
-  --name rustrak-ui \
-  -p 3000:3000 \
-  -e RUSTRAK_API_URL="https://your-server.com" \
-  rustrak/rustrak-ui:latest
-```
-
-**Option B: Deploy to Vercel (free)**
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/AbianS/rustrak/tree/main/apps/webview-ui)
-
-Set `RUSTRAK_API_URL` to your server URL in Vercel's environment variables.
+**API-only deployments still work.** The dashboard is mounted only when a build
+is present in the image, so a server built without one answers the API and
+returns a plain JSON 404 for `/`. Point any Sentry SDK at it and never deploy a
+UI — that has always been the premise, and it has not changed.
 
 ## User management
 
@@ -220,7 +201,7 @@ The format is `email:password`. This only creates the user if no users exist in 
 
 ## Verify the installation
 
-1. Open the dashboard (localhost:3000 or your Vercel URL)
+1. Open the dashboard (localhost:8080, or your `PUBLIC_URL`)
 2. Log in with your admin credentials
 3. You should see an empty project list
 

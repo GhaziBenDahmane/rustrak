@@ -14,6 +14,10 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # One service, and one image: the dashboard is compiled into static files
+  # that this same process hands out at `/`, so there is no second container
+  # and no second origin. It is still optional — an image built without the
+  # dashboard serves the API and nothing else.
   server:
     image: rustrak/rustrak-server:latest
     # Behind a reverse proxy on the same Docker network, delete this `ports`
@@ -36,20 +40,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
-
-  ui:
-    image: rustrak/rustrak-ui:latest
-    # Same as the server: delete this `ports` block when a reverse proxy routes
-    # to the container directly.
-    ports:
-      - "${UI_PORT:-3000}:3000"
-    environment:
-      # Always the internal address of the server, never the public one: this
-      # request never leaves the Docker network.
-      - RUSTRAK_API_URL=${RUSTRAK_API_URL}
-    depends_on:
-      - server
     restart: unless-stopped
 
 volumes:
