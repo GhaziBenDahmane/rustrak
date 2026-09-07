@@ -18,6 +18,15 @@ import {
   CardTitle,
 } from '@/shared/ui/components/shadcn/card';
 
+/** The release from the path, or `null` if it is not a decodable one. */
+function decodeRelease(raw: string): string | null {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
 export const Route = createFileRoute(
   '/_authenticated/projects/$id/releases/$release',
 )({
@@ -26,7 +35,13 @@ export const Route = createFileRoute(
   }),
   loader: async ({ params }) => {
     const projectId = Number.parseInt(params.id, 10);
-    const releaseVersion = decodeURIComponent(params.release);
+    const releaseVersion = decodeRelease(params.release);
+
+    // A malformed escape is not a release this instance has ever seen, so it
+    // is the same answer as one that was never reported. `decodeURIComponent`
+    // throws `URIError` on `%zz`, and letting that reach the router turns a
+    // wrong address into the application-error screen.
+    if (releaseVersion === null) throw notFound();
 
     // Started here, awaited below. It is kept *out* of `loadAll` because the
     // page does not need it: the environment cards are the release's real
@@ -49,20 +64,24 @@ export const Route = createFileRoute(
       getAllReleaseHealthRows(projectId, releaseVersion),
     ]);
 
+    // Both early exits drain the in-flight request above, so a transport-level
+    // failure on a promise nothing is waiting for cannot surface as an
+    // unhandled rejection.
     if (!loaded.success) {
-      // The in-flight request above has no consumer now. Take its rejection so
-      // a transport-level failure cannot surface as an unhandled rejection.
       void newIssuesPromise.catch(() => undefined);
       return { loaded, newIssues: null, releaseVersion };
     }
 
-    const newIssues = await newIssuesPromise;
-
     // No health rows at all means the release in the URL was never reported.
-    // Distinct from the failure above, which is why the check stays after it.
+    // Distinct from the failure above, which is why the check stays after it —
+    // and before the second await, so a wrong address does not wait on a
+    // request whose answer it will not use.
     if (loaded.data[1].length === 0) {
+      void newIssuesPromise.catch(() => undefined);
       throw notFound();
     }
+
+    const newIssues = await newIssuesPromise;
 
     return { loaded, newIssues, releaseVersion };
   },

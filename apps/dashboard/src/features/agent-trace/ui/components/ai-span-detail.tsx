@@ -190,7 +190,7 @@ function asText(value: unknown): string | null {
  * `netNewInput` rather than raw input: a cache read is not a prompt the model
  * processed, and adding the two would report a number the bill does not match.
  */
-async function TokenBreakdownList({
+function TokenBreakdownList({
   tokens,
 }: {
   tokens: NonNullable<ReturnType<typeof tokenBreakdown>>;
@@ -223,7 +223,7 @@ async function TokenBreakdownList({
 }
 
 /** What the model answered: free text, a structured object, tool calls. */
-async function OutputSection({
+function OutputSection({
   output,
 }: {
   output: NonNullable<ReturnType<typeof aiOutput>>;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { updatePreferences } from '@/features/user/api/mutations';
-import { useRouter } from '@/shared/ui/hooks/use-router';
+import { intl } from '@/shared/i18n/intl';
 
 /**
  * Adopts the browser's timezone onto the account, once, for a reader who has
@@ -14,8 +14,10 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
  *
  * Sentry has the same problem and solves it in the browser, because their
  * frontend renders there: `timezoneProvider.tsx` falls back to
- * `Intl.DateTimeFormat().resolvedOptions().timeZone` at render time. Ours
- * renders on the server, so the value has to be sent once and stored.
+ * `Intl.DateTimeFormat().resolvedOptions().timeZone` at render time. This
+ * dashboard renders there too now, but it still *stores* the answer rather
+ * than inferring it per render, because the zone is also what the server
+ * formats alert emails and notification links in.
  *
  * **Once, and only when unset.** `hasTimeZone` is what the server already knows
  * about this user; when it is true this component does nothing and never
@@ -28,7 +30,6 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
  * writes for the same value.
  */
 export function TimeZoneSync({ hasTimeZone }: { hasTimeZone: boolean }) {
-  const router = useRouter();
   const attempted = useRef(false);
 
   useEffect(() => {
@@ -43,14 +44,18 @@ export function TimeZoneSync({ hasTimeZone }: { hasTimeZone: boolean }) {
     }
     if (!zone) return;
 
-    updatePreferences({ timezone: zone }).then((result) => {
+    void updatePreferences({ timezone: zone }).then((result) => {
       // Silent on failure, deliberately. This runs unprompted on someone
       // else's screen; a toast about a preference they never touched would be
       // noise, and the only cost of failing is that timestamps stay in UTC
       // until the next page load tries again.
-      if (result.success) router.refresh();
+      //
+      // `intl.reload()` rather than `router.refresh()`: nothing a loader
+      // fetched depends on the zone, only the formatters do, and they read it
+      // from the snapshot this republishes.
+      if (result.success) void intl.reload();
     });
-  }, [hasTimeZone, router]);
+  }, [hasTimeZone]);
 
   return null;
 }

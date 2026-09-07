@@ -4,6 +4,7 @@ import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
 import { useEffect } from 'react';
 import { useTranslations } from 'use-intl';
 import { Header } from '@/features/user/ui/components/header';
+import { TimeZoneSync } from '@/features/user/ui/components/time-zone-sync';
 import { session } from '@/shared/api/session';
 import { Link } from '@/shared/ui/components/link';
 import { OutageScreen } from '@/shared/ui/components/outage-screen';
@@ -58,6 +59,11 @@ function AuthenticatedLayout() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Renders nothing. Adopts the browser's timezone onto the account the
+          first time a reader arrives without one; see the component. It sits
+          here rather than above the router because it needs a session, and
+          this is the first place there is guaranteed to be one. */}
+      <TimeZoneSync hasTimeZone={Boolean(answer.user.timezone)} />
       <Header user={answer.user} commandBar={<CommandBarSlot />} />
       <main className="flex-1">
         <Outlet />
