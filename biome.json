@@ -21,7 +21,8 @@
       "!**/.turbo",
       "!**/playwright-report",
       "!**/test-results",
-      "!**/src-tauri"
+      "!**/src-tauri",
+      "!apps/dashboard/src/routeTree.gen.ts"
     ]
   },
   "formatter": {
@@ -35,7 +36,8 @@
       "!**/.turbo",
       "!**/playwright-report",
       "!**/test-results",
-      "!**/src-tauri"
+      "!**/src-tauri",
+      "!apps/dashboard/src/routeTree.gen.ts"
     ],
     "enabled": true,
     "formatWithErrors": false,
@@ -123,10 +125,23 @@
       "!**/.turbo",
       "!**/playwright-report",
       "!**/test-results",
-      "!**/src-tauri"
+      "!**/src-tauri",
+      "!apps/dashboard/src/routeTree.gen.ts"
     ]
   },
   "overrides": [
+    {
+      "includes": [
+        "apps/dashboard/src/routes/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": "off"
+          }
+        }
+      }
+    },
     {
       "includes": [
         "**/src/shared/ui/components/shadcn/**"
