@@ -150,7 +150,6 @@ jobs:
             echo '```'
             echo "rustrak/rustrak-server:v$VERSION"
             echo "rustrak/rustrak-server:v$VERSION-postgres"
-            echo "rustrak/rustrak-ui:v$VERSION"
             echo '```'
             echo
             echo "\`@rustrak/client@$VERSION\` and \`@rustrak/mcp@$VERSION\` on npm."
