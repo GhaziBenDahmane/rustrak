@@ -54,7 +54,7 @@ export function LoadFailure({
     // Cleared first: the guard on the way back in must not read the session
     // this very response just disproved and wave the visitor through.
     session.clear();
-    router.replace('/auth/login');
+    router.replace('/login');
   }, [expired, router]);
 
   if (expired) return null;

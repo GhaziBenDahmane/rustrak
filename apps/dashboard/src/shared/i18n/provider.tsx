@@ -8,7 +8,7 @@ import { intl } from './intl';
  * **One provider, not two.** Under Next there were two, and the split was
  * worth it: `NextIntlClientProvider` serialises whatever it is given into the
  * RSC payload of every page under it, so handing all 30 namespaces to
- * `/auth/login` made the one page a visitor sees before they are anyone a
+ * `/login` made the one page a visitor sees before they are anyone a
  * 113KB document carrying the copy for source-map cleanup. There is no RSC
  * payload here. The catalogue is one lazily-imported chunk that the browser
  * fetches once and caches, so a second provider would split a cost that is no

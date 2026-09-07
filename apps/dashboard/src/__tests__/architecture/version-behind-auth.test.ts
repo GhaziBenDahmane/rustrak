@@ -12,7 +12,7 @@ import { isTestFile, withoutComments } from './predicates';
  * straight back onto the login screen the next time someone wants a footer.
  *
  * **The boundary is `routes/_authenticated/`, because that is where the gate
- * is.** `_authenticated.tsx` redirects an anonymous session to `/auth/login` in
+ * is.** `_authenticated.tsx` redirects an anonymous session to `/login` in
  * `beforeLoad`, before it renders any child, so a page below it has a user by
  * construction. Everything else in `routes/` -- the login, the invitation --
  * is reachable with no session at all, and so is every component in `shared/`

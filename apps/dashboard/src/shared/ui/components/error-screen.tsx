@@ -6,7 +6,7 @@ import { RustrakWordmark } from '@/shared/ui/components/rustrak-wordmark';
 /**
  * The full-viewport failure screen.
  *
- * Deliberately the same shape as `/auth/login`: brand panel on the left,
+ * Deliberately the same shape as `/login`: brand panel on the left,
  * content on the right against `bg-card`. Both are pages the user meets with
  * no header and no navigation, so they are the two places the app has to
  * introduce itself rather than assume the chrome already did.

@@ -19,7 +19,7 @@ export const Route = createFileRoute('/')({
     const answer = await session.ensure();
 
     if (answer.state === 'anonymous') {
-      throw redirect({ to: '/auth/login' });
+      throw redirect({ to: '/login' });
     }
 
     if (answer.state === 'authenticated') {

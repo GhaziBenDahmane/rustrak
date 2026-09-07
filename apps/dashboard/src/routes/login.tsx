@@ -5,7 +5,21 @@ import { Link } from '@/shared/ui/components/link';
 import { RustrakWordmark } from '@/shared/ui/components/rustrak-wordmark';
 import { LoginForm } from './-components/login-form';
 
-export const Route = createFileRoute('/auth/login')({
+/**
+ * `/login`, where the Next app had `/auth/login`.
+ *
+ * **The one address this migration changes, and it had to.** `/auth` is the
+ * API's namespace — `/auth/me`, `/auth/login` as a POST — and now that the
+ * page and the API answer on the same origin, a page at `/auth/login` would be
+ * a GET the API scope claims and has no handler for. `routes::dashboard` keeps
+ * the five API prefixes for the server precisely so that a mistyped endpoint
+ * stays a JSON answer rather than becoming HTML, and carving a hole in that
+ * list for one page would give up the property for every other path under it.
+ *
+ * Nothing else moved: `/projects`, `/settings/...`, `/invite/<token>` and every
+ * project route are the addresses they were.
+ */
+export const Route = createFileRoute('/login')({
   head: () => {
     const t = translator('auth');
     return {

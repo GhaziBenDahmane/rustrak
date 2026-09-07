@@ -38,7 +38,7 @@ export const Route = createFileRoute('/_authenticated')({
       // rather than an omission: signing in lands on `/`, which sends the
       // reader to `/projects`. Carrying the intended destination through the
       // login page is a feature this port is not the place to add.
-      throw redirect({ to: '/auth/login' });
+      throw redirect({ to: '/login' });
     }
 
     return answer;

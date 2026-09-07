@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useTranslations } from 'use-intl';
 import { ErrorScreen } from '@/shared/ui/components/error-screen';
 import { Link } from '@/shared/ui/components/link';
@@ -20,6 +21,21 @@ import { Button } from '@/shared/ui/components/shadcn/button';
  */
 export function NotFoundScreen() {
   const t = useTranslations('errors');
+  const title = t('notFound.meta.title');
+
+  // The tab has to say this too, and a route's `head` cannot: a 404 is the
+  // absence of a route match, so there is nothing for the router to resolve a
+  // title from. Next set it from `not-found.tsx`'s own `generateMetadata` for
+  // the same reason, and it replaced the page's title exactly as this does —
+  // including when `LoadFailure` renders this screen in place of a record that
+  // is gone.
+  useEffect(() => {
+    const previous = document.title;
+    document.title = title;
+    return () => {
+      document.title = previous;
+    };
+  }, [title]);
 
   return (
     <ErrorScreen

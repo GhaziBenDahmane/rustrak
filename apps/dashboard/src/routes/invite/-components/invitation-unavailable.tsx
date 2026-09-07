@@ -33,7 +33,7 @@ export function InvitationUnavailable() {
       description={t('unavailable.description')}
       guidance={t('unavailable.guidance')}
       actions={
-        <Button nativeButton={false} render={<Link href="/auth/login" />}>
+        <Button nativeButton={false} render={<Link href="/login" />}>
           {t('unavailable.goToLogin')}
         </Button>
       }

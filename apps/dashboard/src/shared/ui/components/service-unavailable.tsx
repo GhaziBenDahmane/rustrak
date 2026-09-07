@@ -17,7 +17,7 @@ import { Card, CardContent } from '@/shared/ui/components/shadcn/card';
  * by the fourth panel's failure, and a screen with no chrome at all must not
  * render a small dashed card floating in an empty viewport.
  *
- * The surface is still not `/auth/login`. A page that redirects on a network
+ * The surface is still not `/login`. A page that redirects on a network
  * failure sends a signed-in user to a login form that cannot help: logging in
  * issues the same request, which fails the same way, and they bounce again.
  *

@@ -32,7 +32,7 @@ export function Header({ user, commandBar }: HeaderProps) {
   const handleLogout = () => {
     startTransition(async () => {
       await logout();
-      router.push('/auth/login');
+      router.push('/login');
     });
   };
 

@@ -5,7 +5,7 @@ import { createClient } from './rustrak';
  * Whether there is a session, and if not, why not.
  *
  * Three states, not a nullable user. `anonymous` is the *only* one that may
- * send the visitor to `/auth/login`: an unreachable API or a 5xx is
+ * send the visitor to `/login`: an unreachable API or a 5xx is
  * `unavailable`, and redirecting on those turns a flaky connection into a
  * login loop that logging in cannot fix, because the next request fails the
  * same way. A 403 is `unavailable` too, since it means "signed in, not
