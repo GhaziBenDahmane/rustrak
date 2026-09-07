@@ -1,0 +1,61 @@
+---
+version: v0.14.12
+title: Reverse Proxy Deployments
+description: Both containers run behind a reverse proxy with no published host ports, and span timestamps sent as strings land where they belong on the waterfall
+date: 2026-09-07
+tags: [dashboard, docker, fix]
+---
+
+## The dashboard binds to 0.0.0.0 inside its image
+
+A Next.js standalone server listens on whatever `HOSTNAME` holds, and Docker
+fills that variable with the container id on any image that leaves it unset. The
+dashboard was therefore listening on a single interface whose name resolves
+nowhere else: reachable through a published port by accident, and unreachable
+from a proxy on the same network. The image now pins it
+([@andeerc](https://github.com/andeerc)).
+
+- `ENV HOSTNAME="0.0.0.0"` and `ENV PORT="3000"` are set in the image, so a
+  proxy on the Docker network reaches the container on 3000 with no `-p` and no
+  `ports:` block
+- Neither Compose file forwards `HOSTNAME` or `HOST` from the environment it was
+  run from. That reads as a courteous default and is a live grenade: a CI
+  runner, Portainer or any dockerised deploy tool exports its own `HOSTNAME`,
+  and the dashboard inherited a name it could not bind to and crash-looped on
+  `ENOTFOUND`
+- An architecture test reads the Dockerfile and both Compose files as text and
+  fails if either half is reintroduced
+- The port mappings carry defaults, `${SERVER_PORT:-8080}` and
+  `${UI_PORT:-3000}`, so `docker-compose.yml` starts without an `.env`
+
+The production guide has a Reverse proxy section covering the whole setup, and
+the environment reference explains why `RUSTRAK_API_URL` stays internal:
+pointing it at your public domain routes the dashboard's own API calls back
+through the proxy to itself, and sign-in stops working.
+
+## Span timestamps sent as strings
+
+The Sentry protocol allows a span's `start_timestamp` and `timestamp` to be
+either an epoch number or an RFC3339 string. The waterfall assumed a number, so
+a string reached the geometry as a string and produced `NaN` durations and bars
+with no width. Both forms are now normalized when the transaction payload is
+read ([@alydharshi](https://github.com/alydharshi)).
+
+- Strings are matched against the grammar Relay accepts, and one that does not
+  match is dropped rather than guessed at
+- A timestamp with no offset is UTC, as it is in Relay. `Date.parse` would have
+  read it as the reader's local time and placed the same span differently in
+  every timezone
+- The fractional part is added back by hand, because `Date.parse` truncates to
+  milliseconds and SDKs send microseconds. Against a full-precision
+  `start_timestamp`, that truncation rendered sub-millisecond spans with a
+  negative duration
+- Hour 24 and dates like February 30th are rejected. `Date.parse` rolls both
+  into the next day, a full day of drift on a value the server refuses outright
+
+## Improvements
+
+- The dev Compose file passes `PUBLIC_URL`, so the DSN it hands out points
+  somewhere reachable instead of carrying the bind address
+- The dashboard's `CMD` is back to exec form, so the process gets signals
+  directly rather than through a shell
