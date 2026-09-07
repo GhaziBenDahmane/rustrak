@@ -19,7 +19,7 @@ import { useCompact } from './design';
 import { Sheen } from './stage';
 
 /**
- * The application chrome, recreated from apps/webview-ui.
+ * The application chrome, recreated from apps/dashboard.
  *
  * Three pieces, in the order the real app stacks them: a global header across
  * the full width (`(main)/header.tsx`, h-16, sticky, blurred), a project rail
@@ -316,7 +316,7 @@ export function MockShell({
 }
 
 /**
- * `Card size="sm"` from apps/webview-ui/src/components/ui/card.tsx.
+ * `Card size="sm"` from apps/dashboard/src/shared/ui/components/shadcn/card.tsx.
  *
  * A ring rather than a border: the app's cards are defined by `ring-1
  * ring-foreground/10` over `bg-card`, which sits fractionally inside the

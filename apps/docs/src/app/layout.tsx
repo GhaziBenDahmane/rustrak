@@ -57,7 +57,7 @@ export const metadata = {
  * retired bolt tile. Both are gone. The tab icon is now `icon.png` and
  * `apple-icon.png` beside this file, which Next serves by convention: the same
  * two files the dashboard ships, so every Rustrak surface answers with one
- * image. See `apps/webview-ui/src/app/`.
+ * image. See `apps/dashboard/public/`.
  */
 export default function RootLayout({
   children,

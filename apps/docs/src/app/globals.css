@@ -286,7 +286,7 @@ html.dark {
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.26 0 0);
 
-  /* Mirrors apps/webview-ui/src/app/globals.css so the recreated UI reads as
+  /* Mirrors apps/dashboard/src/styles.css so the recreated UI reads as
      the real product and not an approximation of it. Each hue is lifted a step
      for the smaller marks the landing draws, but the assignment is the app's:
      severity is reserved and never reused as a series colour.

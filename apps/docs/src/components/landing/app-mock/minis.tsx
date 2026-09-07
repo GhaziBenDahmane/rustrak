@@ -133,7 +133,7 @@ const GROUPING_BARS = [62, 100, 44, 78, 30, 92, 55, 70, 38, 84, 48, 66];
  *
  * The raw run collapses into a single row, and the row is the real one — the
  * issue list's, from
- * apps/webview-ui/src/app/(main)/projects/[id]/issues/issues-list.tsx, with the
+ * apps/dashboard/public/(main)/projects/[id]/issues/issues-list.tsx, with the
  * indicator strip the product shows: status and priority as dots on a muted
  * pill, severity as the one thing allowed colour, then the culprit, the short
  * id, the trend and the count.
@@ -268,7 +268,7 @@ const ROUTES = [
 
 /**
  * Where an alert lands once a rule fires — the integration toggle from
- * apps/webview-ui/src/app/(main)/projects/[id]/settings/alerts/alerts-settings.tsx.
+ * apps/dashboard/public/(main)/projects/[id]/settings/alerts/alerts-settings.tsx.
  *
  * Recreated down to the rule that card follows, which is easy to miss and is
  * the reason it looks like settings rather than like a feature list: the card's
@@ -366,7 +366,7 @@ const CODE = {
 
 /**
  * The frame a source map resolves back to — `StackFrameItem` from
- * apps/webview-ui/src/app/(main)/projects/[id]/issues/[issueId]/events/[eventId]/stack-frame-item.tsx.
+ * apps/dashboard/public/(main)/projects/[id]/issues/[issueId]/events/[eventId]/stack-frame-item.tsx.
  *
  * The whole component, not a paraphrase of it: the zero-padded index in mono,
  * the function name above its location, the chevron an expandable frame
@@ -606,7 +606,7 @@ const MINI_SLOTS = [0, 1, 2, 3, 4];
  * Severity, exactly as the logs table badges it — OTel names included.
  *
  * The real row from
- * apps/webview-ui/src/app/(main)/projects/[id]/logs/logs-list.tsx: the
+ * apps/dashboard/public/(main)/projects/[id]/logs/logs-list.tsx: the
  * disclosure chevron a row carries because it expands, the level as a full-width
  * outline `Badge` in its `levelTone`, the body in mono, and the relative time on
  * the right. The badge column is fixed at `w-20` in the product and is fixed

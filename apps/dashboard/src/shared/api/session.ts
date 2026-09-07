@@ -26,7 +26,8 @@ export type CurrentUser =
  * consumers both need goes *down* into `shared`, never sideways — and
  * `shared/api` already owns client construction, so the read belongs beside
  * it. Under Next the same collision produced the same answer for the same
- * reason; see the note this replaces in `webview-ui`'s `i18n/request.ts`.
+ * reason, and the layer-direction rule is what caught the import that tried
+ * the other way round.
  */
 export async function getCurrentUser(): Promise<CurrentUser> {
   const client = await createClient();

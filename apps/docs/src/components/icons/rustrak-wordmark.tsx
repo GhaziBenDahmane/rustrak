@@ -2,7 +2,7 @@
  * The Rustrak wordmark: `rustrak` set in Outfit 700 and converted to outlines.
  * Source of truth is `rustrak-brand`, `brand/assets/logo/wordmark.svg`, generated
  * by `tools/build_logo.py`. The letterforms are
- * `apps/webview-ui/src/shared/ui/components/rustrak-wordmark.tsx`'s, verbatim;
+ * `apps/dashboard/src/shared/ui/components/rustrak-wordmark.tsx`'s, verbatim;
  * the app's hover fill and press are not ported, and this copy carries a
  * `decorative` escape the app's does not need.
  *
