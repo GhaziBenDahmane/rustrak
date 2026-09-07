@@ -51,9 +51,9 @@ export function useAsync<T>(
     return () => {
       live = false;
     };
-    // The caller states the identity of the read; `run` is a fresh closure on
-    // every render and would restart it forever.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `deps`, not `[run, ...deps]`: the caller states the identity of the read,
+    // because `run` is a fresh closure on every render and depending on it
+    // would restart the request forever.
   }, deps);
 
   return result;
