@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.7
+
+### Patch Changes
+
+- [`f3457f8`](https://github.com/rustrak/rustrak/commit/f3457f83049ce99f5ec14d79a8f952d287534723) Thanks [@AbianS](https://github.com/AbianS)! - A Reverse proxy section in the production guide covers routing both containers with no published host ports, and documents the two addresses that setup depends on. The environment reference explains why `RUSTRAK_API_URL` stays internal and why `HOSTNAME` must never be forwarded into the container.
+
 ## 0.15.6
 
 ### Patch Changes
