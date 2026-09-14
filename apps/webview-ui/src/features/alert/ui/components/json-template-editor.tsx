@@ -59,10 +59,11 @@ import {
   TEMPLATE_VARIABLE_GROUPS,
   type TemplatePreset,
   type TemplateVariable,
+  type TemplateVariableGroup,
 } from '@/features/alert/model/message-template';
 import type { TemplatePreview } from '@/features/alert/ui/hooks/use-template-preview';
 import { cn } from '@/shared/lib/utils';
-import { Button } from '@/shared/ui/components/shadcn/button';
+import { Button, buttonVariants } from '@/shared/ui/components/shadcn/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -356,125 +357,178 @@ export function JsonTemplateEditor({
       data-disabled={disabled || undefined}
       className="group/editor overflow-hidden rounded-md border border-input bg-transparent text-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/30 data-disabled:opacity-50"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-input bg-muted/30 px-1.5 py-1">
-        <div className="flex items-center gap-0.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="xs" disabled={disabled}>
-                  <LayoutTemplateIcon />
-                  {t('startFrom')}
-                  <ChevronDownIcon
-                    data-icon="inline-end"
-                    className="opacity-60"
-                  />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="start" className="w-72">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {t('startFrom')}
-                </DropdownMenuLabel>
-                {presets.map((preset) => (
-                  <DropdownMenuItem
-                    key={preset.id}
-                    onClick={() => onPreset(preset)}
-                    className="flex-col items-start gap-0 py-1.5"
-                  >
-                    <span className="text-sm">{preset.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {t(`presets.${preset.descriptionKey}`)}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  disabled={disabled || !caretPlaced}
-                  title={caretPlaced ? undefined : t('insertFieldHint')}
-                >
-                  <PlusIcon />
-                  {t('insertField')}
-                  <ChevronDownIcon
-                    data-icon="inline-end"
-                    className="opacity-60"
-                  />
-                </Button>
-              }
-            />
-            <DropdownMenuContent
-              align="start"
-              className="max-h-[min(28rem,70vh)] w-80 overflow-y-auto"
-            >
-              {TEMPLATE_VARIABLE_GROUPS.map((group, index) => (
-                <DropdownMenuGroup key={group}>
-                  {index > 0 && <DropdownMenuSeparator />}
-                  <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                    {t(`groups.${group}`)}
-                  </DropdownMenuLabel>
-                  {variables
-                    .filter((variable) => variable.group === group)
-                    .map((variable) => (
-                      <DropdownMenuItem
-                        key={variable.path}
-                        onClick={() => insertField(variable)}
-                        className="items-baseline gap-3 py-1.5"
-                      >
-                        <span className="flex min-w-0 flex-1 flex-col gap-0">
-                          <span className="font-mono text-xs text-foreground">
-                            {variable.path}
-                          </span>
-                          <span className="truncate text-xs text-muted-foreground">
-                            {t(`variables.${variable.descriptionKey}`)}
-                          </span>
-                        </span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
-                          {variable.detail}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                </DropdownMenuGroup>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="flex items-center gap-0.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            disabled={disabled}
-            onClick={onFormat}
-            aria-label={t('format')}
-            title={t('format')}
-          >
-            <WandSparklesIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            nativeButton={false}
-            aria-label={t('help')}
-            title={t('help')}
-            render={<a href={helpHref} target="_blank" rel="noreferrer" />}
-          >
-            <CircleQuestionMarkIcon />
-          </Button>
-        </div>
-      </div>
+      <EditorToolbar
+        disabled={disabled}
+        caretPlaced={caretPlaced}
+        variables={variables}
+        presets={presets}
+        helpHref={helpHref}
+        onPreset={onPreset}
+        onInsert={insertField}
+        onFormat={onFormat}
+      />
 
       <div ref={host} />
 
       <PreviewPanel preview={preview} />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Toolbar                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The row above the body: where to start from, what to insert, and the two
+ * icon actions. Kept apart from the editor so the editor is only the editor.
+ */
+function EditorToolbar({
+  disabled,
+  caretPlaced,
+  variables,
+  presets,
+  helpHref,
+  onPreset,
+  onInsert,
+  onFormat,
+}: {
+  disabled: boolean;
+  /** Insertion needs a caret; until there is one the menu stays closed. */
+  caretPlaced: boolean;
+  variables: readonly TemplateVariable[];
+  presets: readonly TemplatePreset[];
+  helpHref: string;
+  onPreset: (preset: TemplatePreset) => void;
+  onInsert: (variable: TemplateVariable) => void;
+  onFormat: () => void;
+}) {
+  const t = useTranslations('alerts.customWebhook');
+
+  // One pass over the fields, grouped for the menu.
+  const byGroup = useMemo(() => {
+    const groups = new Map<TemplateVariableGroup, TemplateVariable[]>();
+    for (const variable of variables) {
+      const list = groups.get(variable.group) ?? [];
+      list.push(variable);
+      groups.set(variable.group, list);
+    }
+    return groups;
+  }, [variables]);
+
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-input bg-muted/30 px-1.5 py-1">
+      <div className="flex items-center gap-0.5">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="ghost" size="xs" disabled={disabled}>
+                <LayoutTemplateIcon />
+                {t('startFrom')}
+                <ChevronDownIcon
+                  data-icon="inline-end"
+                  className="opacity-60"
+                />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="start" className="w-72">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {t('startFrom')}
+              </DropdownMenuLabel>
+              {presets.map((preset) => (
+                <DropdownMenuItem
+                  key={preset.id}
+                  onClick={() => onPreset(preset)}
+                  className="flex-col items-start gap-0 py-1.5"
+                >
+                  <span className="text-sm">{preset.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t(`presets.${preset.descriptionKey}`)}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={disabled || !caretPlaced}
+                title={caretPlaced ? undefined : t('insertFieldHint')}
+              >
+                <PlusIcon />
+                {t('insertField')}
+                <ChevronDownIcon
+                  data-icon="inline-end"
+                  className="opacity-60"
+                />
+              </Button>
+            }
+          />
+          <DropdownMenuContent
+            align="start"
+            className="max-h-[min(28rem,70vh)] w-80 overflow-y-auto"
+          >
+            {TEMPLATE_VARIABLE_GROUPS.map((group, index) => (
+              <DropdownMenuGroup key={group}>
+                {index > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {t(`groups.${group}`)}
+                </DropdownMenuLabel>
+                {(byGroup.get(group) ?? []).map((variable) => (
+                  <DropdownMenuItem
+                    key={variable.path}
+                    onClick={() => onInsert(variable)}
+                    className="items-baseline gap-3 py-1.5"
+                  >
+                    <span className="flex min-w-0 flex-1 flex-col gap-0">
+                      <span className="font-mono text-xs text-foreground">
+                        {variable.path}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {t(`variables.${variable.descriptionKey}`)}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">
+                      {variable.detail}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="flex items-center gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          disabled={disabled}
+          onClick={onFormat}
+          aria-label={t('format')}
+          title={t('format')}
+        >
+          <WandSparklesIcon />
+        </Button>
+        <a
+          href={helpHref}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t('help')}
+          title={t('help')}
+          className={cn(buttonVariants({ variant: 'ghost', size: 'icon-xs' }))}
+        >
+          <CircleQuestionMarkIcon />
+        </a>
+      </div>
     </div>
   );
 }
@@ -531,7 +585,7 @@ function PreviewPanel({ preview }: { preview: TemplatePreview }) {
       {preview.status === 'error' && (
         <div
           role="alert"
-          className="animate-in fade-in slide-in-from-top-1 border-t border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive duration-200"
+          className="animate-in fade-in slide-in-from-top-1 border-t border-destructive/20 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive"
         >
           {preview.error}
         </div>
