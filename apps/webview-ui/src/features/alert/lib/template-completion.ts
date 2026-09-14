@@ -11,6 +11,11 @@ export interface OpenExpression {
   from: number;
   /** What has been typed so far, possibly empty. */
   word: string;
+  /**
+   * Nothing but whitespace between `{{` and the caret: the expression was
+   * just opened, which is the one moment an unprompted list is welcome.
+   */
+  fresh: boolean;
 }
 
 /** Characters that make up a payload path: `issue.short_id`. */
@@ -29,5 +34,7 @@ export function expressionAt(
 
   let from = caret;
   while (from > open + 2 && PATH_CHARS.test(doc[from - 1] ?? '')) from--;
-  return { from, word: doc.slice(from, caret) };
+  const word = doc.slice(from, caret);
+  const fresh = word === '' && doc.slice(open + 2, caret).trim() === '';
+  return { from, word, fresh };
 }

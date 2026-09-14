@@ -632,8 +632,7 @@
       "urlPlaceholder": "https://example.com/hooks/incoming",
       "urlDescription": "可选。告警规则可以自带地址。",
       "templateLabel": "消息体",
-      "editorLabel": "JSON",
-      "templateDescription": "可自动补全能插入的字段。点击帮助按钮打开完整参考文档。",
+      "templateDescription": "按端点期望的格式编写 JSON。无论把字段放在哪里，都会自动转义。",
       "format": "格式化",
       "secretLabel": "签名密钥",
       "secretDescription": "可选。用 HMAC-SHA256 为请求签名。",
@@ -659,8 +658,36 @@
         "triggered_at": "告警触发时间",
         "actor": "发送方，始终是 Rustrak"
       },
-      "variablesLabel": "字段",
-      "help": "打开文档"
+      "help": "打开文档",
+      "startFrom": "从模板开始",
+      "insertField": "插入字段",
+      "preview": "预览",
+      "previewSample": "示例告警",
+      "previewIdle": "编写消息体后即可看到渲染结果。",
+      "previewRendering": "渲染中",
+      "previewOk": "JSON 有效",
+      "previewError": "无法发送",
+      "previewUnavailable": "预览暂时不可用。",
+      "unknownField": "告警数据中没有这个字段",
+      "presetApplied": "已从 {name} 开始",
+      "undo": "撤销",
+      "groups": {
+        "issue": "问题",
+        "project": "项目",
+        "alert": "告警"
+      },
+      "presets": {
+        "minimal": "一行文本和一个链接",
+        "slack": "Slack、Mattermost、Rocket.Chat 的传入 Webhook",
+        "discord": "Discord 频道 Webhook",
+        "teams": "Teams 工作流的 Adaptive Card",
+        "wecom": "企业微信群机器人，纯文本",
+        "wecomMarkdown": "企业微信群机器人，Markdown",
+        "dingtalk": "钉钉群机器人，纯文本",
+        "feishu": "飞书或 Lark 群机器人，纯文本",
+        "structured": "为你自己的 API 准备的类型化字段"
+      },
+      "insertFieldHint": "先在消息体中点击要插入字段的位置"
     },
     "slack": {
       "titleNew": "添加 Slack 集成",

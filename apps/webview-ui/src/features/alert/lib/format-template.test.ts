@@ -44,4 +44,13 @@ describe('formatTemplate', () => {
       '{\n  "a": "literal {{ not an expr"\n}',
     );
   });
+
+  it('keeps the quotes around an expression that fills a whole string', () => {
+    // `"{{ x }}"` and `{{ x }}` render alike but are not the same body: an
+    // absent value is "" in one and null in the other, and the reader wrote
+    // the quotes on purpose.
+    expect(formatTemplate('{"text":"{{ issue.title }}"}')).toBe(
+      '{\n  "text": "{{ issue.title }}"\n}',
+    );
+  });
 });

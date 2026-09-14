@@ -21,15 +21,40 @@ export function formatTemplate(template: string): string {
   }
 
   return expressions.reduce(
-    (text, expression, index) =>
-      text
-        .replace(`"${token(index)}"`, expression)
-        .replace(token(index), expression),
+    (text, expression) => text.replace(expression.token, expression.text),
     formatted,
   );
 }
 
-const token = (index: number) => `__rustrak_expr_${index}__`;
+/**
+ * Whether the body is JSON once its expressions are set aside: the same test
+ * the formatter applies before it touches anything.
+ */
+export function templateParses(template: string): boolean {
+  try {
+    JSON.parse(parkExpressions(template).parked);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The two shapes a token takes, told apart by name so the restore step puts
+ * the quotes back exactly where the reader had them. One token for both would
+ * turn `"{{ x }}"` into `{{ x }}`: it renders the same, but it is not what
+ * they wrote, and a field inside a string and a field standing alone do not
+ * mean the same thing for an absent value.
+ */
+const stringToken = (index: number) => `__rustrak_str_${index}__`;
+const valueToken = (index: number) => `"__rustrak_val_${index}__"`;
+
+interface ParkedExpression {
+  /** What stood in the body. */
+  text: string;
+  /** What stands in its place while the JSON is formatted, quotes included. */
+  token: string;
+}
 
 /**
  * Replaces every `{{ … }}` with a token, leaving parseable JSON behind.
@@ -43,9 +68,9 @@ const token = (index: number) => `__rustrak_expr_${index}__`;
  */
 function parkExpressions(template: string): {
   parked: string;
-  expressions: string[];
+  expressions: ParkedExpression[];
 } {
-  const expressions: string[] = [];
+  const expressions: ParkedExpression[] = [];
   let parked = '';
   let inString = false;
 
@@ -68,10 +93,11 @@ function parkExpressions(template: string): {
       continue;
     }
 
-    parked += inString
-      ? token(expressions.length)
-      : `"${token(expressions.length)}"`;
-    expressions.push(template.slice(i, end + 2));
+    const token = inString
+      ? stringToken(expressions.length)
+      : valueToken(expressions.length);
+    parked += token;
+    expressions.push({ text: template.slice(i, end + 2), token });
     i = end + 1;
   }
 

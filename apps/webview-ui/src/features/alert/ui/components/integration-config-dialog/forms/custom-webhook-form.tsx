@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { previewTemplate } from '@/features/alert/api/mutations';
+import { toast } from 'sonner';
 import { filledCredentials } from '@/features/alert/lib/credentials';
 import { formatTemplate } from '@/features/alert/lib/format-template';
 import {
@@ -16,10 +16,13 @@ import {
 } from '@/features/alert/model/integration-forms';
 import {
   TEMPLATE_DOCS_URL,
+  TEMPLATE_PRESETS,
   TEMPLATE_VARIABLES,
+  type TemplatePreset,
   templatePlaceholder,
 } from '@/features/alert/model/message-template';
 import { useIntegrationSubmit } from '@/features/alert/ui/hooks/use-integration-submit';
+import { useTemplatePreview } from '@/features/alert/ui/hooks/use-template-preview';
 import {
   DialogDescription,
   DialogHeader,
@@ -58,22 +61,10 @@ const JsonTemplateEditor = dynamic(
     // Same height and frame as the editor, so the dialog does not jump when
     // the chunk lands.
     loading: () => (
-      <div className="h-[calc(7rem+2.25rem)] animate-pulse rounded-md border border-input bg-muted/30" />
+      <div className="h-[26rem] animate-pulse rounded-md border border-input bg-muted/30" />
     ),
   },
 );
-
-/**
- * Why the body would be refused, or `null`. The editor asks while the reader
- * types and marks the spot itself; the server answers because it owns the
- * template engine, and a check computed anywhere else would eventually
- * disagree with what a save accepts.
- */
-async function validateTemplate(template: string) {
-  const result = await previewTemplate(template);
-  if (!result.success) return null;
-  return result.data.ok ? null : (result.data.error ?? null);
-}
 
 export function CustomWebhookForm({
   onOpenChange,
@@ -120,6 +111,10 @@ export function CustomWebhookForm({
 
   const isLoading = isPending || parentPending;
 
+  // The server renders the body against a sample alert a moment after each
+  // change; the editor shows the answer underneath and underlines a refusal.
+  const { preview, request: requestPreview } = useTemplatePreview();
+
   // An integration that is being edited already has a body, and the reader
   // should see what it renders to without having to touch it first. One
   // request on mount, not a subscription to the field.
@@ -129,6 +124,7 @@ export function CustomWebhookForm({
     const stored = form.getValues('template');
     const indented = formatTemplate(stored);
     if (indented !== stored) form.setValue('template', indented);
+    requestPreview(indented);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -136,6 +132,21 @@ export function CustomWebhookForm({
     form.setValue('template', template, {
       shouldValidate: true,
       shouldDirty: true,
+    });
+    requestPreview(template);
+  };
+
+  // Replacing a body somebody may have been writing deserves a way back that
+  // does not depend on knowing the editor has an undo stack.
+  const startFrom = (preset: TemplatePreset) => {
+    const previous = form.getValues('template');
+    setTemplate(preset.body);
+    if (!previous.trim() || previous === preset.body) return;
+    toast(t('customWebhook.presetApplied', { name: preset.name }), {
+      action: {
+        label: t('customWebhook.undo'),
+        onClick: () => setTemplate(previous),
+      },
     });
   };
 
@@ -158,95 +169,102 @@ export function CustomWebhookForm({
           className="flex min-h-0 flex-1 flex-col"
         >
           {/* The only part that scrolls, so the title and the actions stay
-              on screen however long the message body gets. */}
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-            <NameField<CustomWebhookFormData>
-              placeholder={t('customWebhook.namePlaceholder')}
-              disabled={isLoading}
-            />
+              on screen however long the message body gets. Two columns from
+              md up: the small fields on the left, the editor taking the rest,
+              because the body is where the reader spends their time. */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div className="grid gap-x-8 gap-y-5 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+              <div className="space-y-5">
+                <NameField<CustomWebhookFormData>
+                  placeholder={t('customWebhook.namePlaceholder')}
+                  disabled={isLoading}
+                />
 
-            <FormField
-              control={form.control}
-              name="url"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                    {t('customWebhook.urlLabel')}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      type="url"
-                      placeholder={t('customWebhook.urlPlaceholder')}
-                      disabled={isLoading}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('customWebhook.urlDescription')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                        {t('customWebhook.urlLabel')}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="url"
+                          placeholder={t('customWebhook.urlPlaceholder')}
+                          disabled={isLoading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('customWebhook.urlDescription')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="template"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                    {t('customWebhook.templateLabel')}
-                  </FormLabel>
-                  <FormControl>
-                    <JsonTemplateEditor
-                      value={field.value}
-                      onChange={setTemplate}
-                      onBlur={field.onBlur}
-                      onFormat={() => setTemplate(formatTemplate(field.value))}
-                      validate={validateTemplate}
-                      disabled={isLoading}
-                      placeholder={templatePlaceholder}
-                      variables={TEMPLATE_VARIABLES}
-                      ariaLabel={t('customWebhook.templateLabel')}
-                      label={t('customWebhook.editorLabel')}
-                      helpHref={TEMPLATE_DOCS_URL}
-                      formatLabel={t('customWebhook.format')}
-                      helpLabel={t('customWebhook.help')}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('customWebhook.templateDescription')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="secret"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                        {t('customWebhook.secretLabel')}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          placeholder={t('webhook.secretPlaceholder')}
+                          disabled={isLoading}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        {t('customWebhook.secretDescription')}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="secret"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                    {t('customWebhook.secretLabel')}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      placeholder={t('webhook.secretPlaceholder')}
-                      disabled={isLoading}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {t('customWebhook.secretDescription')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <EnabledField<CustomWebhookFormData> disabled={isLoading} />
+              </div>
 
-            <EnabledField<CustomWebhookFormData> disabled={isLoading} />
+              <FormField
+                control={form.control}
+                name="template"
+                render={({ field }) => (
+                  <FormItem className="min-w-0">
+                    <FormLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                      {t('customWebhook.templateLabel')}
+                    </FormLabel>
+                    <FormControl>
+                      <JsonTemplateEditor
+                        value={field.value}
+                        onChange={setTemplate}
+                        onBlur={field.onBlur}
+                        onFormat={() =>
+                          setTemplate(formatTemplate(field.value))
+                        }
+                        onPreset={startFrom}
+                        preview={preview}
+                        disabled={isLoading}
+                        placeholder={templatePlaceholder}
+                        variables={TEMPLATE_VARIABLES}
+                        presets={TEMPLATE_PRESETS}
+                        ariaLabel={t('customWebhook.templateLabel')}
+                        helpHref={TEMPLATE_DOCS_URL}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t('customWebhook.templateDescription')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </div>
 
           {/* Outside the scroll area: a failure that named no field of this

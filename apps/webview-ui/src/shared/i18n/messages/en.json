@@ -632,8 +632,7 @@
       "urlPlaceholder": "https://example.com/hooks/incoming",
       "urlDescription": "Optional. An alert rule can supply its own.",
       "templateLabel": "Message body",
-      "editorLabel": "JSON",
-      "templateDescription": "Autocompletes the fields you can insert. The help button opens the full reference.",
+      "templateDescription": "Write the JSON your endpoint expects. Fields are escaped for you, wherever you put them.",
       "format": "Format",
       "secretLabel": "Signing secret",
       "secretDescription": "Optional. Signs the request with HMAC-SHA256.",
@@ -659,8 +658,36 @@
         "triggered_at": "When the alert fired",
         "actor": "Who sent it, always Rustrak"
       },
-      "variablesLabel": "Fields",
-      "help": "Open the documentation"
+      "help": "Open the documentation",
+      "startFrom": "Start from",
+      "insertField": "Insert field",
+      "preview": "Preview",
+      "previewSample": "sample alert",
+      "previewIdle": "Write a body to see what it renders to.",
+      "previewRendering": "Rendering",
+      "previewOk": "Valid JSON",
+      "previewError": "Would not send",
+      "previewUnavailable": "Preview unavailable right now.",
+      "unknownField": "Not a field of the alert payload",
+      "presetApplied": "Started from {name}",
+      "undo": "Undo",
+      "groups": {
+        "issue": "Issue",
+        "project": "Project",
+        "alert": "Alert"
+      },
+      "presets": {
+        "minimal": "One line of text and a link",
+        "slack": "Slack, Mattermost, Rocket.Chat incoming webhooks",
+        "discord": "A Discord channel webhook",
+        "teams": "An Adaptive Card for a Teams workflow",
+        "wecom": "WeCom group bot, plain text",
+        "wecomMarkdown": "WeCom group bot, markdown",
+        "dingtalk": "DingTalk group bot, plain text",
+        "feishu": "Feishu or Lark group bot, plain text",
+        "structured": "Typed fields for your own API"
+      },
+      "insertFieldHint": "Click in the body where the field should go"
     },
     "slack": {
       "titleNew": "Add Slack Integration",

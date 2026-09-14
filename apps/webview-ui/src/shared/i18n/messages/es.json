@@ -632,8 +632,7 @@
       "urlPlaceholder": "https://example.com/hooks/incoming",
       "urlDescription": "Opcional. Una regla de alerta puede aportar la suya.",
       "templateLabel": "Cuerpo del mensaje",
-      "editorLabel": "JSON",
-      "templateDescription": "Autocompleta los campos que puedes insertar. El botón de ayuda abre la referencia completa.",
+      "templateDescription": "Escribe el JSON que espera tu endpoint. Los campos se escapan solos, los pongas donde los pongas.",
       "format": "Formatear",
       "secretLabel": "Secreto de firma",
       "secretDescription": "Opcional. Firma la petición con HMAC-SHA256.",
@@ -659,8 +658,36 @@
         "triggered_at": "Cuándo saltó la alerta",
         "actor": "Quién la envía, siempre Rustrak"
       },
-      "variablesLabel": "Campos",
-      "help": "Abrir la documentación"
+      "help": "Abrir la documentación",
+      "startFrom": "Empezar desde",
+      "insertField": "Insertar campo",
+      "preview": "Vista previa",
+      "previewSample": "alerta de ejemplo",
+      "previewIdle": "Escribe un cuerpo para ver cómo se renderiza.",
+      "previewRendering": "Renderizando",
+      "previewOk": "JSON válido",
+      "previewError": "No se enviaría",
+      "previewUnavailable": "La vista previa no está disponible ahora mismo.",
+      "unknownField": "No es un campo de la alerta",
+      "presetApplied": "Empezado desde {name}",
+      "undo": "Deshacer",
+      "groups": {
+        "issue": "Issue",
+        "project": "Proyecto",
+        "alert": "Alerta"
+      },
+      "presets": {
+        "minimal": "Una línea de texto y un enlace",
+        "slack": "Webhooks entrantes de Slack, Mattermost o Rocket.Chat",
+        "discord": "Un webhook de canal de Discord",
+        "teams": "Una Adaptive Card para un flujo de Teams",
+        "wecom": "Bot de grupo de WeCom, texto plano",
+        "wecomMarkdown": "Bot de grupo de WeCom, markdown",
+        "dingtalk": "Bot de grupo de DingTalk, texto plano",
+        "feishu": "Bot de grupo de Feishu o Lark, texto plano",
+        "structured": "Campos tipados para tu propia API"
+      },
+      "insertFieldHint": "Haz clic en el cuerpo donde deba ir el campo"
     },
     "slack": {
       "titleNew": "Añadir integración de Slack",

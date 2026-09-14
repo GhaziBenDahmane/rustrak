@@ -39,10 +39,11 @@ export function IntegrationConfigDialog({
   provider: ProviderType | null;
   onOpenChange: (open: boolean) => void;
 } & Omit<ConfigFormProps, 'onOpenChange'>) {
-  // Custom Webhook lays itself out in three bands — header, scrolling fields,
-  // actions — so the shell hands it the height and gets out of the way: no
-  // padding, no gap, and the popup is a column rather than the default grid.
-  // Email is only tall, not banded, so it still scrolls as one piece.
+  // Custom Webhook lays itself out in three bands (header, scrolling fields,
+  // actions) and two columns, the editor being the wide one, so the shell
+  // hands it the width and the height and gets out of the way: no padding,
+  // no gap, and the popup is a column rather than the default grid. Email is
+  // only tall, not banded, so it still scrolls as one piece.
   const banded = provider === 'custom_webhook';
   const tall = provider === 'email';
 
@@ -50,8 +51,9 @@ export function IntegrationConfigDialog({
     <Dialog open={provider !== null} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          'sm:max-w-lg',
-          banded && 'flex max-h-[85dvh] flex-col gap-0 p-0',
+          banded
+            ? 'flex max-h-[90dvh] flex-col gap-0 p-0 sm:max-w-[min(64rem,calc(100vw-3rem))]'
+            : 'sm:max-w-lg',
           tall && 'max-h-[90dvh] overflow-y-auto',
         )}
       >

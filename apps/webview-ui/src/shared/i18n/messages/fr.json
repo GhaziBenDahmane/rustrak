@@ -632,8 +632,7 @@
       "urlPlaceholder": "https://example.com/hooks/incoming",
       "urlDescription": "Facultatif. Une règle d'alerte peut fournir la sienne.",
       "templateLabel": "Corps du message",
-      "editorLabel": "JSON",
-      "templateDescription": "Complète les champs que vous pouvez insérer. Le bouton d'aide ouvre la référence complète.",
+      "templateDescription": "Écrivez le JSON attendu par votre endpoint. Les champs sont échappés pour vous, où que vous les placiez.",
       "format": "Formater",
       "secretLabel": "Secret de signature",
       "secretDescription": "Facultatif. Signe la requête en HMAC-SHA256.",
@@ -659,8 +658,36 @@
         "triggered_at": "Quand l'alerte a été déclenchée",
         "actor": "L'expéditeur, toujours Rustrak"
       },
-      "variablesLabel": "Champs",
-      "help": "Ouvrir la documentation"
+      "help": "Ouvrir la documentation",
+      "startFrom": "Partir de",
+      "insertField": "Insérer un champ",
+      "preview": "Aperçu",
+      "previewSample": "alerte d'exemple",
+      "previewIdle": "Écrivez un corps pour voir son rendu.",
+      "previewRendering": "Rendu en cours",
+      "previewOk": "JSON valide",
+      "previewError": "Ne serait pas envoyé",
+      "previewUnavailable": "Aperçu indisponible pour le moment.",
+      "unknownField": "Ce n'est pas un champ de l'alerte",
+      "presetApplied": "Parti de {name}",
+      "undo": "Annuler",
+      "groups": {
+        "issue": "Issue",
+        "project": "Projet",
+        "alert": "Alerte"
+      },
+      "presets": {
+        "minimal": "Une ligne de texte et un lien",
+        "slack": "Webhooks entrants Slack, Mattermost ou Rocket.Chat",
+        "discord": "Un webhook de salon Discord",
+        "teams": "Une Adaptive Card pour un flux Teams",
+        "wecom": "Bot de groupe WeCom, texte brut",
+        "wecomMarkdown": "Bot de groupe WeCom, markdown",
+        "dingtalk": "Bot de groupe DingTalk, texte brut",
+        "feishu": "Bot de groupe Feishu ou Lark, texte brut",
+        "structured": "Champs typés pour votre propre API"
+      },
+      "insertFieldHint": "Cliquez dans le corps là où le champ doit aller"
     },
     "slack": {
       "titleNew": "Ajouter l’intégration Slack",

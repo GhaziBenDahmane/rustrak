@@ -14,6 +14,7 @@ describe('expressionAt', () => {
     expect(expressionAt(doc, doc.indexOf(' }}'))).toEqual({
       from: doc.indexOf('issue.ti'),
       word: 'issue.ti',
+      fresh: false,
     });
   });
 
@@ -25,7 +26,17 @@ describe('expressionAt', () => {
   it('offers everything at an empty expression', () => {
     const empty = '{"a": {{  }}}';
     const caret = empty.indexOf('{{') + 3;
-    expect(expressionAt(empty, caret)).toEqual({ from: caret, word: '' });
+    expect(expressionAt(empty, caret)).toEqual({
+      from: caret,
+      word: '',
+      fresh: true,
+    });
+  });
+
+  it('is no longer fresh once something was typed and deleted back to a space', () => {
+    // `{{ a }}` with the caret after "a ": empty word, but not a fresh open.
+    const doc = '{{ a }}';
+    expect(expressionAt(doc, 5)).toEqual({ from: 5, word: '', fresh: false });
   });
 
   it('stops at the closing braces rather than running to the end', () => {
@@ -39,6 +50,7 @@ describe('expressionAt', () => {
     expect(expressionAt(typing, typing.length)).toEqual({
       from: typing.indexOf('issue.ti'),
       word: 'issue.ti',
+      fresh: false,
     });
   });
 });

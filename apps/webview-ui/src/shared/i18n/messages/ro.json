@@ -632,8 +632,7 @@
       "urlPlaceholder": "https://example.com/hooks/incoming",
       "urlDescription": "Opțional. O regulă de alertă poate furniza propriul URL.",
       "templateLabel": "Corpul mesajului",
-      "editorLabel": "JSON",
-      "templateDescription": "Completează câmpurile pe care le poți insera. Butonul de ajutor deschide referința completă.",
+      "templateDescription": "Scrie JSON-ul pe care îl așteaptă endpoint-ul tău. Câmpurile sunt escapate automat, oriunde le pui.",
       "format": "Formatează",
       "secretLabel": "Secret de semnare",
       "secretDescription": "Opțional. Semnează cererea cu HMAC-SHA256.",
@@ -659,8 +658,36 @@
         "triggered_at": "Când s-a declanșat alerta",
         "actor": "Cine o trimite, mereu Rustrak"
       },
-      "variablesLabel": "Câmpuri",
-      "help": "Deschide documentația"
+      "help": "Deschide documentația",
+      "startFrom": "Pornește de la",
+      "insertField": "Inserează câmp",
+      "preview": "Previzualizare",
+      "previewSample": "alertă de probă",
+      "previewIdle": "Scrie un corp ca să vezi cum se randează.",
+      "previewRendering": "Se randează",
+      "previewOk": "JSON valid",
+      "previewError": "Nu s-ar trimite",
+      "previewUnavailable": "Previzualizarea nu este disponibilă acum.",
+      "unknownField": "Nu este un câmp al alertei",
+      "presetApplied": "Pornit de la {name}",
+      "undo": "Anulează",
+      "groups": {
+        "issue": "Issue",
+        "project": "Proiect",
+        "alert": "Alertă"
+      },
+      "presets": {
+        "minimal": "O linie de text și un link",
+        "slack": "Webhook-uri de intrare Slack, Mattermost sau Rocket.Chat",
+        "discord": "Un webhook de canal Discord",
+        "teams": "Un Adaptive Card pentru un flux Teams",
+        "wecom": "Bot de grup WeCom, text simplu",
+        "wecomMarkdown": "Bot de grup WeCom, markdown",
+        "dingtalk": "Bot de grup DingTalk, text simplu",
+        "feishu": "Bot de grup Feishu sau Lark, text simplu",
+        "structured": "Câmpuri tipizate pentru propriul tău API"
+      },
+      "insertFieldHint": "Dă clic în corp acolo unde trebuie să ajungă câmpul"
     },
     "slack": {
       "titleNew": "Adaugă integrare Slack",
