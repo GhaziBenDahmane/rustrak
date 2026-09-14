@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.8
+
+### Patch Changes
+
+- [`6e188ec`](https://github.com/rustrak/rustrak/commit/6e188ec24e0bed675e06070d9e73855e10a9f231) Thanks [@AbianS](https://github.com/AbianS)! - Alerts guide restructured into a section with a new message body template reference; MCP tools table lists the alert channel tools.
+
 ## 0.15.7
 
 ### Patch Changes
