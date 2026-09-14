@@ -539,6 +539,46 @@
         ]
       }
     },
+    "/api/integrations/preview-template": {
+      "post": {
+        "tags": [
+          "Alert Channels"
+        ],
+        "summary": "POST /api/integrations/preview-template",
+        "description": "Renders a Custom Webhook template against a sample payload and hands back\nthe body that would be sent. The dashboard cannot run the template engine,\nso it asks while the reader types; going through the dispatcher's own\nrenderer is what keeps the preview from disagreeing with a delivery.",
+        "operationId": "preview_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewTemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Rendered body, or why it would not render"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/integrations/{id}": {
       "get": {
         "tags": [
@@ -9182,6 +9222,18 @@
               "null"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "PreviewTemplateBody": {
+        "type": "object",
+        "description": "Body of a template preview request.",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
+            "type": "string"
           }
         }
       },

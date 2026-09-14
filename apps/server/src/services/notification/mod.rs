@@ -6,6 +6,7 @@
 
 pub mod custom_webhook;
 pub mod email;
+pub mod json_template;
 pub mod slack;
 pub mod webhook;
 

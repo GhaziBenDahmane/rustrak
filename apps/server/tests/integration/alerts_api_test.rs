@@ -406,17 +406,17 @@ async fn test_custom_webhook_channel_crud_and_validation() {
     .await;
     assert!(result.is_err());
 
-    // Renders, but never to JSON: a bare interpolation in a value position.
-    // Compiling the template says nothing about this, so the save-time check
-    // has to render it, or the integration only fails when an alert fires.
+    // Renders, but never to JSON: a trailing comma. Compiling the template
+    // says nothing about this, so the save-time check has to render it, or
+    // the integration only fails when an alert fires.
     let result = AlertService::create_channel(
         &db.pool,
         CreateNotificationChannel {
-            name: "Custom Unquoted".to_string(),
+            name: "Custom Trailing Comma".to_string(),
             provider_type: ChannelType::CustomWebhook,
             credentials: json!({
                 "url": "https://example.com/hook",
-                "template": r#"{"a": {{ issue.title }}}"#,
+                "template": r#"{"a": "{{ issue.title }}",}"#,
             }),
             is_enabled: true,
         },
@@ -426,6 +426,26 @@ async fn test_custom_webhook_channel_crud_and_validation() {
         result.is_err(),
         "a template that cannot render JSON must not be saved"
     );
+
+    // A field that does not exist is a typo, and a typo is caught here in
+    // words rather than shipped as a blank in a real message.
+    let result = AlertService::create_channel(
+        &db.pool,
+        CreateNotificationChannel {
+            name: "Custom Typo".to_string(),
+            provider_type: ChannelType::CustomWebhook,
+            credentials: json!({
+                "url": "https://example.com/hook",
+                "template": r#"{"a": "{{ issue.titel }}"}"#,
+            }),
+            is_enabled: true,
+        },
+    )
+    .await;
+    let err = result
+        .expect_err("an unknown field must not be saved")
+        .to_string();
+    assert!(err.contains("undefined"), "got: {err}");
 
     // Broken template syntax: rejected at save time, not delivery time.
     let result = AlertService::create_channel(
