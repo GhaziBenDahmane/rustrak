@@ -1,0 +1,5 @@
+---
+"@rustrak/server": "patch"
+---
+
+Custom Webhook integration: a fourth alert channel that POSTs a body rendered from a user-written JSON template, so a WeCom, DingTalk, Feishu or any other bot with its own message schema can be fed without Rustrak carrying an integration per service (@LiJoeAllen). Template values are escaped for where they sit, inside a string or as a JSON value, so a quote in an issue title can no longer break the body. Rendering is bounded and a template that fails against the sample payload is refused at save time. The dashboard editor offers field pills, autocompletion, inline diagnostics, eight presets and a live preview served by the same renderer that delivers. Test results now carry the endpoint's response body, since delivery is judged by HTTP status alone and a bot that refuses a message still answers 200. The API client gains `previewTemplate` and the MCP server gains `create_alert_channel`, `update_alert_channel` and `preview_alert_template`. All notification dispatchers share one HTTP client. Dependencies updated, including argon2 0.6 with existing password hashes still verifying.

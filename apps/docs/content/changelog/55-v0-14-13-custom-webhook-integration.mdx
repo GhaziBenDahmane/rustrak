@@ -1,0 +1,71 @@
+---
+version: v0.14.13
+title: Custom Webhook Integration
+description: A fourth alert channel renders its body from a JSON template you write, so any bot with its own message schema can receive Rustrak alerts, and test results show what the endpoint answered
+date: 2026-09-14
+tags: [server, dashboard, alerts, client, mcp]
+---
+
+## Custom Webhook
+
+The plain webhook sends a fixed payload, which is fine for an endpoint you
+control and useless for a WeCom, DingTalk or Feishu bot that rejects anything
+but its own message shape. The new `custom_webhook` provider keeps the plain
+webhook's delivery, HMAC-SHA256 signature and per-rule routing override, and
+renders the request body from a template you write
+([@LiJoeAllen](https://github.com/LiJoeAllen)).
+
+- The template is JSON with [Minijinja](https://docs.rs/minijinja) expressions
+  over the alert payload: `alert_type`, `triggered_at`, `project.*`,
+  `issue.{id,short_id,title,level,first_seen,last_seen,event_count}`,
+  `issue_url` and `actor`. An unknown field is a render error, not an empty
+  string
+- Values are escaped for where they sit. Inside a string literal a value is
+  written as text, with quotes and newlines escaped; in a value position it is
+  written as a JSON value with its type kept. Nobody has to remember
+  `| tojson`, and an expression that already ends in it is left as written
+- Rendering is bounded: 1 MiB of output, a fixed instruction budget, and a
+  64 KiB cap on the response read. Past any of them the delivery fails with
+  that reason
+- Saving renders the template against a sample payload, once with every field
+  populated and once with `issue.level` absent. A template that fails either
+  render is refused, so a broken body cannot sit waiting for a real incident
+
+## The template editor
+
+The dashboard form for a custom webhook is an editor rather than a textarea.
+
+- Fields appear as pills, with autocompletion for the payload paths and inline
+  diagnostics for a body that would not render
+- Eight presets to start from: Minimal, Slack-compatible, Discord, Microsoft
+  Teams, WeCom, WeCom markdown, DingTalk and Feishu / Lark. Each one is rendered
+  in the server's tests, so a preset that would hand you a broken body fails a
+  test instead
+- A live preview shows the body that would be sent. It comes from
+  `POST /api/integrations/preview-template`, the same renderer the worker
+  uses, so the preview cannot disagree with a delivery
+
+## Test results show the endpoint's answer
+
+Delivery is judged by the HTTP status and the body is not interpreted, the way
+Grafana and Alertmanager do it. A group bot that refuses a message still
+answers `200` and explains itself in the body, so the body is now handed back:
+`POST /api/integrations/{id}/test` returns `response_body` alongside `success`
+and `message`, and the dashboard shows it.
+
+## Client and MCP
+
+- `@rustrak/client`: `custom_webhook` in the provider enum,
+  `alertIntegrations.previewTemplate()`, and `response_body` on the test
+  result
+- `@rustrak/mcp`: `create_alert_channel`, `update_alert_channel` and
+  `preview_alert_template`, next to the existing list and test tools
+
+## Improvements
+
+- Every notification dispatcher shares one process-wide HTTP client, so a
+  delivery reuses the connection pool instead of opening a new one per alert
+- Dependencies updated across the monorepo. `argon2` moves to 0.6; hashes
+  written by 0.5 still verify, and a test pins that
+- The alerts guide is now a section with a full message body template
+  reference
