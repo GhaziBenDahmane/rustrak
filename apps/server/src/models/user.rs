@@ -1,7 +1,4 @@
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
-};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -83,10 +80,8 @@ pub struct LoginRequest {
 impl User {
     /// Hash a password using Argon2id
     pub fn hash_password(password: &str) -> Result<String, AppError> {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-        let hash = argon2
-            .hash_password(password.as_bytes(), &salt)
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes())
             .map_err(|e| AppError::Internal(format!("Password hashing failed: {}", e)))?;
         Ok(hash.to_string())
     }
@@ -128,5 +123,48 @@ mod tests {
     fn unknown_role_falls_back_to_member() {
         assert_eq!(UserRole::from_db("superuser"), UserRole::Member);
         assert_eq!(UserRole::from_db(""), UserRole::Member);
+    }
+
+    fn user_with_hash(password_hash: &str) -> User {
+        User {
+            id: 1,
+            email: "a@example.com".into(),
+            password_hash: password_hash.into(),
+            is_active: true,
+            role: "member".into(),
+            created_at: Utc::now(),
+            last_login: None,
+            language: None,
+            timezone: None,
+        }
+    }
+
+    #[test]
+    fn password_roundtrips_through_hash_and_verify() {
+        let hash = User::hash_password("hunter42").unwrap();
+        assert!(hash.starts_with("$argon2id$v=19$"));
+        let user = user_with_hash(&hash);
+        assert!(user.verify_password("hunter42").unwrap());
+        assert!(!user.verify_password("hunter43").unwrap());
+    }
+
+    #[test]
+    fn hashes_written_by_argon2_0_5_still_verify() {
+        // Produced with argon2 0.5.3 for "correct horse battery staple".
+        let legacy = "$argon2id$v=19$m=19456,t=2,p=1$a3PYmB2M+IrrehO7MdwvLA$ctbNYOFfMLfV8AS53fAY+IiSE6FSVQ8f6f20o5C5pH4";
+        let user = user_with_hash(legacy);
+        assert!(user
+            .verify_password("correct horse battery staple")
+            .unwrap());
+        assert!(!user.verify_password("wrong").unwrap());
+    }
+
+    #[test]
+    fn malformed_stored_hash_is_an_internal_error() {
+        let user = user_with_hash("not-a-phc-string");
+        assert!(matches!(
+            user.verify_password("anything"),
+            Err(AppError::Internal(_))
+        ));
     }
 }
