@@ -37,8 +37,11 @@ const EXPECTED_TOOLS = [
   'get_token',
   'create_token',
   'revoke_token',
-  // Alerts (3)
+  // Alerts (6)
   'list_alert_channels',
+  'create_alert_channel',
+  'update_alert_channel',
+  'preview_alert_template',
   'test_alert_channel',
   'list_alert_rules',
   // Team (9)

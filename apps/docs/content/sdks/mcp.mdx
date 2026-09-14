@@ -145,7 +145,10 @@ The server exits immediately with a clear error message if either variable is mi
 
 | Tool | Description |
 |---|---|
-| `list_alert_channels` | List notification channels (Slack, email, webhook) |
+| `list_alert_channels` | List notification channels (Slack, email, webhook, custom webhook) |
+| `create_alert_channel` | Create a notification channel; a custom webhook takes the JSON body template |
+| `update_alert_channel` | Rename, enable or disable a channel, or replace its credentials |
+| `preview_alert_template` | Render a custom webhook body against a sample alert, or get the refusal |
 | `test_alert_channel` | Send a test notification to a channel |
 | `list_alert_rules` | List alert rules for a project |
 

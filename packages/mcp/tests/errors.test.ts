@@ -88,7 +88,9 @@ describe('toMcpError', () => {
       reason: 'timeout',
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('may or may not have been applied');
+    expect(result.content[0]?.text).toContain(
+      'may or may not have been applied',
+    );
     // And it must not be described as safe to repeat.
     expect(result.content[0]?.text).not.toContain('Retrying will not help.');
   });
