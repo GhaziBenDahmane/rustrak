@@ -552,7 +552,8 @@
       "botTokenRequired": "Token-ul de bot este obligatoriu",
       "botTokenPrefix": "Token-ul de bot trebuie să înceapă cu xoxb-",
       "smtpHostRequired": "Gazda SMTP este obligatorie",
-      "validEmail": "Introdu un e-mail valid"
+      "validEmail": "Introdu un e-mail valid",
+      "templateRequired": "Șablonul este obligatoriu"
     },
     "routing": {
       "slackChannelRequired": "Canalul Slack este obligatoriu pentru „{name}”",
@@ -622,6 +623,72 @@
       "updated": "Webhook actualizat",
       "created": "Webhook creat"
     },
+    "customWebhook": {
+      "titleNew": "Configurare webhook personalizat",
+      "titleEdit": "Editare webhook personalizat",
+      "description": "Trimite alertele cu un corp de mesaj scris de tine.",
+      "namePlaceholder": "De ex., Punte către chatul de gardă",
+      "urlLabel": "URL webhook",
+      "urlPlaceholder": "https://example.com/hooks/incoming",
+      "urlDescription": "Opțional. O regulă de alertă poate furniza propriul URL.",
+      "templateLabel": "Corpul mesajului",
+      "templateDescription": "Scrie JSON-ul pe care îl așteaptă endpoint-ul tău. Câmpurile sunt escapate automat, oriunde le pui.",
+      "format": "Formatează",
+      "secretLabel": "Secret de semnare",
+      "secretDescription": "Opțional. Semnează cererea cu HMAC-SHA256.",
+      "create": "Creează webhook personalizat",
+      "fieldTemplate": "Acel șablon",
+      "saveFailed": "Salvarea webhook-ului personalizat a eșuat",
+      "updated": "Webhook personalizat actualizat",
+      "created": "Webhook personalizat creat",
+      "variables": {
+        "issue.title": "Titlul erorii",
+        "issue.short_id": "Id lizibil al problemei",
+        "issue.level": "error, warning, info… sau absent",
+        "issue.event_count": "De câte ori s-a întâmplat",
+        "issue.id": "Id intern al problemei",
+        "issue.first_seen": "Când a apărut prima dată",
+        "issue.last_seen": "Când a apărut ultima dată",
+        "issue_url": "Link către problemă în Rustrak",
+        "project.name": "Numele proiectului",
+        "project.slug": "Slugul proiectului",
+        "project.id": "Id intern al proiectului",
+        "alert_type": "Ce a declanșat alerta",
+        "alert_id": "Id-ul acestei trimiteri",
+        "triggered_at": "Când s-a declanșat alerta",
+        "actor": "Cine o trimite, mereu Rustrak"
+      },
+      "help": "Deschide documentația",
+      "startFrom": "Pornește de la",
+      "insertField": "Inserează câmp",
+      "preview": "Previzualizare",
+      "previewSample": "alertă de probă",
+      "previewIdle": "Scrie un corp ca să vezi cum se randează.",
+      "previewRendering": "Se randează",
+      "previewOk": "JSON valid",
+      "previewError": "Nu s-ar trimite",
+      "previewUnavailable": "Previzualizarea nu este disponibilă acum.",
+      "unknownField": "Nu este un câmp al alertei",
+      "presetApplied": "Pornit de la {name}",
+      "undo": "Anulează",
+      "groups": {
+        "issue": "Issue",
+        "project": "Proiect",
+        "alert": "Alertă"
+      },
+      "presets": {
+        "minimal": "O linie de text și un link",
+        "slack": "Webhook-uri de intrare Slack, Mattermost sau Rocket.Chat",
+        "discord": "Un webhook de canal Discord",
+        "teams": "Un Adaptive Card pentru un flux Teams",
+        "wecom": "Bot de grup WeCom, text simplu",
+        "wecomMarkdown": "Bot de grup WeCom, markdown",
+        "dingtalk": "Bot de grup DingTalk, text simplu",
+        "feishu": "Bot de grup Feishu sau Lark, text simplu",
+        "structured": "Câmpuri tipizate pentru propriul tău API"
+      },
+      "insertFieldHint": "Dă clic în corp acolo unde trebuie să ajungă câmpul"
+    },
     "slack": {
       "titleNew": "Adaugă integrare Slack",
       "titleEdit": "Editează integrarea Slack",
@@ -689,6 +756,7 @@
       "configureAria": "Configurează {name}",
       "testFailed": "Trimiterea testului a eșuat",
       "testSent": "Notificarea de test a fost trimisă",
+      "testAnswered": "Endpointul a răspuns",
       "testFailedResult": "Testul a eșuat",
       "deleteFailed": "Ștergerea integrării a eșuat",
       "deleted": "Integrare ștearsă",
@@ -735,6 +803,9 @@
       },
       "webhook": {
         "description": "Trimite payload-uri JSON către orice endpoint HTTP."
+      },
+      "customWebhook": {
+        "description": "Trimite un corp scris de tine, în forma pe care o așteaptă endpointul."
       }
     },
     "newIssue": {

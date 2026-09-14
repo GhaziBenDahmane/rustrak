@@ -552,7 +552,8 @@
       "botTokenRequired": "Le token de bot est obligatoire",
       "botTokenPrefix": "Le token de bot doit commencer par xoxb-",
       "smtpHostRequired": "L’hôte SMTP est obligatoire",
-      "validEmail": "Veuillez saisir une adresse e-mail valide"
+      "validEmail": "Veuillez saisir une adresse e-mail valide",
+      "templateRequired": "Le modèle est requis"
     },
     "routing": {
       "slackChannelRequired": "Un canal Slack est requis pour « {name} »",
@@ -622,6 +623,72 @@
       "updated": "Webhook mis à jour",
       "created": "Webhook créé"
     },
+    "customWebhook": {
+      "titleNew": "Configurer le webhook personnalisé",
+      "titleEdit": "Modifier le webhook personnalisé",
+      "description": "Envoyez les alertes avec un corps de message que vous écrivez.",
+      "namePlaceholder": "P. ex., Passerelle vers le chat d'astreinte",
+      "urlLabel": "URL du webhook",
+      "urlPlaceholder": "https://example.com/hooks/incoming",
+      "urlDescription": "Facultatif. Une règle d'alerte peut fournir la sienne.",
+      "templateLabel": "Corps du message",
+      "templateDescription": "Écrivez le JSON attendu par votre endpoint. Les champs sont échappés pour vous, où que vous les placiez.",
+      "format": "Formater",
+      "secretLabel": "Secret de signature",
+      "secretDescription": "Facultatif. Signe la requête en HMAC-SHA256.",
+      "create": "Créer le webhook personnalisé",
+      "fieldTemplate": "Ce modèle",
+      "saveFailed": "Échec de l'enregistrement du webhook personnalisé",
+      "updated": "Webhook personnalisé mis à jour",
+      "created": "Webhook personnalisé créé",
+      "variables": {
+        "issue.title": "Le titre de l'erreur",
+        "issue.short_id": "Id lisible du problème",
+        "issue.level": "error, warning, info… ou absent",
+        "issue.event_count": "Nombre d'occurrences",
+        "issue.id": "Id interne du problème",
+        "issue.first_seen": "Première occurrence",
+        "issue.last_seen": "Dernière occurrence",
+        "issue_url": "Lien vers le problème dans Rustrak",
+        "project.name": "Nom du projet",
+        "project.slug": "Slug du projet",
+        "project.id": "Id interne du projet",
+        "alert_type": "Ce qui a déclenché l'alerte",
+        "alert_id": "Id de cet envoi",
+        "triggered_at": "Quand l'alerte a été déclenchée",
+        "actor": "L'expéditeur, toujours Rustrak"
+      },
+      "help": "Ouvrir la documentation",
+      "startFrom": "Partir de",
+      "insertField": "Insérer un champ",
+      "preview": "Aperçu",
+      "previewSample": "alerte d'exemple",
+      "previewIdle": "Écrivez un corps pour voir son rendu.",
+      "previewRendering": "Rendu en cours",
+      "previewOk": "JSON valide",
+      "previewError": "Ne serait pas envoyé",
+      "previewUnavailable": "Aperçu indisponible pour le moment.",
+      "unknownField": "Ce n'est pas un champ de l'alerte",
+      "presetApplied": "Parti de {name}",
+      "undo": "Annuler",
+      "groups": {
+        "issue": "Issue",
+        "project": "Projet",
+        "alert": "Alerte"
+      },
+      "presets": {
+        "minimal": "Une ligne de texte et un lien",
+        "slack": "Webhooks entrants Slack, Mattermost ou Rocket.Chat",
+        "discord": "Un webhook de salon Discord",
+        "teams": "Une Adaptive Card pour un flux Teams",
+        "wecom": "Bot de groupe WeCom, texte brut",
+        "wecomMarkdown": "Bot de groupe WeCom, markdown",
+        "dingtalk": "Bot de groupe DingTalk, texte brut",
+        "feishu": "Bot de groupe Feishu ou Lark, texte brut",
+        "structured": "Champs typés pour votre propre API"
+      },
+      "insertFieldHint": "Cliquez dans le corps là où le champ doit aller"
+    },
     "slack": {
       "titleNew": "Ajouter l’intégration Slack",
       "titleEdit": "Modifier l’intégration Slack",
@@ -689,6 +756,7 @@
       "configureAria": "Configurer {name}",
       "testFailed": "Échec de l’envoi du test",
       "testSent": "Notification de test envoyée",
+      "testAnswered": "L'endpoint a répondu",
       "testFailedResult": "Test échoué",
       "deleteFailed": "Échec de la suppression de l’intégration",
       "deleted": "Intégration supprimée",
@@ -735,6 +803,9 @@
       },
       "webhook": {
         "description": "Envoie des charges utiles JSON vers n’importe quel endpoint HTTP."
+      },
+      "customWebhook": {
+        "description": "POST un corps que vous écrivez, dans la forme attendue par l'endpoint."
       }
     },
     "newIssue": {

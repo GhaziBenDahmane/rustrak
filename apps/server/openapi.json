@@ -539,6 +539,46 @@
         ]
       }
     },
+    "/api/integrations/preview-template": {
+      "post": {
+        "tags": [
+          "Alert Channels"
+        ],
+        "summary": "POST /api/integrations/preview-template",
+        "description": "Renders a Custom Webhook template against a sample payload and hands back\nthe body that would be sent. The dashboard cannot run the template engine,\nso it asks while the reader types; going through the dispatcher's own\nrenderer is what keeps the preview from disagreeing with a delivery.",
+        "operationId": "preview_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewTemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Rendered body, or why it would not render"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/integrations/{id}": {
       "get": {
         "tags": [
@@ -9185,6 +9225,18 @@
           }
         }
       },
+      "PreviewTemplateBody": {
+        "type": "object",
+        "description": "Body of a template preview request.",
+        "required": [
+          "template"
+        ],
+        "properties": {
+          "template": {
+            "type": "string"
+          }
+        }
+      },
       "ProjectListStats": {
         "type": "object",
         "description": "The at-a-glance aggregates one row of the project-list table needs.\n\nDeliberately narrower than [`ProjectStatsSummary`]: that one answers \"how\nis this project doing\" for a page dedicated to a single project, this one\nanswers \"which of my projects should I look at first\" and must stay cheap\nenough to compute for every project on the page at once.",
@@ -9402,7 +9454,8 @@
         "enum": [
           "webhook",
           "email",
-          "slack"
+          "slack",
+          "custom_webhook"
         ]
       },
       "ReadinessChecks": {

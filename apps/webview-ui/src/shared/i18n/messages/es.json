@@ -552,7 +552,8 @@
       "botTokenRequired": "El token de bot es obligatorio",
       "botTokenPrefix": "El token de bot debe empezar por xoxb-",
       "smtpHostRequired": "El host SMTP es obligatorio",
-      "validEmail": "Introduce un correo electrónico válido"
+      "validEmail": "Introduce un correo electrónico válido",
+      "templateRequired": "La plantilla es obligatoria"
     },
     "routing": {
       "slackChannelRequired": "Se requiere un canal de Slack para «{name}»",
@@ -622,6 +623,72 @@
       "updated": "Webhook actualizado",
       "created": "Webhook creado"
     },
+    "customWebhook": {
+      "titleNew": "Configurar webhook personalizado",
+      "titleEdit": "Editar webhook personalizado",
+      "description": "Envía las alertas con un cuerpo de mensaje que escribes tú.",
+      "namePlaceholder": "P. ej., Puente al chat de guardia",
+      "urlLabel": "URL del webhook",
+      "urlPlaceholder": "https://example.com/hooks/incoming",
+      "urlDescription": "Opcional. Una regla de alerta puede aportar la suya.",
+      "templateLabel": "Cuerpo del mensaje",
+      "templateDescription": "Escribe el JSON que espera tu endpoint. Los campos se escapan solos, los pongas donde los pongas.",
+      "format": "Formatear",
+      "secretLabel": "Secreto de firma",
+      "secretDescription": "Opcional. Firma la petición con HMAC-SHA256.",
+      "create": "Crear webhook personalizado",
+      "fieldTemplate": "Esa plantilla",
+      "saveFailed": "Error al guardar el webhook personalizado",
+      "updated": "Webhook personalizado actualizado",
+      "created": "Webhook personalizado creado",
+      "variables": {
+        "issue.title": "El título del error",
+        "issue.short_id": "Id legible del problema",
+        "issue.level": "error, warning, info… o ausente",
+        "issue.event_count": "Cuántas veces ha ocurrido",
+        "issue.id": "Id interno del problema",
+        "issue.first_seen": "Cuándo se vio por primera vez",
+        "issue.last_seen": "Cuándo se vio por última vez",
+        "issue_url": "Enlace al problema en Rustrak",
+        "project.name": "Nombre del proyecto",
+        "project.slug": "Slug del proyecto",
+        "project.id": "Id interno del proyecto",
+        "alert_type": "Qué disparó esta alerta",
+        "alert_id": "Id de este envío",
+        "triggered_at": "Cuándo saltó la alerta",
+        "actor": "Quién la envía, siempre Rustrak"
+      },
+      "help": "Abrir la documentación",
+      "startFrom": "Empezar desde",
+      "insertField": "Insertar campo",
+      "preview": "Vista previa",
+      "previewSample": "alerta de ejemplo",
+      "previewIdle": "Escribe un cuerpo para ver cómo se renderiza.",
+      "previewRendering": "Renderizando",
+      "previewOk": "JSON válido",
+      "previewError": "No se enviaría",
+      "previewUnavailable": "La vista previa no está disponible ahora mismo.",
+      "unknownField": "No es un campo de la alerta",
+      "presetApplied": "Empezado desde {name}",
+      "undo": "Deshacer",
+      "groups": {
+        "issue": "Issue",
+        "project": "Proyecto",
+        "alert": "Alerta"
+      },
+      "presets": {
+        "minimal": "Una línea de texto y un enlace",
+        "slack": "Webhooks entrantes de Slack, Mattermost o Rocket.Chat",
+        "discord": "Un webhook de canal de Discord",
+        "teams": "Una Adaptive Card para un flujo de Teams",
+        "wecom": "Bot de grupo de WeCom, texto plano",
+        "wecomMarkdown": "Bot de grupo de WeCom, markdown",
+        "dingtalk": "Bot de grupo de DingTalk, texto plano",
+        "feishu": "Bot de grupo de Feishu o Lark, texto plano",
+        "structured": "Campos tipados para tu propia API"
+      },
+      "insertFieldHint": "Haz clic en el cuerpo donde deba ir el campo"
+    },
     "slack": {
       "titleNew": "Añadir integración de Slack",
       "titleEdit": "Editar integración de Slack",
@@ -689,6 +756,7 @@
       "configureAria": "Configurar {name}",
       "testFailed": "No se pudo enviar la prueba",
       "testSent": "Notificación de prueba enviada",
+      "testAnswered": "El endpoint respondió",
       "testFailedResult": "La prueba falló",
       "deleteFailed": "No se pudo eliminar la integración",
       "deleted": "Integración eliminada",
@@ -735,6 +803,9 @@
       },
       "webhook": {
         "description": "Envía cargas JSON a cualquier endpoint HTTP."
+      },
+      "customWebhook": {
+        "description": "Envía un cuerpo que escribes tú, con la forma que espere el endpoint."
       }
     },
     "newIssue": {

@@ -51,7 +51,9 @@ export function toMcpError(error: RustrakError): McpToolResult {
     case 'forbidden':
       // Deterministic, and worth naming so it is not mistaken for a transient
       // fault worth retrying: this token will never be allowed to do this.
-      return mcpError(`Not permitted: ${error.message} Retrying will not help.`);
+      return mcpError(
+        `Not permitted: ${error.message} Retrying will not help.`,
+      );
     default:
       // validation, conflict, gone, payload_too_large, client_error,
       // invalid_request, invalid_response: all deterministic. The same call
