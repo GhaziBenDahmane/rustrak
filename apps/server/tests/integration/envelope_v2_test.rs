@@ -479,18 +479,16 @@ async fn scoped_event_file_is_deleted_after_the_durability_checkpoint() {
         .unwrap();
     assert_eq!(count, 2, "both digests have committed");
 
+    // The worker deletes the files and then drops the batch's guards; this
+    // task can be polled between the two, so wait for both together.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-    while pending_files(temp_dir.path()) > 0 {
+    while pending_files(temp_dir.path()) > 0 || !processors.errors.in_flight().is_empty() {
         assert!(
             tokio::time::Instant::now() < deadline,
-            "the durability queue must delete both files after its checkpoint"
+            "the durability queue must delete both files after its checkpoint and release their in-flight entries"
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    assert!(
-        processors.errors.in_flight().is_empty(),
-        "deleted files release their in-flight entries"
-    );
 }
 
 /// Relay parity: a malformed item payload never fails the envelope — the

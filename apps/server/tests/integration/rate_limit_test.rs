@@ -4,7 +4,7 @@
 
 use crate::common::TestDb;
 use actix_web::{test, web, App};
-use chrono::{Duration, Utc};
+use chrono::{Duration, SubsecRound, Utc};
 use rustrak::config::{Config, DatabaseConfig, RateLimitConfig};
 use rustrak::routes;
 use rustrak::services::{
@@ -109,7 +109,9 @@ async fn stale_quota_cache_is_refreshed_before_the_next_ingest() {
         .execute(&db.pool)
         .await
         .unwrap();
-    let stale_until = Utc::now() + Duration::minutes(10);
+    // Whole seconds: Postgres keeps microseconds, so a nanosecond `Utc::now()`
+    // would not compare equal once it comes back.
+    let stale_until = (Utc::now() + Duration::minutes(10)).trunc_subsecs(0);
     set_project_quota_exceeded(&db.pool, project_id, stale_until).await;
     sqlx::query("UPDATE projects SET next_quota_check = 0 WHERE id = $1")
         .bind(project_id)
