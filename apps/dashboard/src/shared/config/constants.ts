@@ -9,8 +9,8 @@ import packageJson from '../../../package.json';
  * number identifies the Rustrak release rather than the semver of any single
  * artifact.
  *
- * They can still differ, and the About page shows both for that reason:
- * `VITE_RUSTRAK_API_URL` lets this bundle be served away from the server it
- * talks to.
+ * They can still differ, and the About page shows both for that reason: the
+ * `rustrak-ui` image serves this bundle away from the server it talks to, and
+ * the two are not upgraded in one step.
  */
 export const APP_VERSION = packageJson.version;

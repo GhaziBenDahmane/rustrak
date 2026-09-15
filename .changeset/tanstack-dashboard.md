@@ -8,11 +8,12 @@ The dashboard is now served by the server, from one image.
 with Vite and TanStack Router. It compiles to static files that the Rust server
 hands out at `/`, so the same Actix process answers the page and the API.
 
-**One container instead of two.** `rustrak/rustrak-ui` is no longer published,
-the `ui` service is gone from `docker-compose.yml`, and `RUSTRAK_API_URL` is no
-longer needed: the browser calls the API on the origin it loaded the page from,
-which also keeps the session cookie first-party and removes CORS from the
-dashboard's path. Open the server's own address — `:8080` by default.
+**One container instead of two, by default.** The browser calls the API on the
+origin it loaded the page from, which also keeps the session cookie first-party
+and removes CORS from the dashboard's path. Open the server's own address,
+`:8080` by default. `rustrak/rustrak-ui` is now nginx serving the same bundle
+and proxying the API to `RUSTRAK_API_URL`, for a dashboard hosted away from its
+server; `docker-compose.yml` keeps it behind a `ui` profile.
 
 The dashboard stays optional. It is mounted only when `RUSTRAK_DASHBOARD_DIR`
 (default `./static`) holds an `index.html`, so an image built without one

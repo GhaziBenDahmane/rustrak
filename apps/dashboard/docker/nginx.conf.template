@@ -1,0 +1,75 @@
+# The standalone dashboard: the compiled SPA served by nginx, with the API
+# proxied to a Rustrak server somewhere else.
+#
+# This is what `vite dev` does in development, in production form. The
+# browser only ever talks to this origin, so the session cookie stays
+# first-party and there is no CORS between the dashboard and the server, which
+# is the same property the server-embedded dashboard has. `RUSTRAK_API_URL`
+# is read at container start (nginx's entrypoint runs envsubst over
+# /etc/nginx/templates/), so one image serves any server.
+#
+# The proxied prefixes are the server's `API_PREFIXES` and Vite's
+# `apiPrefixes`; `api-prefixes.test.ts` fails the build if the three drift.
+# Each prefix is two locations because a prefix is a path *segment*: `/api`
+# and `/api/x` are the server's, `/apidocs-for-humans` would be the router's.
+
+server {
+    listen ${PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # The upstream, from the environment. Because it is a variable, nginx
+    # resolves its host per request rather than at config load, which needs a
+    # resolver; the entrypoint exports the container's own as
+    # NGINX_LOCAL_RESOLVERS. `valid=30s` is what lets the server container
+    # restart with a new address without restarting this one.
+    set $rustrak_api "${RUSTRAK_API_URL}";
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=30s;
+
+    # nginx has no `proxy_pass` inside a shared snippet without `include`, so
+    # the settings every proxied location needs live here as a template and
+    # each location repeats the one line that differs.
+    proxy_http_version 1.1;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $http_host;
+    # Sentry envelopes can be large; the server enforces its own limit.
+    client_max_body_size 50m;
+
+    # --- The API ------------------------------------------------------------
+
+    location = /api      { proxy_pass $rustrak_api; }
+    location /api/       { proxy_pass $rustrak_api; }
+    location = /auth     { proxy_pass $rustrak_api; }
+    location /auth/      { proxy_pass $rustrak_api; }
+    location = /health   { proxy_pass $rustrak_api; }
+    location /health/    { proxy_pass $rustrak_api; }
+    location = /docs     { proxy_pass $rustrak_api; }
+    location /docs/      { proxy_pass $rustrak_api; }
+    location = /api-docs { proxy_pass $rustrak_api; }
+    location /api-docs/  { proxy_pass $rustrak_api; }
+
+    # --- The application ----------------------------------------------------
+
+    # Hashed bundles: a URL under here can never point at different bytes, so
+    # it is the one directory that can be cached forever. A miss stays a miss
+    # rather than falling through to the shell, because HTML under a `.js` URL
+    # produces a syntax error that names the bundle instead of the deploy.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # Everything else is a client route the router owns, answered with the
+    # shell. `no-cache` rather than `no-store`: the browser may keep it but
+    # has to revalidate, because the shell names bundles a deploy may have
+    # replaced; nginx's ETag makes that a 304.
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri /index.html;
+    }
+}

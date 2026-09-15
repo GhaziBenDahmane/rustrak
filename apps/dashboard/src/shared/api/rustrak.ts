@@ -10,12 +10,13 @@ import { RustrakClient } from '@rustrak/client';
  * the origin, the session cookie stays first-party and no CORS preflight is
  * involved in either environment.
  *
- * `VITE_RUSTRAK_API_URL` is the escape hatch for a bundle hosted apart from
- * its server. Cross-origin then, and the instance has to allow credentials
- * from that origin.
+ * There is deliberately no override. A bundle hosted away from its server is
+ * `apps/dashboard/Dockerfile`: nginx in front of the same files, proxying the
+ * API prefixes, so the browser still talks to one origin. Calling the API
+ * cross-origin instead would leave the `SameSite=Lax` session cookie behind.
  */
 function baseUrl(): string {
-  return import.meta.env.VITE_RUSTRAK_API_URL ?? window.location.origin;
+  return window.location.origin;
 }
 
 /**
