@@ -8,7 +8,7 @@ import { Enter, MockStage, Settle, Sweep } from './stage';
 
 /**
  * The span waterfall, recreated from
- * apps/webview-ui/src/app/(main)/projects/[id]/performance/[txnId]/span-waterfall.tsx.
+ * apps/dashboard/public/(main)/projects/[id]/performance/[txnId]/span-waterfall.tsx.
  *
  * ── Why this screen and not another table ───────────────────────────────────
  *

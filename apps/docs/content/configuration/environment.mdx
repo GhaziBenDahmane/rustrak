@@ -173,7 +173,11 @@ Global SMTP settings for email notifications. Channels can override these.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DASHBOARD_URL` | `http://localhost:3000` | URL for issue links in notifications |
+| `DASHBOARD_URL` | `http://localhost:3000` | Base URL for the issue links in notifications |
+
+The server serves the dashboard itself, so in production this is the public URL
+of the server (`https://rustrak.example.com`). The default is the Vite dev
+server, which is where the dashboard lives during development.
 
 ## Bootstrap
 
@@ -187,75 +191,60 @@ CREATE_SUPERUSER="admin@example.com:secure-password"
 
 Only creates user if database is empty.
 
-## Dashboard (Next.js)
+## Dashboard
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RUSTRAK_API_URL` | `http://localhost:8080` | Address the dashboard uses to reach the server. Always an internal one |
-| `PORT` | `3000` | Port the dashboard listens on **inside** the container |
-| `HOSTNAME` | `0.0.0.0` | TCP bind address. Already correct in the image |
-| `RUSTRAK_VERSION_CHECK_ENABLED` | `true` | Set to `false` to disable the update notice and stop all outbound version checks |
+| `RUSTRAK_DASHBOARD_DIR` | `./static` | Where the compiled dashboard lives, relative to the working directory or absolute |
 
-### RUSTRAK_API_URL
+### RUSTRAK_DASHBOARD_DIR
 
-Every call the dashboard makes to the server happens **server-side**, inside the
-Next.js process. The browser never talks to the server directly, so this is the
-address one container uses to reach the other:
+The dashboard is static files, and the server hands them out from `/`. This is
+where it looks for them. The image already puts a build at `/app/static`, which
+is what the default resolves to, so you do not normally set this.
 
-```bash
-# Docker Compose: the service name
-RUSTRAK_API_URL=http://server:8080
-
-# Dashboard running outside Docker
-RUSTRAK_API_URL=http://localhost:8080
-```
-
-It stays internal even when both are published on a public domain. Pointing it
-at that domain sends the dashboard's own API calls back out through your proxy,
-which routes them to the dashboard rather than the server, and sign-in stops
-working.
-
-### HOSTNAME
-
-The interface the dashboard binds to inside its container. The image already
-sets `0.0.0.0`, which is what you want in every deployment, so you do not need
-this in your Compose file or your `.env`.
-
-It is spelled `HOSTNAME` and not `HOST` because that is the name a Next.js
-standalone server reads. Docker also fills `HOSTNAME` with the container id on
-any image that leaves it unset, and that collision has one practical
-consequence: **never forward the ambient variable into the container**.
-
-```yaml
-# Wrong. On a host that exports HOSTNAME (a CI runner, Portainer, anything
-# running Compose from inside a container) the dashboard inherits a name it
-# cannot bind to and the container crash-loops on ENOTFOUND.
-environment:
-  - HOSTNAME=${HOSTNAME:-0.0.0.0}
-```
-
-> **Behind a reverse proxy?** You do not need to publish a host port for either
-> service. See [Reverse proxy](/configuration/production#reverse-proxy).
-
-### RUSTRAK_VERSION_CHECK_ENABLED
-
-When a newer Rustrak release exists, the dashboard shows a dismissible notice
-linking to that release's changelog entry.
-
-To find out, it fetches a small static file published alongside the docs. That
-check runs **server-side only** — the browser never contacts it — and the result
-is cached for one hour per instance, so it costs one outbound request per hour
-regardless of how many people use the dashboard. No instance identifier,
-telemetry or usage data is sent, and any failure is silent: an unreachable or
-blocked feed simply means no notice appears.
-
-Set this to `false` if your installation must make no outbound requests at all:
+**It is a path, not a switch.** The dashboard is mounted when the directory
+actually holds an `index.html` and skipped when it does not, so a server-only
+deployment needs no configuration to stay server-only — and an image built
+without a dashboard behaves exactly as one always has.
 
 ```bash
-RUSTRAK_VERSION_CHECK_ENABLED=false
+# Serve a dashboard you built and mounted yourself
+RUSTRAK_DASHBOARD_DIR=/srv/rustrak-dashboard
 ```
 
-With the check disabled, no request is made under any circumstances.
+**There is no API address to configure.** The browser loads the dashboard from
+the server and calls the API on that same origin, so the two can never disagree
+about where the other one is. That also means the session cookie is
+first-party, and no CORS policy applies to the dashboard's own requests.
+
+Two variables that used to live here are gone with the separate dashboard
+container: `RUSTRAK_API_URL`, which told the Next.js process how to reach the
+server, and `HOSTNAME`, which was that process's bind address.
+
+### The update check
+
+The dashboard compares the running server's version against the release feed
+published on GitHub Pages, and shows a notice when a newer one exists. **That
+request is now made by the browser rather than by a server process**, which is
+the one consequence of serving the dashboard as static files worth knowing
+about: the feed is fetched from each reader's browser, on their connection,
+rather than once per hour from the instance.
+
+Nothing about the instance is sent — the request is a plain `GET` for a public
+JSON file, with no identifier, telemetry or usage data — and every failure is
+silent: a blocked or unreachable feed simply means no notice appears. The
+browser's own HTTP cache decides how often it is re-fetched.
+
+It is switched off at build time rather than at runtime, because a static
+bundle has no process to read an environment from:
+
+```bash
+VITE_RUSTRAK_VERSION_CHECK_ENABLED=false pnpm --filter @rustrak/dashboard build
+```
+
+For an installation that must make no outbound requests at all and does not
+build its own image, blocking the host at the network is the reliable answer.
 
 ## Complete Example
 
@@ -267,12 +256,9 @@ With the check disabled, no request is made under any circumstances.
 # Required
 DATABASE_URL=sqlite:///data/rustrak.db
 
-# Server
+# Server (the dashboard is served by this same process, from /)
 PORT=8080
 RUST_LOG=info
-
-# Dashboard
-RUSTRAK_API_URL=http://localhost:8080
 ```
 
 ### PostgreSQL (production)
@@ -299,8 +285,8 @@ DATABASE_MAX_CONNECTIONS=20
 MAX_EVENTS_PER_MINUTE=1000
 MAX_EVENTS_PER_HOUR=10000
 
-# Dashboard
-RUSTRAK_API_URL=https://rustrak.yourcompany.com
+# Dashboard (only for the links inside notifications; the dashboard itself
+# needs no configuration, it is served from / by this process)
 DASHBOARD_URL=https://rustrak.yourcompany.com
 
 # Email Alerts (optional - can also configure per-channel)

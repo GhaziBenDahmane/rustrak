@@ -32,6 +32,8 @@
   ],
   "ignore": {
     "files": [
+      ".next/**",
+      "out/**",
       "**/shared/ui/components/shadcn/**",
       "**/src/components/ui/**",
       "content/**/_meta.js",

@@ -48,6 +48,25 @@ Session auth is better UX for people; token auth is the standard for machines.
 
 DSN format: `http://<sentry_key>@<host>/<project_id>`.
 
+## It also serves the dashboard
+
+`routes/dashboard.rs` mounts `apps/dashboard`'s compiled output at `/`, so one
+process answers both the page and the API and the session cookie stays
+first-party. `RUSTRAK_DASHBOARD_DIR` says where the build is (default
+`./static`, which is where `scripts/bundle-dashboard.sh` puts it).
+
+**It stays optional.** No `index.html` in that directory means nothing is
+mounted and the server behaves exactly as it did before — the premise is that
+the server alone is a complete product, and `cargo build` has to keep working
+for anyone who never installs Node.
+
+The one rule the fallback must not break: `API_PREFIXES` (`/api`, `/auth`,
+`/health`, `/docs`, `/api-docs`) never answer with the application shell. An
+unmatched path under one of them is a JSON 404 like any other error, because a
+mistyped endpoint answering `200 text/html` makes `@rustrak/client` report a
+schema failure against itself. `apps/dashboard/vite.config.ts` proxies the same
+five prefixes in development; **the two lists must not drift.**
+
 ## Tests
 
 ```bash

@@ -5,7 +5,7 @@ on:
     branches: ["main"]
     paths:
       - "apps/server/**"
-      - "apps/webview-ui/**"
+      - "apps/dashboard/**"
       - "packages/**"
       - ".github/workflows/codeql.yml"
   # No `branches` filter: it matches the PR's base, and a PR onto a feature
@@ -13,7 +13,7 @@ on:
   pull_request:
     paths:
       - "apps/server/**"
-      - "apps/webview-ui/**"
+      - "apps/dashboard/**"
       - "packages/**"
   schedule:
     - cron: "27 3 * * 1" # Weekly Monday 03:27 UTC

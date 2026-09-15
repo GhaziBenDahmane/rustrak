@@ -19,7 +19,7 @@ import { Beacon, Enter, MockStage, Settle, useIdleStep } from './stage';
 
 /**
  * Structured logs, recreated from
- * apps/webview-ui/src/app/(main)/projects/[id]/logs/logs-list.tsx.
+ * apps/dashboard/public/(main)/projects/[id]/logs/logs-list.tsx.
  *
  * Two details carry the argument and are easy to lose:
  *

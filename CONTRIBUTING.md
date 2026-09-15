@@ -65,12 +65,17 @@ Before you begin, ensure you have the following installed:
    starts PostgreSQL, disable the default feature and explicitly enable
    `postgres`.
 
-6. **Run the UI (in another terminal)**
+6. **Run the dashboard (in another terminal)**
 
    ```bash
-   cd apps/webview-ui
+   cd apps/dashboard
    pnpm dev
    ```
+
+   Vite serves it on `:3000` and proxies `/api`, `/auth`, `/health`, `/docs`
+   and `/api-docs` through to the server, so the browser only ever talks to one
+   origin — the same arrangement production has, where the server itself hands
+   out the compiled bundle.
 
 ### Running Tests
 
@@ -80,7 +85,7 @@ pnpm test
 
 # Run tests for a specific package
 cd apps/server && cargo test
-cd apps/webview-ui && pnpm test
+cd apps/dashboard && pnpm test
 ```
 
 ### Linting and Formatting
@@ -145,7 +150,7 @@ Rustrak is a monorepo managed with Turborepo and pnpm:
 rustrak/
 ├── apps/
 │   ├── server/           # Rust backend (Actix-web)
-│   ├── webview-ui/       # Next.js frontend
+│   ├── dashboard/        # React SPA, served by the server
 │   └── docs/             # Documentation site
 ├── packages/
 │   ├── client/           # TypeScript API client
@@ -163,7 +168,7 @@ Each component has its own CLAUDE.md describing its architecture and the rules
 that apply inside it. Read the one for the area you are touching:
 
 - Server: `apps/server/CLAUDE.md`
-- WebView UI: `apps/webview-ui/CLAUDE.md`
+- Dashboard: `apps/dashboard/CLAUDE.md`
 - Client Package: `packages/client/CLAUDE.md`
 - MCP Server: `packages/mcp/CLAUDE.md`
 

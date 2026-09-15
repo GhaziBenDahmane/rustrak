@@ -18,7 +18,7 @@ import { Enter, MockStage, Settle, Ticker } from './stage';
 
 /**
  * The issue stream, recreated from
- * apps/webview-ui/src/app/(main)/projects/[id]/issues/issues-list.tsx.
+ * apps/dashboard/public/(main)/projects/[id]/issues/issues-list.tsx.
  *
  * The row is the point of the screen, so it is reproduced whole: selection
  * checkbox, title, culprit, then the quiet indicator strip — status, priority,

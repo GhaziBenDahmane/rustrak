@@ -50,27 +50,24 @@ DATABASE_URL=postgres://user:pass@host:5432/rustrak?sslmode=require
 
 ## Reverse proxy
 
-Neither container needs a published host port. Put them on the proxy's network,
-delete the `ports:` blocks from `docker-compose.yml`, and let the proxy reach
-them on `3000` and `8080` directly.
+The container needs no published host port. Put it on the proxy's network,
+delete the `ports:` block from `docker-compose.yml`, and let the proxy reach it
+on `8080`.
 
-Two addresses decide the rest of the configuration, and they are not the same
-one:
+**One container answers both the dashboard and the API**, so there is only one
+upstream and only one address to get right:
 
-- **`RUSTRAK_API_URL` is internal.** The dashboard calls the server from inside
-  its own container, server-side, so this request never leaves the Docker
-  network. It stays `http://server:8080`.
 - **`PUBLIC_URL` is public.** It is the host Rustrak writes into every DSN, so
   it has to be an address your SDKs can reach from outside.
 
-Getting the first one wrong is the common mistake: pointing `RUSTRAK_API_URL` at
-your public domain sends the dashboard's own calls back out through the proxy,
-which routes them to the dashboard instead of the server, and sign-in fails.
+There is no longer an internal dashboard-to-server address to configure. The
+dashboard is static files served from `/`, and the browser calls the API on the
+origin it was loaded from — which is the public host, through the proxy, like
+every other request.
 
-### Two hostnames
+### One hostname
 
-One host for the dashboard, one for ingestion. Nothing overlaps, so this is the
-shape to reach for.
+The simple case, and now the default one. Everything lives behind one name:
 
 ```yaml
 # docker-compose.yml
@@ -81,14 +78,8 @@ services:
       - DATABASE_URL=postgres://rustrak:${POSTGRES_PASSWORD}@postgres:5432/rustrak
       - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
       - SSL_PROXY=true
-      - PUBLIC_URL=https://ingest.example.com
+      - PUBLIC_URL=https://rustrak.example.com
     networks: [internal, proxy]
-
-  ui:
-    image: rustrak/rustrak-ui:latest
-    environment:
-      - RUSTRAK_API_URL=http://server:8080
-    networks: [proxy]
 
 networks:
   internal:
@@ -96,55 +87,13 @@ networks:
     external: true
 ```
 
-With nginx, that is one `server` block per hostname:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name rustrak.example.com;   # dashboard
-    location / {
-        proxy_pass http://ui:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name ingest.example.com;    # SDKs and the DSN
-    location / {
-        proxy_pass http://server:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-Caddy says the same thing in four lines, and Traefik in two labels per service
-(`traefik.http.routers.<name>.rule=Host(...)` plus the service port). The rule
-is the same in all three: hostname in, container out, no published port.
-
-### One hostname
-
-If you only have one name to spend, route by path. Everything an SDK sends
-lives under `/api/`, and the dashboard serves no routes there:
-
 ```nginx
 server {
     listen 443 ssl http2;
     server_name rustrak.example.com;
 
-    location /api/ {
-        proxy_pass http://server:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
     location / {
-        proxy_pass http://ui:3000;
+        proxy_pass http://server:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -152,12 +101,35 @@ server {
 }
 ```
 
-`PUBLIC_URL=https://rustrak.example.com` then produces a DSN with no port in
-it, and the SDK's `POST /api/<project>/envelope/` lands on the server.
+Caddy says the same thing in four lines, and Traefik in two labels
+(`traefik.http.routers.<name>.rule=Host(...)` plus the service port). No path
+rules, because there is nothing to split: the server decides for itself which
+paths are the API's and which are the dashboard's, and the two lists cannot
+disagree because there is only one of them.
 
-The server's own `/auth/` and `/health/` routes are deliberately not exposed
-this way: the dashboard reaches them over `RUSTRAK_API_URL` on the internal
-network, and `/auth/login` on the public host is the dashboard's sign-in page.
+### Two hostnames
+
+Still available, and worth it if you want ingestion on a name of its own — an
+SDK's `POST /api/<project>/envelope/` is unauthenticated traffic from the open
+internet, and separating it lets the proxy rate-limit or firewall that name
+without touching the one your team signs in on.
+
+Point both names at the same container and set `PUBLIC_URL` to the ingestion
+one, since that is the address the DSN has to carry:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name rustrak.example.com;   # the team
+    location / { proxy_pass http://server:8080; }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ingest.example.com;    # SDKs and the DSN
+    location /api/ { proxy_pass http://server:8080; }
+}
+```
 
 ## Performance
 
@@ -165,11 +137,12 @@ network, and `/auth/login` on the public host is the dashboard's sign-in page.
 
 | Component | CPU | Memory |
 |-----------|-----|--------|
-| Server | 1 vCPU | 256MB |
+| Server (API + dashboard) | 1 vCPU | 256MB |
 | Database | 1 vCPU | 512MB |
-| Dashboard | 0.5 vCPU | 256MB |
 
-For minimal footprint, run only the server (about 25MB RAM idle, under 60MB while absorbing a 20k-event burst) and access the dashboard locally or via Vercel.
+The dashboard costs nothing at runtime: it is static files the server reads
+once at startup and hands out from memory. The whole process idles at about
+25MB and stays under 60MB while absorbing a 20k-event burst.
 
 ### Rate limiting
 

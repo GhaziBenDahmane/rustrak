@@ -30,7 +30,7 @@ docker compose -f docker-compose.dev.yml up -d postgres
 cd apps/server && cargo run
 
 # Run dashboard (separate terminal)
-cd apps/webview-ui && pnpm dev
+cd apps/dashboard && pnpm dev
 ```
 
 ## Project structure
@@ -39,7 +39,7 @@ cd apps/webview-ui && pnpm dev
 rustrak/
 ├── apps/
 │   ├── server/         # Rust API server
-│   ├── webview-ui/     # Next.js dashboard
+│   ├── dashboard/      # React SPA, served by the server
 │   └── docs/           # Documentation
 ├── packages/
 │   ├── client/         # TypeScript API client
@@ -96,19 +96,24 @@ sqlx migrate add description
 sqlx migrate run
 ```
 
-## Dashboard (Next.js)
+## Dashboard
+
+React 19, TanStack Router and Vite. It compiles to static files that the Rust
+server hands out, so there is no Node process in production: `pnpm dev` runs
+Vite on `:3000` and proxies the API prefixes to the server, which is the same
+one-origin arrangement production has.
 
 ### Tests
 
 ```bash
-cd apps/webview-ui
+cd apps/dashboard
 pnpm test
 pnpm lint
 ```
 
 ### Strings and translations
 
-Every user-facing sentence lives in `src/shared/i18n/messages/`, one JSON dictionary per locale, and nowhere else. A new string goes into **both** `en.json` and `zh.json`, and is read through a translator rather than written inline.
+Every user-facing sentence lives in `src/shared/i18n/messages/`, one JSON dictionary per locale, and nowhere else. A new string goes into **all five** dictionaries, and is read through a translator rather than written inline.
 
 Dates, numbers and percentages are never formatted by hand. `toLocaleString()` resolves the locale of whatever process runs it, which on a Server Component is the container's, so it disagrees with the browser that hydrates it. Use next-intl's `useFormatter` or `getFormatter` with one of the named formats. The architecture suites fail the build on all of this.
 

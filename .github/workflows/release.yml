@@ -140,7 +140,7 @@ jobs:
           # single tag would be a lie about what the other images contain.
           # `apps/docs` is not in the group and is expected to drift - do not
           # add it back here.
-          for pkg in apps/webview-ui packages/client packages/mcp; do
+          for pkg in apps/dashboard packages/client packages/mcp; do
             PKG_VERSION=$(node -p "require('./$pkg/package.json').version")
             if [[ "$PKG_VERSION" != "$VERSION" ]]; then
               echo "::error::$pkg is at $PKG_VERSION but the release is $VERSION."
@@ -181,7 +181,6 @@ jobs:
             echo '```'
             echo "rustrak/rustrak-server:v$VERSION"
             echo "rustrak/rustrak-server:v$VERSION-postgres"
-            echo "rustrak/rustrak-ui:v$VERSION"
             echo '```'
             echo
             echo "\`@rustrak/client@$VERSION\` and \`@rustrak/mcp@$VERSION\` on npm."

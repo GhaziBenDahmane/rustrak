@@ -12,7 +12,7 @@ const COMPACT = new Intl.NumberFormat('en', {
 });
 
 /**
- * `compactCount` from apps/webview-ui/src/lib/chart-format.ts.
+ * `compactCount` from apps/dashboard/src/lib/chart-format.ts.
  *
  * Lives beside the charts rather than inside them because `mock-overview`
  * formats its own counters with it, and a module that exports both a component

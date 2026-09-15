@@ -81,19 +81,25 @@ location / {
 
 ## Can't connect to dashboard
 
-### Dashboard running locally
+The dashboard is served by the server itself, from `/`, so its address is the
+server's address — `http://localhost:8080` by default.
 
-If you're running the dashboard on your laptop connecting to a remote server:
+If `/` answers with a JSON 404 instead of the sign-in page, the image has no
+dashboard build in it. That is a supported configuration, not a fault: the
+server is a complete product without a UI, and it mounts one only when
+`RUSTRAK_DASHBOARD_DIR` (default `./static`) actually holds an `index.html`.
+The startup log says which it found:
 
-```bash
-docker run -p 3000:3000 \
-  -e RUSTRAK_API_URL=https://your-server.com \
-  rustrak/rustrak-ui:latest
+```
+Serving the dashboard from /app/static
+No dashboard build at ./static — serving the API only
 ```
 
 Make sure:
-- The server URL is correct
-- HTTPS is configured if required
+- You are opening the server's port, not `:3000`
+- HTTPS is configured if required, and `SSL_PROXY=true` when a proxy
+  terminates it — otherwise the session cookie is dropped and every page looks
+  signed out
 - No firewall blocking the connection
 
 ### Server not responding
@@ -170,16 +176,12 @@ MAX_EVENTS_PER_HOUR=1000
 
 ### Consider server-only deployment
 
-Run just the server (~50MB RAM) and access the dashboard separately:
+The whole install is one container (~50MB RAM), dashboard included — the
+dashboard is static files the server reads once at startup, so it costs nothing
+at runtime:
 
 ```bash
-# On server
 docker run -d -p 8080:8080 rustrak/rustrak-server:latest
-
-# Dashboard on another machine
-docker run -d -p 3000:3000 \
-  -e RUSTRAK_API_URL=https://your-server.com \
-  rustrak/rustrak-ui:latest
 ```
 
 ## Events delayed

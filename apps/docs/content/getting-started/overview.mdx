@@ -33,38 +33,31 @@ Rustrak ships two Docker image variants, each compiled for a different database 
 
 SQLite is the default — no external service needed. PostgreSQL is available for production deployments that need concurrent writes or high volume.
 
-## Deployment options
+## Deployment
 
-Rustrak has a unique architecture that separates the server from the dashboard:
-
-| Option | Server | Dashboard | Best for |
-|--------|--------|-----------|----------|
-| **Full stack** | Your server | Your server | Small teams, development |
-| **Server only** | Your server | Your laptop | Minimal server resources |
-| **Server only** | Your server | Vercel (free) | Production with zero server overhead |
-
-### Server-only deployment
-
-The Rustrak server uses only **~50MB RAM**. If you run the dashboard locally or on Vercel, your server only needs to handle API requests—no frontend assets, no Node.js runtime.
+One container, one port, one process:
 
 ```bash
-# On your server: just the Rust binary
 docker run -d -p 8080:8080 \
   -e DATABASE_URL=postgres://user:pass@localhost:5432/rustrak \
   -e SESSION_SECRET_KEY=$(openssl rand -hex 32) \
   -e CREATE_SUPERUSER=admin@example.com:your-secure-password \
   rustrak/rustrak-server:postgres
-
-# Dashboard on another machine or Vercel
-docker run -d -p 3000:3000 \
-  -e RUSTRAK_API_URL=https://your-server.com \
-  rustrak/rustrak-ui:latest
 ```
 
-This is perfect for:
-- VPS with limited RAM (512MB-1GB)
-- Edge deployments
-- Cost-conscious setups
+The dashboard is compiled to static files and served by the same Actix process
+that answers `/api`, so there is no Node.js runtime in production, no second
+image, and no API address to configure. The browser and the API share one
+origin, which is what keeps the session cookie first-party.
+
+The whole thing uses **~50MB RAM**, which is what makes it comfortable on:
+- a VPS with 512MB–1GB
+- edge deployments
+- cost-conscious setups
+
+**The dashboard is still optional.** It is mounted only when a build is present
+in the image; without one the server answers the API and nothing else. Point
+any Sentry SDK at it and never deploy a UI.
 
 ## What's included
 

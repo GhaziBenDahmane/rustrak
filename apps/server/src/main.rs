@@ -144,6 +144,23 @@ async fn main() -> std::io::Result<()> {
     #[cfg(feature = "openapi")]
     let openapi_scalar_doc = openapi::ApiDoc::openapi();
 
+    // The compiled dashboard, if one was shipped alongside the binary.
+    //
+    // Detected once here rather than per worker: the answer cannot change
+    // while the process runs, and `HttpServer::new` calls its factory once per
+    // worker thread, which would otherwise mean one stat of the filesystem per
+    // core at startup and a server that disagrees with itself if the directory
+    // appears halfway through.
+    let dashboard = routes::dashboard::Dashboard::detect(&config.dashboard_dir);
+    match &dashboard {
+        Some(found) => log::info!("Serving the dashboard from {}", found.root().display()),
+        None => log::info!(
+            "No dashboard build at {} — serving the API only",
+            config.dashboard_dir
+        ),
+    }
+    let serve_dashboard = dashboard.is_some();
+
     let session_aggregator_data = web::Data::new(session_aggregator.clone());
 
     // Processor registry — single dispatch surface for the ingest pipeline.
@@ -231,7 +248,7 @@ async fn main() -> std::io::Result<()> {
                     .build(),
             )
             // Authentication middleware (must be after SessionMiddleware)
-            .wrap(RequireAuth)
+            .wrap(RequireAuth::new(serve_dashboard))
             // Health check routes (no auth required)
             .service(
                 web::scope("/health")
@@ -295,7 +312,13 @@ async fn main() -> std::io::Result<()> {
                 )
         };
 
-        app
+        // The dashboard goes last, and has to: it ends in a catch-all that
+        // answers every unclaimed path with the application shell, so anything
+        // registered after it would never be reached.
+        match &dashboard {
+            Some(dashboard) => app.configure(dashboard.configure()),
+            None => app,
+        }
     })
     .bind((host.as_str(), port))?
     .shutdown_timeout(30)

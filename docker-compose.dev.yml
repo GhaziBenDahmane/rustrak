@@ -36,17 +36,6 @@ services:
       postgres:
         condition: service_healthy
 
-  webview-ui:
-    build:
-      context: .
-      dockerfile: ./apps/webview-ui/Dockerfile
-    ports:
-      - "${UI_PORT:-3000}:3000"
-    environment:
-      - RUSTRAK_API_URL=http://server:8080
-    depends_on:
-      - server
-
 volumes:
   postgres_data:
   sourcemaps_data:

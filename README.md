@@ -32,10 +32,10 @@ Error tracking usually comes two ways: a SaaS bill that scales with your worst
 day, or a self-hosted stack that wants its own machine. Rustrak is the third
 option: the same protocol, on hardware you already have.
 
-Two design decisions do most of that work. **The dashboard is a separate image
-from the server**, so you can run the API on a small box and the dashboard on
-your laptop or on Vercel; the machine holding your data never serves frontend
-assets. And **ingestion is two-phase**. The endpoint parses the envelope, writes
+Two design decisions do most of that work. **The dashboard is static files the
+server hands out**, so one small process answers both the API and the UI, and
+an image built without the dashboard is a complete product on its own. And
+**ingestion is two-phase**. The endpoint parses the envelope, writes
 it to disk and returns `200`; a spawned task then does the database work.
 Accepting an event never waits on the database, which is what stops a traffic
 spike from becoming a timeout inside your app. On a 4-core box with SQLite, a
@@ -64,14 +64,6 @@ services:
       - CREATE_SUPERUSER=${CREATE_SUPERUSER}
     restart: unless-stopped
 
-  ui:
-    image: rustrak/rustrak-ui:latest
-    ports: ["3000:3000"]
-    environment:
-      - RUSTRAK_API_URL=http://server:8080
-    depends_on: [server]
-    restart: unless-stopped
-
 volumes:
   rustrak_data:
 ```
@@ -82,7 +74,9 @@ export CREATE_SUPERUSER=admin@example.com:changeme123
 docker compose up -d
 ```
 
-Open <http://localhost:3000> and sign in with those credentials.
+Open <http://localhost:8080> and sign in with those credentials. One container
+answers both the dashboard and the API, so there is no second image, no second
+port, and no address to tell one half about the other.
 
 Running at scale? Use the `:postgres` tag and set `DATABASE_URL`. The
 [installation guide](https://rustrak.github.io/rustrak/getting-started/installation)

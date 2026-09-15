@@ -26,7 +26,7 @@ import {
 
 /**
  * The project overview, recreated from
- * apps/webview-ui/src/app/(main)/projects/[id]/page.tsx.
+ * apps/dashboard/public/(main)/projects/[id]/page.tsx.
  *
  * Tile *area* is the hierarchy, which is the whole idea of the real bento: the
  * error-volume chart is the one thing worth looking at first, so it takes four
