@@ -1,0 +1,55 @@
+---
+title: "Half the memory, twice the throughput: a pass over ingest and digest"
+description: "A 20k-event burst used to push the server to 195 MB and 2.3k requests per second. After profiling the pipeline it sits at 53 MB and 5k, with the same durability guarantees and no API change."
+date: "2026-09-15"
+author: "Abian Suarez"
+tags: ["engineering", "rust", "performance", "sqlite"]
+---
+
+Rustrak's pitch is that it runs on the machine you already have. That only holds if a bad afternoon in production, the kind where an app throws twenty thousand errors in a minute, does not turn the tracker into the next thing that falls over. So we sat down with `perf` and `strace`, sent the server a 20k-event burst, and looked at what it was actually doing.
+
+## What the profile said
+
+Application CPU was not the problem. The grouping regex was about 1% of the profile, SQLite about 10%, the allocator about 3%. The time went to thread hand-offs and to a few structural decisions that were fine at low volume and wrong under a burst.
+
+**Memory grew with the burst, not with the cap.** Ingestion is two-phase: the endpoint writes the envelope to disk, answers `200`, and spawns a task that does the database work. At most 16 of those tasks run at once; the rest wait for a permit. The catch was that every waiting task carried its entire async state machine inline, about 5.5 KB of it, before it had done anything. Sixteen thousand queued tasks came to roughly 195 MB of resident memory. `MALLOC_ARENA_MAX` changed nothing, which ruled out allocator fragmentation.
+
+**The recovery worker replayed the live queue.** On startup, and periodically after that, the server scans the ingest directory for files a previous process left behind and digests them. Under a backlog that scan saw every file the running tasks had not reached yet, read them all, and digested them on top of the tasks that already owned them. In one 20k run that was 16 000 failed reads, 15 duplicate digests and three unique-constraint violations, plus a full read of the whole queue on every pass.
+
+**Nine round trips to the blocking pool per accepted event.** Storing an event went through `tokio::fs` one call at a time: open, write, flush, fsync, link, unlink, open the directory, fsync it, close. Each one is a hop to the blocking thread pool and back, and each hop is a futex wake and a context switch. They were the top of the profile.
+
+**SQLite's busy handler as a queue.** Sixteen digests contended for the write lock through SQLite's busy handler, which polls with sleeps that grow to 100 ms. That is about five `clock_nanosleep` calls per event, and the lock sat idle between one commit and the next poll. On top of that, every digest ran its own `FULL` checkpoint before deleting its file: two fsyncs and a page copy per event.
+
+## What changed
+
+- The digest future is boxed only after it holds a permit. A waiting task used to carry the digest's whole state machine, about 5.5 KB, before doing anything; now it holds a few hundred bytes, and the working set (payload, parsed JSON, grouping) is bounded by the concurrency cap rather than the burst size.
+- An in-flight registry. The ingest route claims `(project_id, event_id)` before the file exists. The recovery scan skips owned files by name, before reading them, and treats a file that vanished between listing and replay as handled rather than failed.
+- The store is one blocking-pool round trip. Write, publish and directory sync run as a single `spawn_blocking` with `std::fs`. Same logic, same fsyncs, one hop.
+- Fewer statements per digest. The project and installation rows are read once. The grouping and its issue come back in one `JOIN`. The event insert no longer does `RETURNING *`, which was re-parsing the whole payload into a second JSON tree just to drop it. The platform-inference `UPDATE` is skipped once a project has a platform.
+- On SQLite, digests take turns at the write lock in process on a `tokio::sync::Mutex` instead of through the busy handler, and durability checkpoints are batched: committed digests enqueue their file and return, and a background worker runs one `FULL` checkpoint per 25 ms window for everything that committed in it.
+- Rate-limit window counts compare `digested_at` as text in the column's own format, so the `(project_id, digested_at)` index serves the scan instead of a full table scan.
+
+The durability contract is unchanged. A pending file is still deleted only after a completed `FULL` checkpoint that started after its commit, and a `kill -9` twelve seconds into a burst followed by a restart on the same database replayed every acknowledged event exactly once. Nothing about the wire protocol moved either: the same envelopes are accepted, the same responses come back.
+
+## Numbers
+
+Fresh instance, SQLite, 20 000 error events of about 4.8 KB each at 32 connections. The load generator ran on the same 4-core box, so the absolute figures are conservative; the deltas are the point.
+
+| | Before | After |
+|---|---|---|
+| Ingest throughput | ~2.3k req/s | ~5k req/s |
+| Ingest p50 / p99 | 13 ms / 26 ms | 6 ms / 12 ms |
+| Digest throughput | ~510 events/s | ~1000 events/s |
+| Server CPU for the run | 56 s | 31 s |
+| Peak memory | 195 MB | 53 MB |
+| Recovery-worker failed reads / duplicate digests | 16k / 15 | 0 / 0 |
+
+A 50 000-event run at 64 connections finished with an empty ingest directory, no warnings and 76 MB peak. Idle memory is unchanged at about 25 MB.
+
+PostgreSQL gets everything that is not SQLite-specific: the far smaller footprint per queued event, no replay of the live queue, one blocking round trip per stored event, and five fewer statements per digest.
+
+We also tried `mimalloc` and did not adopt it. The allocator is 3% of the profile and the queued-task fix took most of the burst memory away, so it did not justify a C build dependency in the distroless image.
+
+## What this means for a deployment
+
+The sizing advice in the [production guide](/configuration/production#performance) still stands, with more headroom in it than before. A server that used to need a couple of hundred megabytes to absorb a burst now stays under 60 MB, and gets through the burst in half the time.

@@ -4,7 +4,7 @@
 
 use crate::common::TestDb;
 use actix_web::{test, web, App};
-use chrono::{Duration, Utc};
+use chrono::{Duration, SubsecRound, Utc};
 use rustrak::config::{Config, DatabaseConfig, RateLimitConfig};
 use rustrak::routes;
 use rustrak::services::{
@@ -109,16 +109,22 @@ async fn stale_quota_cache_is_refreshed_before_the_next_ingest() {
         .execute(&db.pool)
         .await
         .unwrap();
-    let project = ProjectService::get_by_id(&db.pool, project_id)
-        .await
-        .unwrap();
-    let stale_until = Utc::now() + Duration::minutes(10);
+    // Whole seconds: Postgres keeps microseconds, so a nanosecond `Utc::now()`
+    // would not compare equal once it comes back.
+    let stale_until = (Utc::now() + Duration::minutes(10)).trunc_subsecs(0);
     set_project_quota_exceeded(&db.pool, project_id, stale_until).await;
     sqlx::query("UPDATE projects SET next_quota_check = 0 WHERE id = $1")
         .bind(project_id)
         .execute(&db.pool)
         .await
         .unwrap();
+    // The row as the ingest extractor loads it at the start of the request:
+    // `check_quota` reads the project's quota state from this, not from a
+    // second lookup.
+    let project = ProjectService::get_by_id(&db.pool, project_id)
+        .await
+        .unwrap();
+    assert_eq!(project.quota_exceeded_until, Some(stale_until));
 
     assert!(RateLimitService::check_quota(&db.pool, &project, &config)
         .await
