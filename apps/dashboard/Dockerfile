@@ -51,5 +51,9 @@ EXPOSE 3000
 # configuration without a rebuild.
 RUN rm /etc/nginx/conf.d/default.conf
 COPY apps/dashboard/docker/nginx.conf.template /etc/nginx/templates/rustrak.conf.template
+# Sourced before the template is rendered (name order, `.envsh` means sourced):
+# drops a trailing slash from RUSTRAK_API_URL and refuses a path, because with
+# a variable `proxy_pass` either would send every API request to the wrong URI.
+COPY apps/dashboard/docker/15-rustrak-api-url.envsh /docker-entrypoint.d/15-rustrak-api-url.envsh
 
 COPY --from=builder /app/apps/dashboard/dist /usr/share/nginx/html
