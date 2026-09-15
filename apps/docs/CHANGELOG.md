@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.9
+
+### Patch Changes
+
+- [`1392c19`](https://github.com/rustrak/rustrak/commit/1392c19442217e78b7fd4aa6482607d456d2a5ad) Thanks [@AbianS](https://github.com/AbianS)! - A blog post on the ingest and digest performance pass, and the production guide's footprint figure now states idle and burst memory.
+
 ## 0.15.8
 
 ### Patch Changes

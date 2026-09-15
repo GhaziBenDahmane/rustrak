@@ -1,5 +1,9 @@
 # @rustrak/client
 
+## 0.14.14
+
+No changes in this release.
+
 ## 0.14.13
 
 No changes in this release.
