@@ -17,6 +17,11 @@ on:
   # apps/docs/content/changelog/, which the site renders and feeds to its
   # version switcher. Those have to reach the site even when `docs` itself did
   # not move.
+  #
+  # Stable releases only; the guard below skips a prerelease. A release
+  # candidate is cut from `next`, and deploying from its tag would publish
+  # `next`'s docs as the site, describing a version `latest` does not yet
+  # serve. The rc's own entry reaches the site when it ships as stable.
   release:
     types: [published]
 
@@ -51,6 +56,12 @@ jobs:
         id: check
         run: |
           set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "true" ]]; then
+            echo "${{ github.event.release.tag_name }} is a prerelease; the site follows the stable line, not deploying."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           if [[ "${{ github.event_name }}" != "push" ]]; then
             echo "Event is ${{ github.event_name }}, deploying without a version check."
