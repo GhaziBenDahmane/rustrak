@@ -22,7 +22,7 @@ Application CPU was not the problem. The grouping regex was about 1% of the prof
 
 ## What changed
 
-- The digest future is boxed only after it holds a permit. Waiters are now a few bytes each, so backlog memory is bounded by the concurrency cap instead of the burst size.
+- The digest future is boxed only after it holds a permit. A waiting task used to carry the digest's whole state machine, about 5.5 KB, before doing anything; now it holds a few hundred bytes, and the working set (payload, parsed JSON, grouping) is bounded by the concurrency cap rather than the burst size.
 - An in-flight registry. The ingest route claims `(project_id, event_id)` before the file exists. The recovery scan skips owned files by name, before reading them, and treats a file that vanished between listing and replay as handled rather than failed.
 - The store is one blocking-pool round trip. Write, publish and directory sync run as a single `spawn_blocking` with `std::fs`. Same logic, same fsyncs, one hop.
 - Fewer statements per digest. The project and installation rows are read once. The grouping and its issue come back in one `JOIN`. The event insert no longer does `RETURNING *`, which was re-parsing the whole payload into a second JSON tree just to drop it. The platform-inference `UPDATE` is skipped once a project has a platform.
@@ -46,9 +46,9 @@ Fresh instance, SQLite, 20 000 error events of about 4.8 KB each at 32 connectio
 
 A 50 000-event run at 64 connections finished with an empty ingest directory, no warnings and 76 MB peak. Idle memory is unchanged at about 25 MB.
 
-PostgreSQL gets everything that is not SQLite-specific: bounded backlog memory, no replay of the live queue, one blocking round trip per stored event, and five fewer statements per digest.
+PostgreSQL gets everything that is not SQLite-specific: the far smaller footprint per queued event, no replay of the live queue, one blocking round trip per stored event, and five fewer statements per digest.
 
-We also tried `mimalloc` and did not adopt it. The allocator is 3% of the profile and memory is now bounded by the backlog fix, so it did not justify a C build dependency in the distroless image.
+We also tried `mimalloc` and did not adopt it. The allocator is 3% of the profile and the queued-task fix took most of the burst memory away, so it did not justify a C build dependency in the distroless image.
 
 ## What this means for a deployment
 
