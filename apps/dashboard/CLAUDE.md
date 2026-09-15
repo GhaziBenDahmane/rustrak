@@ -4,7 +4,10 @@ React 19, TanStack Router in file-based mode, Vite, Tailwind and shadcn/ui,
 `use-intl` for `en`, `zh`, `fr`, `es` and `ro`. Root context: `/CLAUDE.md`.
 
 It compiles to static files and **the Rust server hands them out**. There is no
-Node process in production, no second container, and no separate origin.
+Node process in production, no second container, and no separate origin. The
+one alternative is `Dockerfile` here: the same `dist/` behind nginx, proxying
+the API prefixes to `RUSTRAK_API_URL`, for a dashboard hosted away from its
+server. The browser still sees one origin either way.
 
 ```bash
 pnpm dev --filter=@rustrak/dashboard          # Vite on :3000, proxying to the server
@@ -76,8 +79,10 @@ Everything follows from that:
 - No CORS on the dashboard's path at all. The server's permissive CORS exists
   for SDK ingestion, not for this.
 
-`VITE_RUSTRAK_API_URL` overrides the origin, for a bundle hosted away from its
-server. It is an escape hatch and it gives up all three properties above.
+There is no override. A bundle hosted away from its server is `Dockerfile`
+here: nginx proxying the same prefixes, so all three properties hold there
+too. Calling the API cross-origin would give all three up, which is why no
+`VITE_RUSTRAK_API_URL` exists.
 
 ## Who gets in
 

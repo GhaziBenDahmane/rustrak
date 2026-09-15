@@ -218,9 +218,11 @@ the server and calls the API on that same origin, so the two can never disagree
 about where the other one is. That also means the session cookie is
 first-party, and no CORS policy applies to the dashboard's own requests.
 
-Two variables that used to live here are gone with the separate dashboard
-container: `RUSTRAK_API_URL`, which told the Next.js process how to reach the
-server, and `HOSTNAME`, which was that process's bind address.
+`RUSTRAK_API_URL` is not a server variable. It belongs to the optional
+`rustrak/rustrak-ui` image, nginx serving the same bundle for a dashboard
+hosted [on its own host](/configuration/production#dashboard-on-its-own-host),
+and it names the server that image proxies the API to. `HOSTNAME`, which was
+the old dashboard process's bind address, is gone.
 
 ### The update check
 

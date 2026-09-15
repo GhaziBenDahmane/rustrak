@@ -131,6 +131,42 @@ server {
 }
 ```
 
+### Dashboard on its own host
+
+The default is one container, and it is the one to reach for. The other
+topology is still supported: the API on a small box and the dashboard
+somewhere else, with the machine holding your data serving no frontend at all.
+`rustrak/rustrak-ui` is the same dashboard bundle behind nginx, which proxies
+`/api`, `/auth`, `/health`, `/docs` and `/api-docs` to the server named by
+`RUSTRAK_API_URL`:
+
+```yaml
+services:
+  ui:
+    image: rustrak/rustrak-ui:latest
+    ports: ["3000:3000"]
+    environment:
+      - RUSTRAK_API_URL=https://ingest.example.com
+```
+
+The browser still sees a single origin, the one the dashboard was loaded from,
+so the session cookie stays first-party and no CORS applies. `RUSTRAK_API_URL`
+is read when the container starts, not when the image is built, and its host
+is resolved per request, so the server can move without restarting the
+dashboard. The image is about 30MB and idles under 15MB of memory.
+
+`RUSTRAK_API_URL` is an origin with no path (`https://ingest.example.com`,
+not `https://ingest.example.com/`; a trailing slash is dropped, a path refuses
+to start). Across hosts make it `https://`: the session cookie travels on that
+hop, and nginx verifies the server's certificate against the system bundle.
+Plain `http://server:8080` is for the two containers sharing a Docker
+network, as in the Compose file.
+
+The server keeps serving its own copy of the dashboard too. To run it
+API-only, point [`RUSTRAK_DASHBOARD_DIR`](/configuration/environment#rustrak_dashboard_dir)
+at an empty directory: the dashboard is mounted only when that directory holds
+an `index.html`.
+
 ## Performance
 
 ### Resource allocation

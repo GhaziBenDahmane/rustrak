@@ -75,8 +75,10 @@ docker compose up -d
 ```
 
 Open <http://localhost:8080> and sign in with those credentials. One container
-answers both the dashboard and the API, so there is no second image, no second
-port, and no address to tell one half about the other.
+answers both the dashboard and the API, so there is no second port and no
+address to tell one half about the other. Want the dashboard on a different
+host from your data? `rustrak/rustrak-ui` is the same dashboard behind nginx;
+see the [production guide](https://rustrak.github.io/rustrak/configuration/production#dashboard-on-its-own-host).
 
 Running at scale? Use the `:postgres` tag and set `DATABASE_URL`. The
 [installation guide](https://rustrak.github.io/rustrak/getting-started/installation)

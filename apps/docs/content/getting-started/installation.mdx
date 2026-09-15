@@ -209,10 +209,9 @@ You're ready to [capture your first error](/getting-started/quickstart).
 
 ## Resource comparison
 
-| Setup | Server RAM | Server CPU | Notes |
-|-------|------------|------------|-------|
-| Full stack | ~200MB | Low | Easiest setup |
-| Server only | ~50MB | Minimal | Dashboard runs elsewhere |
-| Server only + Vercel | ~50MB | Minimal | Zero dashboard overhead |
+| Setup | RAM | Notes |
+|-------|-----|-------|
+| Server with the dashboard built in | ~25MB idle | The default. One container, one origin |
+| Server API-only + `rustrak/rustrak-ui` elsewhere | ~25MB + ~15MB | The dashboard on another host, behind nginx. See [production](/configuration/production#dashboard-on-its-own-host) |
 
-For a 512MB VPS, the server-only option leaves plenty of room for your application and database.
+For a 512MB VPS, either option leaves plenty of room for your application and database.

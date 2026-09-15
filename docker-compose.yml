@@ -17,7 +17,8 @@ services:
   # One service, and one image: the dashboard is compiled into static files
   # that this same process hands out at `/`, so there is no second container
   # and no second origin. It is still optional — an image built without the
-  # dashboard serves the API and nothing else.
+  # dashboard serves the API and nothing else. The `ui` service at the bottom
+  # is the exception, for a dashboard on another host.
   server:
     image: rustrak/rustrak-server:latest
     # Behind a reverse proxy on the same Docker network, delete this `ports`
@@ -40,6 +41,25 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Optional, and off unless you ask for it: `docker compose --profile ui up`.
+  # The same dashboard behind nginx, proxying the API to the server, for an
+  # installation that keeps the dashboard on a different host from its data.
+  # On the same host it buys nothing over the copy the server already serves.
+  ui:
+    image: rustrak/rustrak-ui:latest
+    profiles: ["ui"]
+    # As with `server` above: behind a reverse proxy on the same network,
+    # delete this `ports` block and let the proxy reach the container on 3000.
+    # This is the address people sign in on, so in production it sits behind
+    # TLS like the server does.
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    environment:
+      - RUSTRAK_API_URL=http://server:8080
+    depends_on:
+      - server
     restart: unless-stopped
 
 volumes:
