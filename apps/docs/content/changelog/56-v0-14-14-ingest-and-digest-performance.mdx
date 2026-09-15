@@ -1,0 +1,64 @@
+---
+version: v0.14.14
+title: Ingest and Digest Performance
+description: A profiling pass over the ingest and digest pipeline cuts peak memory under a burst from ~195 MB to ~53 MB, doubles ingest throughput and halves server CPU, with no change to durability or to the wire protocol
+date: 2026-09-15
+tags: [server, performance, sqlite, postgres]
+---
+
+## Half the memory, twice the throughput
+
+A 20k-event burst used to push the server to ~195 MB of resident memory and
+~2.3k accepted requests per second. Profiling showed the time going to thread
+hand-offs and to a few structures that grew with the burst rather than with the
+concurrency cap, not to application CPU. The
+[write-up](/blog/ingest-digest-performance) has the full story; the changes:
+
+- A digest task waiting for a processing slot no longer carries its whole
+  state machine. Thousands of queued events cost a few hundred bytes each
+  instead of ~5.5 KB, and the working set (payload, parsed JSON, grouping) is
+  bounded by the 16-slot cap
+- The recovery worker keeps an in-flight registry and skips events a task in
+  this process already owns, by filename and before reading them. Under load it
+  used to re-read and re-digest the live queue on every scan: 16k failed reads
+  and 15 duplicate digests in one 20k run, now zero
+- Storing a pending file is one blocking-pool round trip instead of nine
+  `tokio::fs` hops, with the same write, publish and directory fsync
+- Each digest issues fewer statements: project and installation rows are read
+  once, the grouping and its issue come back in one `JOIN`, the event insert no
+  longer re-parses the payload through `RETURNING *`, and the platform
+  inference `UPDATE` is skipped once a project has a platform
+
+On SQLite specifically:
+
+- Digests take turns at the write lock in process instead of through the busy
+  handler's polling sleeps, so the lock never sits idle between one commit and
+  the next poll
+- Durability checkpoints are batched. A committed digest enqueues its file and
+  returns; a background worker runs one `FULL` checkpoint per 25 ms window for
+  everything that committed in it. A pending file is still deleted only after a
+  completed checkpoint that started after its commit
+- Rate-limit window counts compare `digested_at` in the column's own text
+  format, so the `(project_id, digested_at)` index serves the scan instead of a
+  full table scan
+
+Measured on a 4-core box against SQLite, 20k events at 32 connections, load
+generator on the same machine:
+
+| | v0.14.13 | v0.14.14 |
+|---|---|---|
+| Ingest throughput | ~2.3k req/s | ~5k req/s |
+| Ingest p50 / p99 | 13 ms / 26 ms | 6 ms / 12 ms |
+| Digest throughput | ~510 events/s | ~1000 events/s |
+| Server CPU for the run | 56 s | 31 s |
+| Peak RSS | 195 MB | 53 MB |
+
+PostgreSQL gets everything that is not SQLite-specific. Idle memory is
+unchanged at about 25 MB. The envelope endpoint accepts the same payloads and
+returns the same responses as before.
+
+## Improvements
+
+- `rustls` moves to 0.23.45 for RUSTSEC-2026-0285
+- The Postgres end-to-end suite runs against `postgres:16-alpine`, matching
+  the compose file, instead of the testcontainers default of 11
