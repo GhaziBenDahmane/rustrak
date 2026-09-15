@@ -372,3 +372,80 @@ fn test_ssl_proxy_still_requires_a_session_secret() {
         "a secure-cookie deployment must not fall back to a per-start random key"
     );
 }
+
+// =============================================================================
+// RUSTRAK_DASHBOARD switch
+// =============================================================================
+
+/// Runs `body` with `DATABASE_URL` set and `RUSTRAK_DASHBOARD` as given,
+/// restoring both afterwards so the serial tests around it see the same
+/// environment they started with.
+fn with_dashboard_env<T>(value: Option<&str>, body: impl FnOnce() -> T) -> T {
+    let saved_db = std::env::var("DATABASE_URL").ok();
+    let saved_switch = std::env::var("RUSTRAK_DASHBOARD").ok();
+    std::env::set_var("DATABASE_URL", "postgres://test:test@localhost/test");
+    match value {
+        Some(v) => std::env::set_var("RUSTRAK_DASHBOARD", v),
+        None => std::env::remove_var("RUSTRAK_DASHBOARD"),
+    }
+
+    let out = body();
+
+    match saved_db {
+        Some(v) => std::env::set_var("DATABASE_URL", v),
+        None => std::env::remove_var("DATABASE_URL"),
+    }
+    match saved_switch {
+        Some(v) => std::env::set_var("RUSTRAK_DASHBOARD", v),
+        None => std::env::remove_var("RUSTRAK_DASHBOARD"),
+    }
+    out
+}
+
+#[test]
+#[serial]
+fn the_dashboard_is_enabled_unless_switched_off() {
+    with_dashboard_env(None, || {
+        let config = Config::from_env().expect("Config::from_env() should succeed");
+        assert!(config.dashboard.enabled);
+    });
+}
+
+#[test]
+#[serial]
+fn the_dashboard_switch_reads_the_usual_spellings() {
+    for (value, expected) in [
+        ("off", false),
+        ("false", false),
+        ("0", false),
+        ("OFF", false),
+        (" off ", false),
+        ("on", true),
+        ("true", true),
+        ("1", true),
+    ] {
+        with_dashboard_env(Some(value), || {
+            let config = Config::from_env().expect("Config::from_env() should succeed");
+            assert_eq!(
+                config.dashboard.enabled, expected,
+                "RUSTRAK_DASHBOARD={value:?}"
+            );
+        });
+    }
+}
+
+/// A value the switch does not recognise is refused rather than read as
+/// either side. The asymmetry is the point: an operator who typed `of` meant
+/// to keep the dashboard off the box, and a default of "on" would expose it.
+#[test]
+#[serial]
+fn the_dashboard_switch_refuses_what_it_does_not_recognise() {
+    with_dashboard_env(Some("of"), || {
+        let error = Config::from_env().expect_err("a typo must not be read as on or off");
+        assert!(
+            matches!(error, rustrak::config::ConfigError::InvalidDashboardSwitch { ref value } if value == "of"),
+            "got {error:?}"
+        );
+        assert!(error.to_string().contains("RUSTRAK_DASHBOARD"), "{error}");
+    });
+}

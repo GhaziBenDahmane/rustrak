@@ -195,7 +195,23 @@ Only creates user if database is empty.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `RUSTRAK_DASHBOARD` | `on` | Whether to serve the dashboard at all. `off` keeps the server API-only |
 | `RUSTRAK_DASHBOARD_DIR` | `./static` | Where the compiled dashboard lives, relative to the working directory or absolute |
+
+### RUSTRAK_DASHBOARD
+
+`off` keeps the dashboard unmounted even though the image carries a build.
+This is for the deployment that runs the dashboard from
+[another host](/configuration/production#dashboard-on-its-own-host) and wants
+the machine holding the data to serve no frontend at all.
+
+```bash
+RUSTRAK_DASHBOARD=off
+```
+
+`on`, `off`, `true`, `false`, `1` and `0` are accepted. Anything else refuses
+to start, deliberately: a typo that silently left the dashboard on would
+expose a UI you meant to keep off the box.
 
 ### RUSTRAK_DASHBOARD_DIR
 
@@ -204,9 +220,9 @@ where it looks for them. The image already puts a build at `/app/static`, which
 is what the default resolves to, so you do not normally set this.
 
 **It is a path, not a switch.** The dashboard is mounted when the directory
-actually holds an `index.html` and skipped when it does not, so a server-only
-deployment needs no configuration to stay server-only — and an image built
-without a dashboard behaves exactly as one always has.
+actually holds an `index.html` and skipped when it does not, so an image built
+without a dashboard behaves exactly as one always has. To keep a build that is
+there from being served, use `RUSTRAK_DASHBOARD=off` above.
 
 ```bash
 # Serve a dashboard you built and mounted yourself

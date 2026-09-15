@@ -6,7 +6,7 @@
 use crate::common::process_error_event;
 use actix_web::{middleware, web, App, HttpServer};
 use chrono::Utc;
-use rustrak::config::{Config, DatabaseConfig, RateLimitConfig};
+use rustrak::config::{Config, DashboardConfig, DatabaseConfig, RateLimitConfig};
 use rustrak::db::DbPool;
 use rustrak::ingest::EventMetadata;
 use rustrak::models::CreateProject;
@@ -52,7 +52,10 @@ fn create_test_config(ingest_dir: &str) -> Config {
         max_chunk_size_bytes: 10 * 1024 * 1024,
         session_flush_interval_secs: 30,
         session_cardinality_cap: 10_000,
-        dashboard_dir: "./static".to_string(),
+        dashboard: DashboardConfig {
+            dir: "./static".to_string(),
+            enabled: true,
+        },
     }
 }
 

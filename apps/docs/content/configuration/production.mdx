@@ -162,10 +162,8 @@ hop, and nginx verifies the server's certificate against the system bundle.
 Plain `http://server:8080` is for the two containers sharing a Docker
 network, as in the Compose file.
 
-The server keeps serving its own copy of the dashboard too. To run it
-API-only, point [`RUSTRAK_DASHBOARD_DIR`](/configuration/environment#rustrak_dashboard_dir)
-at an empty directory: the dashboard is mounted only when that directory holds
-an `index.html`.
+The server keeps serving its own copy of the dashboard unless you turn it off
+with [`RUSTRAK_DASHBOARD=off`](/configuration/environment#rustrak_dashboard).
 
 ## Performance
 

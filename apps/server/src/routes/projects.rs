@@ -240,7 +240,7 @@ fn build_base_url(config: &Config) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{DatabaseConfig, RateLimitConfig, SecurityConfig};
+    use crate::config::{DashboardConfig, DatabaseConfig, RateLimitConfig, SecurityConfig};
     use std::time::Duration;
 
     fn make_config(public_url: Option<String>, host: &str, port: u16) -> Config {
@@ -271,7 +271,10 @@ mod tests {
             max_chunk_size_bytes: 10 * 1024 * 1024,
             session_flush_interval_secs: 30,
             session_cardinality_cap: 10_000,
-            dashboard_dir: "./static".to_string(),
+            dashboard: DashboardConfig {
+                dir: "./static".to_string(),
+                enabled: true,
+            },
         }
     }
 
