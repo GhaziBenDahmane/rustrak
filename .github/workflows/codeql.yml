@@ -23,7 +23,7 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     # Skip the automated "chore: version packages" PR - see ci.yml.
-    if: github.head_ref != 'changeset-release/main'
+    if: ${{ !(startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     permissions:
       security-events: write
