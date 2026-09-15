@@ -1,8 +1,21 @@
 name: Release
 
+# Two release lines, one workflow.
+#
+# `main` is the stable line: every merge of the version PR cuts `vX.Y.Z`, moves
+# the `latest` tags and publishes to npm's `latest`. `next` is the prerelease
+# line for a change too large to land stable first: the same flow, except that
+# `.changeset/pre.json` exists there (`changeset pre enter rc`), so versions
+# come out as `vX.Y.Z-rc.N`, the GitHub release is marked prerelease, and
+# docker-publish.yml moves the `next` tags instead of `latest`. Fixes keep
+# landing on `main` as before and reach `next` by merging `main` into it.
+#
+# Promoting `next`: `changeset pre exit` there, merge the version PR that
+# drops the suffix, then merge `next` into `main`. `pre.json` must never reach
+# `main` while it is in pre mode, or `main` starts cutting prereleases too.
 on:
   push:
-    branches: [main]
+    branches: [main, next]
 
 permissions:
   contents: write
@@ -30,12 +43,33 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Check if this is a version commit (no changesets = versions were just bumped)
+      # Check if this is a version commit (no pending changesets = versions were
+      # just bumped).
+      #
+      # "Pending" is not "present": in prerelease mode `changeset version` keeps
+      # the consumed changeset files on disk and lists their ids in
+      # `pre.json` instead, so they can be replayed into the final changelog on
+      # exit. Counting `.md` files there would see changesets forever and never
+      # cut a release. This is the same filter changesets/action applies.
       - name: Check for changesets
         id: check
         run: |
-          # Count changeset files (excluding README.md and config.json)
-          CHANGESETS=$(ls .changeset/*.md 2>/dev/null | grep -v README.md | wc -l | tr -d ' ')
+          CHANGESETS=$(node -e '
+            const fs = require("node:fs");
+            const dir = ".changeset";
+            const preFile = `${dir}/pre.json`;
+            const consumed = new Set(
+              fs.existsSync(preFile)
+                ? JSON.parse(fs.readFileSync(preFile, "utf8")).changesets
+                : [],
+            );
+            const pending = fs
+              .readdirSync(dir)
+              .filter((f) => f.endsWith(".md") && f !== "README.md")
+              .map((f) => f.slice(0, -".md".length))
+              .filter((id) => !consumed.has(id));
+            console.log(pending.length);
+          ')
           echo "changesets_count=$CHANGESETS"
 
           if [ "$CHANGESETS" -eq "0" ]; then
@@ -51,8 +85,8 @@ jobs:
       # Nothing reviews this PR. It carries only version bumps and generated
       # changelogs, written by changesets from commits that were already
       # reviewed on their own PRs. Three separate mechanisms enforce that:
-      #   - CI, CodeQL and rust-security skip on the head branch
-      #     `changeset-release/main` (changesets/action's default name).
+      #   - CI, CodeQL and rust-security skip on a head branch under
+      #     `changeset-release/` (changesets/action names it after the base).
       #   - The `skip-review` label below silences CodeRabbit and Greptile.
       #     Neither bot can filter by head branch, and the PR is authored by a
       #     real account through PAT_TOKEN, so author filtering is out too.
@@ -60,6 +94,8 @@ jobs:
       #     for the same two bots: the label can only be applied after the PR
       #     exists, and a bot may already have picked it up by then.
       # Changing the title or the label name re-enables the bots here.
+      # The action opens the PR against the branch that triggered it, so on
+      # `next` the head is `changeset-release/next` and the base is `next`.
       - name: Create Release Pull Request
         id: changesets
         if: steps.check.outputs.has_changesets == 'true'
@@ -104,6 +140,15 @@ jobs:
             echo "Tag $TAG already exists, nothing to release"
             exit 0
           fi
+
+          # A hyphen is semver's prerelease marker: `0.15.0-rc.1`. Everything
+          # below that reads the version keys off it, and docker-publish.yml
+          # makes the same call from the tag alone.
+          PRERELEASE=false
+          if [[ "$VERSION" == *-* ]]; then
+            PRERELEASE=true
+          fi
+          echo "Releasing $TAG (prerelease: $PRERELEASE)"
 
           # Sanity check: the fixed group must be aligned. If it drifted, the
           # single tag would be a lie about what the other images contain.
@@ -156,12 +201,29 @@ jobs:
             echo "\`@rustrak/client@$VERSION\` and \`@rustrak/mcp@$VERSION\` on npm."
           } >> "$NOTES_FILE"
 
+          # Which moving tags this build took. Named here because the notes are
+          # what an operator reads to decide whether `latest` changed.
+          if [[ "$PRERELEASE" == "true" ]]; then
+            echo "Prerelease: also tagged \`next\` and \`next-postgres\` on Docker Hub and published under the \`next\` dist-tag on npm. \`latest\` does not move." >> "$NOTES_FILE"
+          else
+            echo "Also tagged \`latest\` and \`postgres\` on Docker Hub." >> "$NOTES_FILE"
+          fi
+
           # Pin where the generated "Full Changelog" range starts. Left to itself
           # GitHub picks the previous release, which is ambiguous here: releases
           # before v0.12.0 were tagged per package, five per version. Resolve it
           # explicitly, preferring a previous v* tag and falling back to the old
           # per-package scheme.
-          PREV_TAG=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -1)
+          #
+          # A stable release compares against the previous stable one: sorted
+          # by version, `v0.15.0-rc.3` would otherwise outrank `v0.14.14` and a
+          # `v0.14.15` cut from main would list the whole prerelease line as
+          # its own. A prerelease compares against whatever came last.
+          if [[ "$PRERELEASE" == "true" ]]; then
+            PREV_TAG=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -1)
+          else
+            PREV_TAG=$(git tag -l 'v[0-9]*' --sort=-v:refname | grep -v -- '-' | head -1)
+          fi
           if [[ -z "$PREV_TAG" ]]; then
             PREV_TAG=$(git tag -l '@rustrak/server@*' --sort=-v:refname | head -1)
           fi
@@ -173,14 +235,21 @@ jobs:
           #
           # --generate-notes appends GitHub's own PR and contributor list after
           # the body above, per the Releases API.
+          #
+          # `--prerelease` keeps a `next` build out of `/releases/latest`, which
+          # is what anyone polling for updates reads.
           GH_ARGS=(
             "$TAG"
             --target "${{ github.sha }}"
             --title "$RELEASE_TITLE"
             --notes-file "$NOTES_FILE"
             --generate-notes
-            --latest
           )
+          if [[ "$PRERELEASE" == "true" ]]; then
+            GH_ARGS+=(--prerelease)
+          else
+            GH_ARGS+=(--latest)
+          fi
           if [[ -n "$PREV_TAG" ]]; then
             echo "Generating notes since $PREV_TAG"
             GH_ARGS+=(--notes-start-tag "$PREV_TAG")

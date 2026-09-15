@@ -22,19 +22,37 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
+      channel: ${{ steps.check.outputs.channel }}
     steps:
+      # `channel` is which moving tags this build takes. A stable `vX.Y.Z`
+      # moves `latest` (and `postgres`) and lands on npm's `latest` dist-tag.
+      # A prerelease `vX.Y.Z-rc.N`, cut by release.yml from the `next` branch,
+      # moves `next` (and `next-postgres`) and publishes under npm's `next`
+      # dist-tag, so nobody pulling `latest` or running
+      # `npm install @rustrak/client` picks up a release candidate by accident.
       - name: Extract version from release tag
         id: check
         run: |
           TAG="${{ github.event.release.tag_name }}"
           echo "Release tag: $TAG"
 
-          VERSION=$(echo "$TAG" | grep -oE '^v([0-9]+\.[0-9]+\.[0-9]+)$' | sed 's/^v//')
+          VERSION=$(echo "$TAG" | grep -oE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' | sed 's/^v//')
           if [[ -z "$VERSION" ]]; then
-            echo "::error::Could not extract semver version from tag '$TAG'. Expected format: vX.Y.Z"
+            echo "::error::Could not extract semver version from tag '$TAG'. Expected format: vX.Y.Z or vX.Y.Z-rc.N"
             exit 1
           fi
+
+          # A hyphen is semver's prerelease marker. The release's own flag
+          # would say the same, but the tag is what release.yml decided from.
+          if [[ "$VERSION" == *-* ]]; then
+            CHANNEL=next
+          else
+            CHANNEL=latest
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+          echo "Version $VERSION on channel $CHANNEL"
 
   # ── SQLite image (default: latest) ───────────────────────────────────────────
   # Build on native runners (no QEMU). Each platform pushes by digest only.
@@ -107,13 +125,14 @@ jobs:
           pattern: digests-server-sqlite-*
           merge-multiple: true
 
-      - name: Create manifest list and push (SQLite — latest)
+      - name: Create manifest list and push (SQLite)
         working-directory: ${{ runner.temp }}/digests
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          CHANNEL="${{ needs.version.outputs.channel }}"
           docker buildx imagetools create \
             -t rustrak/rustrak-server:v${VERSION} \
-            -t rustrak/rustrak-server:latest \
+            -t rustrak/rustrak-server:${CHANNEL} \
             $(printf 'rustrak/rustrak-server@sha256:%s ' *)
 
       - name: Inspect image
@@ -195,9 +214,16 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           VERSION="${{ needs.version.outputs.version }}"
+          CHANNEL="${{ needs.version.outputs.channel }}"
+          # The stable moving tag is `postgres`, not `latest-postgres`.
+          if [[ "$CHANNEL" == "latest" ]]; then
+            MOVING=postgres
+          else
+            MOVING="${CHANNEL}-postgres"
+          fi
           docker buildx imagetools create \
             -t rustrak/rustrak-server:v${VERSION}-postgres \
-            -t rustrak/rustrak-server:postgres \
+            -t rustrak/rustrak-server:${MOVING} \
             $(printf 'rustrak/rustrak-server@sha256:%s ' *)
 
       - name: Inspect image
@@ -310,12 +336,15 @@ jobs:
       - name: Build packages
         run: pnpm --filter @rustrak/client build && pnpm --filter @rustrak/mcp build
 
+      # `--tag` is the dist-tag. Without it npm points `latest` at whatever was
+      # published last, prerelease included, and `npm install @rustrak/client`
+      # would hand out a release candidate.
       - name: Publish @rustrak/client
-        run: pnpm --filter @rustrak/client publish --no-git-checks --access public
+        run: pnpm --filter @rustrak/client publish --no-git-checks --access public --tag "${{ needs.version.outputs.channel }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @rustrak/mcp
-        run: pnpm --filter @rustrak/mcp publish --no-git-checks --access public
+        run: pnpm --filter @rustrak/mcp publish --no-git-checks --access public --tag "${{ needs.version.outputs.channel }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
