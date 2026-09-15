@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.10-rc.0
+
+### Patch Changes
+
+- [`46163c8`](https://github.com/rustrak/rustrak/commit/46163c87ca9d0c0364c4c8bc302e313955560a27) Thanks [@AbianS](https://github.com/AbianS)! - Installation, production, environment and troubleshooting rewritten for the single-container deployment: one port, one upstream behind a reverse proxy, `RUSTRAK_DASHBOARD` and `RUSTRAK_DASHBOARD_DIR`, and a "Dashboard on its own host" section for `rustrak-ui` with `RUSTRAK_API_URL`.
+
 ## 0.15.9
 
 ### Patch Changes
