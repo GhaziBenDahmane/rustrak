@@ -152,7 +152,7 @@ async fn create_test_event(
     let mut data = event_data.clone();
     data["timestamp"] = json!(timestamp.timestamp() as f64);
 
-    EventService::create(
+    let id = EventService::create(
         pool,
         event_id,
         project_id,
@@ -165,7 +165,10 @@ async fn create_test_event(
         None,
     )
     .await
-    .expect("Failed to create test event")
+    .expect("Failed to create test event");
+    EventService::get_by_id(pool, id)
+        .await
+        .expect("Failed to load test event")
 }
 
 fn create_event_data() -> Value {

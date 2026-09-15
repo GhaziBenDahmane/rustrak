@@ -38,7 +38,9 @@ your laptop or on Vercel; the machine holding your data never serves frontend
 assets. And **ingestion is two-phase**. The endpoint parses the envelope, writes
 it to disk and returns `200`; a spawned task then does the database work.
 Accepting an event never waits on the database, which is what stops a traffic
-spike from becoming a timeout inside your app.
+spike from becoming a timeout inside your app. On a 4-core box with SQLite, a
+burst of 20,000 events is accepted at about 5k events per second with the
+server peaking under 60 MB of memory.
 
 <img width="2000" height="820" alt="numbers" src="https://github.com/user-attachments/assets/e51ca5d2-56ed-4366-966d-24801b47f0f8" />
 

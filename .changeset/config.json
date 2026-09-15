@@ -1,5 +1,5 @@
 {
-  "$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
+  "$schema": "https://unpkg.com/@changesets/config@4.0.0/schema.json",
   "changelog": ["@changesets/changelog-github", { "repo": "rustrak/rustrak" }],
   "commit": false,
   "fixed": [
@@ -8,6 +8,7 @@
   "linked": [],
   "access": "public",
   "baseBranch": "main",
+  "privatePackages": { "version": true, "tag": false },
   "updateInternalDependencies": "patch",
   "ignore": ["@rustrak/test-sentry", "@rustrak/benchmarks"]
 }

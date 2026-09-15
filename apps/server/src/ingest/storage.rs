@@ -1,12 +1,11 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::io;
+use std::io::{self, Write as _};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::fs::{self, OpenOptions};
-use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::fs;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
@@ -90,9 +89,31 @@ async fn read_pending_record(
     let bytes = fs::read(path)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to read event file: {}", e)))?;
-    let record: PendingEventRecord = serde_json::from_slice(&bytes)
+    decode_pending_record(&bytes, event_id, project_id)
+}
+
+fn decode_pending_record(
+    bytes: &[u8],
+    event_id: &str,
+    project_id: Option<i32>,
+) -> AppResult<Vec<u8>> {
+    let record: PendingEventRecord = serde_json::from_slice(bytes)
         .map_err(|e| AppError::Internal(format!("Invalid pending event record: {}", e)))?;
     validate_pending_record(record, event_id, project_id)
+}
+
+/// Reads a file, or `None` when it does not exist. One round trip to the
+/// blocking pool instead of the `try_exists` + `read` pair, which also left a
+/// window for the file to vanish between the two.
+async fn read_if_present(path: &Path) -> AppResult<Option<Vec<u8>>> {
+    match fs::read(path).await {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(AppError::Internal(format!(
+            "Failed to read event file: {}",
+            e
+        ))),
+    }
 }
 
 fn base64_chunk_ranges(data_len: usize) -> impl Iterator<Item = Range<usize>> {
@@ -117,32 +138,49 @@ fn encode_base64_chunk(input: &[u8], output: &mut String) {
     STANDARD.encode_string(input, output);
 }
 
-async fn write_pending_record(
-    file: &mut fs::File,
+/// Runs a filesystem step on the blocking pool.
+///
+/// One hop per store or delete. The store used to go through `tokio::fs` call
+/// by call, and each call is its own hop to the blocking pool and back: open,
+/// write, flush, fsync, link, unlink, open the directory, fsync it, close.
+/// Nine hand-offs per accepted event, all of them futex wakes and context
+/// switches that showed up as the top of the profile. Batched, the request
+/// thread parks once for the whole thing.
+async fn on_blocking_pool<T, F>(what: &'static str, work: F) -> AppResult<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> AppResult<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| AppError::Internal(format!("{what} task failed: {e}")))?
+}
+
+fn write_pending_record(
+    file: &mut std::fs::File,
     metadata: &EventMetadata,
     event_data: &[u8],
 ) -> io::Result<()> {
     let metadata_bytes = serde_json::to_vec(metadata).map_err(io::Error::other)?;
-    let mut writer = BufWriter::new(file);
+    let mut writer = io::BufWriter::new(&mut *file);
     let version = PENDING_EVENT_VERSION;
     let payload = event_data;
-    writer
-        .write_all(format!(r#"{{"version":{version},"metadata":"#).as_bytes())
-        .await?;
-    writer.write_all(&metadata_bytes).await?;
-    writer.write_all(br#","event_data":""#).await?;
+    writer.write_all(format!(r#"{{"version":{version},"metadata":"#).as_bytes())?;
+    writer.write_all(&metadata_bytes)?;
+    writer.write_all(br#","event_data":""#)?;
     let initial_chunk_len = payload.len().min(BASE64_WRITE_CHUNK_SIZE);
     let mut encoded = String::with_capacity(initial_chunk_len.div_ceil(3) * 4);
     for range in base64_chunk_ranges(payload.len()) {
         encode_base64_chunk(&payload[range], &mut encoded);
-        writer.write_all(encoded.as_bytes()).await?;
+        writer.write_all(encoded.as_bytes())?;
     }
-    writer.write_all(br#""}"#).await?;
-    writer.flush().await?;
-    writer.get_mut().sync_all().await
+    writer.write_all(br#""}"#)?;
+    writer.flush()?;
+    drop(writer);
+    file.sync_all()
 }
 
-async fn publish_pending_file(
+fn publish_pending_file(
     path: &Path,
     temporary_path: &Path,
     event_id: &str,
@@ -153,15 +191,15 @@ async fn publish_pending_file(
         .and_then(|name| name.to_str())
         .ok_or_else(|| AppError::Internal("Invalid ingest file path".to_string()))?;
 
-    match fs::hard_link(temporary_path, path).await {
+    match std::fs::hard_link(temporary_path, path) {
         Ok(()) => {
-            let _ = fs::remove_file(temporary_path).await;
+            let _ = std::fs::remove_file(temporary_path);
         }
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-            let is_symlink = match fs::symlink_metadata(path).await {
+            let is_symlink = match std::fs::symlink_metadata(path) {
                 Ok(metadata) => metadata.file_type().is_symlink(),
                 Err(metadata_error) => {
-                    let _ = fs::remove_file(temporary_path).await;
+                    let _ = std::fs::remove_file(temporary_path);
                     return Err(AppError::Internal(format!(
                         "Failed to inspect existing ingest file: {}",
                         metadata_error
@@ -171,10 +209,10 @@ async fn publish_pending_file(
             let is_complete = if is_symlink {
                 false
             } else {
-                let existing = match fs::read(path).await {
+                let existing = match std::fs::read(path) {
                     Ok(existing) => existing,
                     Err(read_error) => {
-                        let _ = fs::remove_file(temporary_path).await;
+                        let _ = std::fs::remove_file(temporary_path);
                         return Err(AppError::Internal(format!(
                             "Failed to inspect existing ingest file: {}",
                             read_error
@@ -191,7 +229,7 @@ async fn publish_pending_file(
             if is_complete {
                 // A duplicate event ID is idempotent: keep the first complete
                 // record instead of allowing a later payload to win a race.
-                let _ = fs::remove_file(temporary_path).await;
+                let _ = std::fs::remove_file(temporary_path);
                 return Ok(());
             }
 
@@ -206,15 +244,15 @@ async fn publish_pending_file(
             // name first.  The subsequent rename replaces that name
             // atomically, so a crash cannot leave recovery with neither the
             // old record nor the new durable record.
-            if let Err(link_error) = fs::hard_link(path, &quarantine).await {
-                let _ = fs::remove_file(temporary_path).await;
+            if let Err(link_error) = std::fs::hard_link(path, &quarantine) {
+                let _ = std::fs::remove_file(temporary_path);
                 return Err(AppError::Internal(format!(
                     "Failed to quarantine ingest file: {}",
                     link_error
                 )));
             }
-            if let Err(rename_error) = fs::rename(temporary_path, path).await {
-                let _ = fs::remove_file(temporary_path).await;
+            if let Err(rename_error) = std::fs::rename(temporary_path, path) {
+                let _ = std::fs::remove_file(temporary_path);
                 return Err(AppError::Internal(format!(
                     "Failed to publish replacement ingest file: {}",
                     rename_error
@@ -222,7 +260,7 @@ async fn publish_pending_file(
             }
         }
         Err(e) => {
-            let _ = fs::remove_file(temporary_path).await;
+            let _ = std::fs::remove_file(temporary_path);
             return Err(AppError::Internal(format!(
                 "Failed to publish ingest file: {}",
                 e
@@ -230,12 +268,12 @@ async fn publish_pending_file(
         }
     }
 
-    sync_parent_directory(path).await?;
+    sync_parent_directory(path)?;
 
     Ok(())
 }
 
-async fn write_pending_record_atomically(
+fn write_pending_record_atomically(
     path: &Path,
     event_id: &str,
     project_id: i32,
@@ -247,30 +285,29 @@ async fn write_pending_record_atomically(
         .and_then(|name| name.to_str())
         .ok_or_else(|| AppError::Internal("Invalid ingest file path".to_string()))?;
     let temporary_path = path.with_file_name(format!(".{file_name}.tmp-{}", Uuid::new_v4()));
-    let mut temporary_file = match OpenOptions::new()
+    let mut temporary_file = match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary_path)
-        .await
     {
         Ok(file) => file,
         Err(e) => {
-            let _ = fs::remove_file(&temporary_path).await;
+            let _ = std::fs::remove_file(&temporary_path);
             return Err(AppError::Internal(format!(
                 "Failed to write temporary ingest file: {}",
                 e
             )));
         }
     };
-    if let Err(e) = write_pending_record(&mut temporary_file, metadata, event_data).await {
-        let _ = fs::remove_file(&temporary_path).await;
+    if let Err(e) = write_pending_record(&mut temporary_file, metadata, event_data) {
+        let _ = std::fs::remove_file(&temporary_path);
         return Err(AppError::Internal(format!(
             "Failed to write temporary ingest file: {}",
             e
         )));
     }
     drop(temporary_file);
-    publish_pending_file(path, &temporary_path, event_id, project_id).await
+    publish_pending_file(path, &temporary_path, event_id, project_id)
 }
 
 /// Creates the ingest directory once during server startup.
@@ -280,69 +317,71 @@ pub async fn prepare_ingest_dir(base_dir: &Path) -> AppResult<()> {
         .map_err(|e| AppError::Internal(format!("Failed to create ingest directory: {}", e)))
 }
 
-async fn sync_parent_directory(path: &Path) -> AppResult<()> {
+fn sync_parent_directory(path: &Path) -> AppResult<()> {
     if let Some(parent) = path.parent() {
-        let directory = fs::File::open(parent)
-            .await
+        let directory = std::fs::File::open(parent)
             .map_err(|e| AppError::Internal(format!("Failed to open ingest directory: {}", e)))?;
         directory
             .sync_all()
-            .await
             .map_err(|e| AppError::Internal(format!("Failed to sync ingest directory: {}", e)))?;
     }
     Ok(())
 }
 
-async fn write_legacy_atomically(path: &Path, bytes: &[u8]) -> AppResult<()> {
+fn write_legacy_atomically(path: &Path, bytes: &[u8]) -> AppResult<()> {
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| AppError::Internal("Invalid ingest file path".to_string()))?;
     let temporary_path = path.with_file_name(format!(".{file_name}.tmp-{}", Uuid::new_v4()));
-    let mut temporary_file = match OpenOptions::new()
+    let mut temporary_file = match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary_path)
-        .await
     {
         Ok(file) => file,
         Err(e) => {
-            let _ = fs::remove_file(&temporary_path).await;
+            let _ = std::fs::remove_file(&temporary_path);
             return Err(AppError::Internal(format!(
                 "Failed to write temporary ingest file: {}",
                 e
             )));
         }
     };
-    if let Err(e) = temporary_file.write_all(bytes).await {
-        let _ = fs::remove_file(&temporary_path).await;
+    if let Err(e) = temporary_file.write_all(bytes) {
+        let _ = std::fs::remove_file(&temporary_path);
         return Err(AppError::Internal(format!(
             "Failed to write temporary ingest file: {}",
             e
         )));
     }
-    if let Err(e) = temporary_file.sync_all().await {
-        let _ = fs::remove_file(&temporary_path).await;
+    if let Err(e) = temporary_file.sync_all() {
+        let _ = std::fs::remove_file(&temporary_path);
         return Err(AppError::Internal(format!(
             "Failed to sync temporary ingest file: {}",
             e
         )));
     }
-    if let Err(e) = fs::rename(&temporary_path, path).await {
-        let _ = fs::remove_file(&temporary_path).await;
+    if let Err(e) = std::fs::rename(&temporary_path, path) {
+        let _ = std::fs::remove_file(&temporary_path);
         return Err(AppError::Internal(format!(
             "Failed to publish ingest file: {}",
             e
         )));
     }
-    sync_parent_directory(path).await
+    sync_parent_directory(path)
 }
 
 /// Saves an event using the legacy, unscoped path.
 pub async fn store_event(base_dir: &Path, event_id: &str, event_data: &[u8]) -> AppResult<PathBuf> {
     prepare_ingest_dir(base_dir).await?;
     let path = get_event_path(base_dir, event_id)?;
-    write_legacy_atomically(&path, event_data).await?;
+    let bytes = event_data.to_vec();
+    let write_path = path.clone();
+    on_blocking_pool("legacy event store", move || {
+        write_legacy_atomically(&write_path, &bytes)
+    })
+    .await?;
     Ok(path)
 }
 
@@ -360,37 +399,45 @@ pub async fn store_event_with_metadata(
     }
     let path = get_project_event_path(base_dir, metadata.project_id, event_id)?;
     let pending_path = path.with_extension("pending.json");
-    prepare_ingest_dir(base_dir).await?;
-    match write_pending_record_atomically(
-        &pending_path,
-        event_id,
-        metadata.project_id,
-        metadata,
-        event_data,
-    )
-    .await
-    {
-        Ok(()) => {}
-        Err(_error)
-            if matches!(
-                fs::metadata(base_dir).await,
-                Err(e) if e.kind() == io::ErrorKind::NotFound
-            ) =>
-        {
-            // Cleanup can remove the directory after preparation but before
-            // the temporary file is opened; recreate it once and retry.
-            prepare_ingest_dir(base_dir).await?;
-            write_pending_record_atomically(
-                &pending_path,
-                event_id,
-                metadata.project_id,
-                metadata,
-                event_data,
-            )
-            .await?
+    let base_dir = base_dir.to_path_buf();
+    let event_id = event_id.to_string();
+    let metadata = metadata.clone();
+    let event_data = event_data.to_vec();
+    on_blocking_pool("event store", move || {
+        // The directory was created at startup (`prepare_ingest_dir`); the
+        // retry below covers it disappearing since. Creating it again on
+        // every event was one more round trip per request for an `EEXIST`.
+        match write_pending_record_atomically(
+            &pending_path,
+            &event_id,
+            metadata.project_id,
+            &metadata,
+            &event_data,
+        ) {
+            Ok(()) => Ok(()),
+            Err(_error)
+                if matches!(
+                    std::fs::metadata(&base_dir),
+                    Err(e) if e.kind() == io::ErrorKind::NotFound
+                ) =>
+            {
+                // Cleanup can remove the directory after preparation but before
+                // the temporary file is opened; recreate it once and retry.
+                std::fs::create_dir_all(&base_dir).map_err(|e| {
+                    AppError::Internal(format!("Failed to create ingest directory: {}", e))
+                })?;
+                write_pending_record_atomically(
+                    &pending_path,
+                    &event_id,
+                    metadata.project_id,
+                    &metadata,
+                    &event_data,
+                )
+            }
+            Err(error) => Err(error),
         }
-        Err(error) => return Err(error),
-    }
+    })
+    .await?;
     Ok(path)
 }
 
@@ -416,62 +463,50 @@ pub(crate) async fn read_event_with_location(
     event_id: &str,
 ) -> AppResult<(Vec<u8>, EventStorageLocation)> {
     let project_pending_path = get_project_pending_event_path(base_dir, project_id, event_id)?;
-    match fs::try_exists(&project_pending_path).await {
-        Ok(true) => {
-            return Ok((
-                read_pending_record(&project_pending_path, event_id, Some(project_id)).await?,
-                EventStorageLocation::Project,
-            ));
-        }
-        Ok(false) => {}
-        Err(e) => {
-            return Err(AppError::Internal(format!(
-                "Failed to read event file: {}",
-                e
-            )))
-        }
+    if let Some(bytes) = read_if_present(&project_pending_path).await? {
+        return Ok((
+            decode_pending_record(&bytes, event_id, Some(project_id))?,
+            EventStorageLocation::Project,
+        ));
     }
 
     let project_path = get_project_event_path(base_dir, project_id, event_id)?;
-    match fs::try_exists(&project_path).await {
-        Ok(true) => {
-            return Ok((
-                fs::read(&project_path)
-                    .await
-                    .map_err(|e| AppError::Internal(format!("Failed to read event file: {}", e)))?,
-                EventStorageLocation::Project,
-            ));
-        }
-        Ok(false) => {}
-        Err(e) => {
-            return Err(AppError::Internal(format!(
-                "Failed to read event file: {}",
-                e
-            )))
-        }
+    if let Some(bytes) = read_if_present(&project_path).await? {
+        return Ok((bytes, EventStorageLocation::Project));
     }
 
     let legacy_pending_path = get_pending_event_path(base_dir, event_id)?;
-    match fs::try_exists(&legacy_pending_path).await {
-        Ok(true) => Ok((
-            read_pending_record(&legacy_pending_path, event_id, Some(project_id)).await?,
+    if let Some(bytes) = read_if_present(&legacy_pending_path).await? {
+        return Ok((
+            decode_pending_record(&bytes, event_id, Some(project_id))?,
             EventStorageLocation::Legacy,
-        )),
-        Ok(false) => {
-            let legacy_path = get_event_path(base_dir, event_id)?;
-            match fs::read(&legacy_path).await {
-                Ok(bytes) => Ok((bytes, EventStorageLocation::Legacy)),
-                Err(e) => Err(AppError::Internal(format!(
-                    "Failed to read event file: {}",
-                    e
-                ))),
-            }
-        }
+        ));
+    }
+
+    let legacy_path = get_event_path(base_dir, event_id)?;
+    match fs::read(&legacy_path).await {
+        Ok(bytes) => Ok((bytes, EventStorageLocation::Legacy)),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Err(AppError::Internal(format!(
+            "{MISSING_EVENT_FILE}: {}",
+            event_id
+        ))),
         Err(e) => Err(AppError::Internal(format!(
             "Failed to read event file: {}",
             e
         ))),
     }
+}
+
+/// Prefix of the error an event read reports when no copy of the event exists
+/// at any location. The recovery worker reads it as "already handled": the
+/// file it listed a moment ago was finished and deleted by the task that
+/// owned it, which is not a failure to replay.
+pub(crate) const MISSING_EVENT_FILE: &str = "Event file not found";
+
+/// Whether an error is the event-file-missing case described at
+/// [`MISSING_EVENT_FILE`].
+pub(crate) fn is_missing_event_file(error: &AppError) -> bool {
+    matches!(error.kind(), AppError::Internal(message) if message.starts_with(MISSING_EVENT_FILE))
 }
 
 pub async fn read_event_for_project(
@@ -500,7 +535,17 @@ pub(crate) async fn delete_event_at(
     event_id: &str,
     location: EventStorageLocation,
 ) -> AppResult<()> {
-    let paths = match location {
+    delete_paths(event_paths_at(base_dir, project_id, event_id, location)?).await
+}
+
+/// Every path an event's durable copy may occupy at `location`.
+pub(crate) fn event_paths_at(
+    base_dir: &Path,
+    project_id: i32,
+    event_id: &str,
+    location: EventStorageLocation,
+) -> AppResult<Vec<PathBuf>> {
+    Ok(match location {
         EventStorageLocation::Project => vec![
             get_project_event_path(base_dir, project_id, event_id)?,
             get_project_pending_event_path(base_dir, project_id, event_id)?,
@@ -510,8 +555,7 @@ pub(crate) async fn delete_event_at(
             get_event_metadata_path(base_dir, event_id)?,
             get_pending_event_path(base_dir, event_id)?,
         ],
-    };
-    delete_paths(paths).await
+    })
 }
 
 pub async fn delete_event_for_project(
@@ -528,15 +572,20 @@ pub async fn delete_event_for_project(
     .await
 }
 
-async fn delete_paths(paths: Vec<PathBuf>) -> AppResult<()> {
-    for path in paths {
-        match fs::remove_file(&path).await {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => log::warn!("Failed to delete event file {:?}: {}", path, e),
+/// Removes the given files, ignoring ones that are already gone, in one
+/// blocking-pool round trip however many there are.
+pub(crate) async fn delete_paths(paths: Vec<PathBuf>) -> AppResult<()> {
+    on_blocking_pool("event delete", move || {
+        for path in paths {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                Err(e) => log::warn!("Failed to delete event file {:?}: {}", path, e),
+            }
         }
-    }
-    Ok(())
+        Ok(())
+    })
+    .await
 }
 
 fn is_orphaned_temporary_file(file_name: &str) -> bool {
@@ -615,6 +664,20 @@ fn pending_filename_matches(file_name: &str, metadata: &EventMetadata, event_id:
 
 /// Reads pending event metadata left by an interrupted or exhausted digest.
 pub async fn list_pending_event_metadata(base_dir: &Path) -> AppResult<Vec<EventMetadata>> {
+    list_pending_event_metadata_except(base_dir, |_, _| false).await
+}
+
+/// [`list_pending_event_metadata`], skipping every project-scoped file whose
+/// `(project_id, event_id)` the caller says it owns, before the file is read.
+///
+/// A scan reads and parses each candidate in full (payload included), so
+/// under a backlog of thousands of in-flight events a scan that only filtered
+/// afterwards cost hundreds of megabytes of reads for nothing. Legacy files
+/// carry no project id in their name and are read as before.
+pub(crate) async fn list_pending_event_metadata_except(
+    base_dir: &Path,
+    owned: impl Fn(i32, Uuid) -> bool,
+) -> AppResult<Vec<EventMetadata>> {
     cleanup_orphaned_temporary_files(base_dir).await?;
     let mut entries = match fs::read_dir(base_dir).await {
         Ok(entries) => entries,
@@ -642,6 +705,12 @@ pub async fn list_pending_event_metadata(base_dir: &Path) -> AppResult<Vec<Event
         let is_pending_record = file_name.ends_with(".pending.json");
         let is_legacy_metadata = file_name.ends_with(".meta.json");
         if !is_pending_record && !is_legacy_metadata {
+            continue;
+        }
+        if is_pending_record
+            && parse_project_pending_filename(file_name)
+                .is_some_and(|(project_id, event_id)| owned(project_id, event_id))
+        {
             continue;
         }
 
@@ -908,6 +977,44 @@ mod tests {
             .await
             .unwrap();
         assert!(dir.is_dir());
+    }
+
+    #[tokio::test]
+    async fn recovery_listing_skips_owned_files_without_reading_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let owned_id = "9ec79c33-ec99-42ab-8353-589fcb2e04dc";
+        let other_id = "1ec79c33-ec99-42ab-8353-589fcb2e04dc";
+        store_event_with_metadata(dir.path(), owned_id, br"{}", &metadata(owned_id, 7))
+            .await
+            .unwrap();
+        store_event_with_metadata(dir.path(), other_id, br"{}", &metadata(other_id, 7))
+            .await
+            .unwrap();
+        // An owned file that is not even valid JSON: proof it was never read.
+        let owned_path = get_project_pending_event_path(dir.path(), 7, owned_id).unwrap();
+        fs::write(&owned_path, b"not json").await.unwrap();
+
+        let owned_uuid = Uuid::parse_str(owned_id).unwrap();
+        let listed = list_pending_event_metadata_except(dir.path(), |project_id, event_id| {
+            project_id == 7 && event_id == owned_uuid
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(listed.len(), 1);
+        assert!(same_event_id(&listed[0].event_id, other_id));
+    }
+
+    #[tokio::test]
+    async fn a_read_of_a_vanished_event_reports_it_as_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let error = read_event_for_project(dir.path(), 7, "9ec79c33-ec99-42ab-8353-589fcb2e04dc")
+            .await
+            .unwrap_err();
+        assert!(is_missing_event_file(&error), "{error}");
+        assert!(!is_missing_event_file(&AppError::Internal(
+            "Failed to read event file: permission denied".to_string()
+        )));
     }
 
     proptest! {

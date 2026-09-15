@@ -10,10 +10,10 @@ use crate::digest::processors::{
     is_retryable_write_contention, Processor, ProcessorCtx, Processors, SessionItem,
 };
 use crate::error::{AppError, AppResult};
+use crate::ingest::storage::{is_missing_event_file, list_pending_event_metadata_except};
 use crate::ingest::{
-    decompress_body, detach_payload_if_needed, get_content_encoding, list_pending_event_metadata,
-    store_event_with_metadata, EnvelopeItemKind, EnvelopeParser, EventMetadata,
-    MAX_COMPRESSED_SIZE,
+    decompress_body, detach_payload_if_needed, get_content_encoding, store_event_with_metadata,
+    EnvelopeItemKind, EnvelopeParser, EventMetadata, MAX_COMPRESSED_SIZE,
 };
 use crate::services::RateLimitService;
 
@@ -260,6 +260,8 @@ pub async fn ingest_envelope(
     };
 
     let event_id = event_id.expect("event_id is Some when event_item is Some");
+    let event_uuid = uuid::Uuid::parse_str(&event_id)
+        .map_err(|_| AppError::Validation("event_id must be a valid UUID".to_string()))?;
 
     // 6. Validate that the payload is valid JSON without building a Value tree;
     //    the digest re-parses the stored file.
@@ -272,6 +274,13 @@ pub async fn ingest_envelope(
         ingested_at,
         remote_addr,
     };
+    // Claimed before the file exists so the recovery worker never sees a
+    // pending file that no task owns. Released when the spawned digest ends,
+    // or here if the store fails and there is nothing to recover.
+    let in_flight = processors
+        .errors
+        .in_flight()
+        .register(auth.project.id, event_uuid);
     store_event_with_metadata(
         processors.errors.ingest_dir(),
         &event_id,
@@ -288,40 +297,50 @@ pub async fn ingest_envelope(
         // grouping working set stay bounded to the concurrent cap, not the
         // burst size.
         let _permit = processors.processing_slot.acquire().await;
-        let ctx = ProcessorCtx {
-            pool: pool_clone,
-            project_id: metadata.project_id,
-            event_id: uuid::Uuid::parse_str(&metadata.event_id)
-                .unwrap_or_else(|_| uuid::Uuid::nil()),
-            ingested_at: metadata.ingested_at,
-            remote_addr: None,
-        };
-        for attempt in 0..4 {
-            match processors.errors.process_ref(&metadata, &ctx).await {
-                Ok(()) => break,
-                Err(e) if is_retryable_write_contention(&e) && attempt < 3 => {
-                    let delay = std::time::Duration::from_millis(250 << attempt);
-                    log::warn!(
-                        "Digest {} remains locked; retrying after {:?}: {:?}",
-                        metadata.event_id,
-                        delay,
-                        e
-                    );
-                    tokio::time::sleep(delay).await;
-                }
-                Err(e) => {
-                    log::error!(
-                        "Failed to digest event {}; it remains queued: {:?}",
-                        metadata.event_id,
-                        e
-                    );
-                    break;
-                }
-            }
-        }
+        // Boxed here, after the permit: the digest's state machine is several
+        // kilobytes, and a burst leaves thousands of tasks waiting on the
+        // permit. Unboxed, each waiter carried the whole thing inline and
+        // the backlog's memory grew with the burst rather than the cap.
+        Box::pin(digest_stored_event(&processors, &pool_clone, &metadata)).await;
+        drop(in_flight);
     });
 
     Ok(HttpResponse::Ok().json(IngestResponse { id: Some(event_id) }))
+}
+
+/// Digests one stored event, retrying transient write contention. Failures
+/// leave the durable file in place for the recovery worker.
+async fn digest_stored_event(processors: &Processors, pool: &DbPool, metadata: &EventMetadata) {
+    let ctx = ProcessorCtx {
+        pool: pool.clone(),
+        project_id: metadata.project_id,
+        event_id: uuid::Uuid::parse_str(&metadata.event_id).unwrap_or_else(|_| uuid::Uuid::nil()),
+        ingested_at: metadata.ingested_at,
+        remote_addr: None,
+    };
+    for attempt in 0..4 {
+        match processors.errors.process_ref(metadata, &ctx).await {
+            Ok(()) => break,
+            Err(e) if is_retryable_write_contention(&e) && attempt < 3 => {
+                let delay = std::time::Duration::from_millis(250 << attempt);
+                log::warn!(
+                    "Digest {} remains locked; retrying after {:?}: {:?}",
+                    metadata.event_id,
+                    delay,
+                    e
+                );
+                tokio::time::sleep(delay).await;
+            }
+            Err(e) => {
+                log::error!(
+                    "Failed to digest event {}; it remains queued: {:?}",
+                    metadata.event_id,
+                    e
+                );
+                break;
+            }
+        }
+    }
 }
 
 /// Replays event files left by a previous process after a digest failure.
@@ -359,7 +378,15 @@ async fn recover_pending_events_once_with_status(
     processors: web::Data<Processors>,
     ingest_dir: std::path::PathBuf,
 ) -> bool {
-    let pending = match list_pending_event_metadata(&ingest_dir).await {
+    // Files owned by a task in this process (digest in flight, or committed
+    // and awaiting its durability checkpoint) are not leftovers: replaying
+    // one would digest the event twice and race that task for the file.
+    let in_flight = processors.errors.in_flight();
+    let pending = match list_pending_event_metadata_except(&ingest_dir, |project_id, event_id| {
+        in_flight.contains(project_id, event_id)
+    })
+    .await
+    {
         Ok(pending) => pending,
         Err(e) => {
             log::error!("Failed to scan pending event metadata: {:?}", e);
@@ -369,6 +396,13 @@ async fn recover_pending_events_once_with_status(
 
     let mut has_pending = false;
     for metadata in pending {
+        // Re-checked per file: the listing was filtered, but a task can have
+        // claimed a legacy-named file since, or finished one listed earlier.
+        let owned = uuid::Uuid::parse_str(&metadata.event_id)
+            .is_ok_and(|event_id| in_flight.contains(metadata.project_id, event_id));
+        if owned {
+            continue;
+        }
         let ctx = ProcessorCtx {
             pool: pool.clone(),
             project_id: metadata.project_id,
@@ -378,6 +412,15 @@ async fn recover_pending_events_once_with_status(
             remote_addr: None,
         };
         if let Err(e) = processors.errors.process_ref(&metadata, &ctx).await {
+            if is_missing_event_file(&e) {
+                // Listed a moment ago, finished and deleted by its owner
+                // since: nothing left to replay.
+                log::debug!(
+                    "Pending digest {} was completed by its owner before replay",
+                    metadata.event_id
+                );
+                continue;
+            }
             has_pending = true;
             log::warn!(
                 "Pending digest {} remains queued: {:?}",

@@ -1,5 +1,17 @@
 # @rustrak/server
 
+## 0.14.14
+
+### Patch Changes
+
+- [`1392c19`](https://github.com/rustrak/rustrak/commit/1392c19442217e78b7fd4aa6482607d456d2a5ad) Thanks [@AbianS](https://github.com/AbianS)! - Ingest and digest run on less memory and CPU and get through a burst faster, with the durability contract and the envelope wire contract unchanged. A digest task waiting for a processing slot no longer carries its whole state machine, so a queue of thousands of events costs a few hundred bytes each instead of several kilobytes: peak RSS during a 20k-event burst drops from ~195 MB to ~53 MB. The recovery worker skips events a task in this process already owns, which under load had it re-reading and re-digesting the live queue. The pending-file store is one blocking-pool round trip instead of nine `tokio::fs` hops, and every digest issues fewer statements: project and installation rows read once, grouping and issue in one JOIN, no `RETURNING *` of the event payload, platform inference skipped once set, and rate-limit window counts served by the `(project_id, digested_at)` index. On SQLite, digests take turns at the write lock in process instead of through the busy handler, and durability checkpoints are batched on a background queue. Measured on a 4-core box against SQLite (20k events, 32 connections): ingest ~2.3k → ~5k req/s with p99 27 ms → 12 ms, digest ~510 → ~1000 events/s, server CPU 56 s → 31 s. rustls is bumped to 0.23.45 for RUSTSEC-2026-0285.
+
+## 0.14.13
+
+### Patch Changes
+
+- [`6e188ec`](https://github.com/rustrak/rustrak/commit/6e188ec24e0bed675e06070d9e73855e10a9f231) Thanks [@AbianS](https://github.com/AbianS)! - Custom Webhook integration: a fourth alert channel that POSTs a body rendered from a user-written JSON template, so a WeCom, DingTalk, Feishu or any other bot with its own message schema can be fed without Rustrak carrying an integration per service (@LiJoeAllen). Template values are escaped for where they sit, inside a string or as a JSON value, so a quote in an issue title can no longer break the body. Rendering is bounded and a template that fails against the sample payload is refused at save time. The dashboard editor offers field pills, autocompletion, inline diagnostics, eight presets and a live preview served by the same renderer that delivers. Test results now carry the endpoint's response body, since delivery is judged by HTTP status alone and a bot that refuses a message still answers 200. The API client gains `previewTemplate` and the MCP server gains `create_alert_channel`, `update_alert_channel` and `preview_alert_template`. All notification dispatchers share one HTTP client. Dependencies updated, including argon2 0.6 with existing password hashes still verifying.
+
 ## 0.14.12
 
 ### Patch Changes

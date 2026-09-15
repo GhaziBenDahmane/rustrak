@@ -139,12 +139,17 @@ impl EventService {
             .ok_or_else(|| AppError::NotFound(format!("Event {} not found", event_id)))
     }
 
-    /// Creates a new event.
+    /// Creates a new event and returns its primary key.
     ///
     /// Takes an executor rather than the pool so the digest can insert the
     /// event inside the same transaction that creates the issue and bumps its
     /// counters: those counters claim this row, so they have to commit or roll
     /// back together.
+    ///
+    /// Returns only the id: `RETURNING *` would hand the whole `data` blob
+    /// back to be parsed into a second `serde_json::Value` tree that the
+    /// digest then drops, doubling the payload's JSON work and peak memory.
+    /// Callers that need the row load it with [`Self::get_by_id`].
     #[allow(clippy::too_many_arguments)]
     pub async fn create<'e, E>(
         executor: E,
@@ -157,7 +162,7 @@ impl EventService {
         denormalized: &DenormalizedFields,
         remote_addr: Option<&str>,
         alert_type: Option<AlertType>,
-    ) -> AppResult<Event>
+    ) -> AppResult<Uuid>
     where
         E: sqlx::Executor<'e, Database = crate::db::Db>,
     {
@@ -220,7 +225,7 @@ impl EventService {
         // Generate primary key UUID in application for cross-DB compatibility
         let id = Uuid::new_v4();
 
-        let event = sqlx::query_as::<_, Event>(
+        sqlx::query(
             r#"
             INSERT INTO events (
                 id, event_id, project_id, issue_id, grouping_id, data,
@@ -231,7 +236,6 @@ impl EventService {
                 sdk_name, sdk_version, remote_addr, alert_type
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
-            RETURNING *
             "#,
         )
         .bind(id)
@@ -257,10 +261,10 @@ impl EventService {
         .bind(sdk_version)
         .bind(remote_addr_str)
         .bind(alert_type)
-        .fetch_one(executor)
+        .execute(executor)
         .await?;
 
-        Ok(event)
+        Ok(id)
     }
 
     /// Checks if an event with this event_id already exists in the project

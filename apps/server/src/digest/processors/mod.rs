@@ -20,9 +20,74 @@ use crate::ingest::envelope::EnvelopeItemKind;
 use crate::services::sourcemap::SourceMapProvider;
 use crate::workers::session_aggregator::SessionAggregatorHandle;
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+/// The error digests this process currently owns: spawned by the ingest route
+/// and not finished yet, or committed and waiting for the durability
+/// checkpoint that lets their file be deleted.
+///
+/// The recovery worker consults it so a backlog is never replayed on top of
+/// the tasks already working through it. Before this existed, every scan
+/// under load re-read and re-digested the whole queue: thousands of wasted
+/// project lookups and file reads per scan, and the same event digested twice
+/// whenever the scan won the race to the file.
+#[derive(Default)]
+pub struct InFlightDigests {
+    entries: Mutex<HashMap<(i32, Uuid), usize>>,
+}
+
+impl InFlightDigests {
+    /// Marks an event as owned until the returned guard is dropped. Counted,
+    /// so a duplicate delivery in flight alongside the first keeps the entry
+    /// alive until both are done.
+    pub fn register(self: &Arc<Self>, project_id: i32, event_id: Uuid) -> InFlightGuard {
+        let key = (project_id, event_id);
+        *self.entries.lock().unwrap().entry(key).or_insert(0) += 1;
+        InFlightGuard {
+            registry: Arc::clone(self),
+            key,
+        }
+    }
+
+    /// Whether some task in this process owns the event.
+    pub fn contains(&self, project_id: i32, event_id: Uuid) -> bool {
+        self.entries
+            .lock()
+            .unwrap()
+            .contains_key(&(project_id, event_id))
+    }
+
+    /// Number of distinct events currently owned.
+    pub fn len(&self) -> usize {
+        self.entries.lock().unwrap().len()
+    }
+
+    /// Whether no digest is in flight.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Ownership of one in-flight digest; dropping it releases the entry.
+pub struct InFlightGuard {
+    registry: Arc<InFlightDigests>,
+    key: (i32, Uuid),
+}
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        let mut entries = self.registry.entries.lock().unwrap();
+        if let Some(count) = entries.get_mut(&self.key) {
+            *count -= 1;
+            if *count == 0 {
+                entries.remove(&self.key);
+            }
+        }
+    }
+}
 
 /// Cap on concurrently running spawned digest tasks. Each holds a full
 /// payload plus its parsed JSON working set, so an unbounded spawn turns a
@@ -141,4 +206,42 @@ pub struct ProcessorCtx {
     pub event_id: Uuid,
     pub ingested_at: DateTime<Utc>,
     pub remote_addr: Option<String>,
+}
+
+#[cfg(test)]
+mod in_flight_tests {
+    use super::*;
+
+    #[test]
+    fn a_guard_owns_the_event_until_dropped() {
+        let registry = Arc::new(InFlightDigests::default());
+        let id = Uuid::new_v4();
+        assert!(!registry.contains(1, id));
+
+        let guard = registry.register(1, id);
+        assert!(registry.contains(1, id));
+        assert!(!registry.contains(2, id), "ownership is per project");
+        assert_eq!(registry.len(), 1);
+
+        drop(guard);
+        assert!(!registry.contains(1, id));
+        assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn duplicate_deliveries_keep_the_entry_until_the_last_guard_drops() {
+        let registry = Arc::new(InFlightDigests::default());
+        let id = Uuid::new_v4();
+        let first = registry.register(1, id);
+        let second = registry.register(1, id);
+        assert_eq!(registry.len(), 1);
+
+        drop(first);
+        assert!(
+            registry.contains(1, id),
+            "the second delivery still owns it"
+        );
+        drop(second);
+        assert!(!registry.contains(1, id));
+    }
 }

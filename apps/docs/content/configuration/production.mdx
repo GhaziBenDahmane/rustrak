@@ -141,7 +141,8 @@ server {
 | Database | 1 vCPU | 512MB |
 
 The dashboard costs nothing at runtime: it is static files the server reads
-once at startup and hands out from memory. The whole process idles at ~50MB.
+once at startup and hands out from memory. The whole process idles at about
+25MB and stays under 60MB while absorbing a 20k-event burst.
 
 ### Rate limiting
 

@@ -1,5 +1,17 @@
 # docs
 
+## 0.15.9
+
+### Patch Changes
+
+- [`1392c19`](https://github.com/rustrak/rustrak/commit/1392c19442217e78b7fd4aa6482607d456d2a5ad) Thanks [@AbianS](https://github.com/AbianS)! - A blog post on the ingest and digest performance pass, and the production guide's footprint figure now states idle and burst memory.
+
+## 0.15.8
+
+### Patch Changes
+
+- [`6e188ec`](https://github.com/rustrak/rustrak/commit/6e188ec24e0bed675e06070d9e73855e10a9f231) Thanks [@AbianS](https://github.com/AbianS)! - Alerts guide restructured into a section with a new message body template reference; MCP tools table lists the alert channel tools.
+
 ## 0.15.7
 
 ### Patch Changes

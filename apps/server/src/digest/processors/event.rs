@@ -1,10 +1,13 @@
-use super::{Processor, ProcessorCtx};
+use super::{InFlightDigests, Processor, ProcessorCtx};
 use crate::config::RateLimitConfig;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
-use crate::ingest::storage::{delete_event_at, read_event_with_location};
+use crate::ingest::storage::{delete_event_at, read_event_with_location, EventStorageLocation};
+#[cfg(feature = "sqlite")]
+use crate::ingest::storage::{delete_paths, event_paths_at};
 use crate::ingest::EventMetadata;
 use crate::models::{AlertType, Grouping, Issue};
+use crate::services::rate_limit::QuotaCounters;
 use crate::services::sourcemap::SourceMapProvider;
 use crate::services::{
     calculate_grouping_key, get_denormalized_fields, hash_grouping_key, AlertService,
@@ -27,8 +30,17 @@ pub struct ErrorProcessor {
     ingest_dir: PathBuf,
     rate_limit_config: RateLimitConfig,
     sourcemap_provider: Arc<dyn SourceMapProvider>,
-    // Coalesces SQLite durability checkpoints across concurrent digests.
-    checkpoint_gate: tokio::sync::Mutex<crate::db::CheckpointGate>,
+    in_flight: Arc<InFlightDigests>,
+    /// SQLite has one writer at a time. Digests queue for it here, in process,
+    /// rather than in SQLite's busy handler: that handler polls with sleeps
+    /// that grow to 100ms, so with several digests waiting the lock sat idle
+    /// between one commit and the next poll, and each waiter burned a
+    /// connection thread sleeping.
+    #[cfg(feature = "sqlite")]
+    write_slot: Arc<tokio::sync::Mutex<()>>,
+    /// Batches the durability checkpoints that gate file deletion.
+    #[cfg(feature = "sqlite")]
+    durability: Arc<DurabilityQueue>,
 }
 
 impl ErrorProcessor {
@@ -37,16 +49,30 @@ impl ErrorProcessor {
         rate_limit_config: RateLimitConfig,
         sourcemap_provider: Arc<dyn SourceMapProvider>,
     ) -> Self {
+        #[cfg(feature = "sqlite")]
+        let write_slot = Arc::new(tokio::sync::Mutex::new(()));
         Self {
+            #[cfg(feature = "sqlite")]
+            durability: Arc::new(DurabilityQueue::new(
+                ingest_dir.clone(),
+                Arc::clone(&write_slot),
+            )),
             ingest_dir,
             rate_limit_config,
             sourcemap_provider,
-            checkpoint_gate: tokio::sync::Mutex::new(crate::db::CheckpointGate::default()),
+            in_flight: Arc::new(InFlightDigests::default()),
+            #[cfg(feature = "sqlite")]
+            write_slot,
         }
     }
 
     pub(crate) fn ingest_dir(&self) -> &Path {
         &self.ingest_dir
+    }
+
+    /// The digests this processor's process currently owns.
+    pub fn in_flight(&self) -> &Arc<InFlightDigests> {
+        &self.in_flight
     }
 
     pub(crate) async fn process_ref(
@@ -95,10 +121,10 @@ impl ErrorProcessor {
     /// Runs the digest pipeline; retryable contention leaves the durable event queued.
     async fn process_impl(&self, metadata: &EventMetadata, ctx: &ProcessorCtx) -> AppResult<()> {
         let pool = &ctx.pool;
-        let _digested_at = Utc::now();
 
         // 0. Read the event before quota checks so cleanup can target the exact
-        // project-scoped file that was read.
+        // project-scoped file that was read. The project row loaded here is
+        // the one the quota check and the platform inference read too.
         let project = ProjectService::get_by_id(pool, metadata.project_id).await?;
         let (event_bytes, storage_location) =
             read_event_with_location(&self.ingest_dir, metadata.project_id, &metadata.event_id)
@@ -185,11 +211,10 @@ impl ErrorProcessor {
                     .await?;
                 }
             }
-            delete_after_success(
+            self.delete_after_success(
                 pool,
-                &self.checkpoint_gate,
-                &self.ingest_dir,
                 metadata.project_id,
+                event_id,
                 &metadata.event_id,
                 storage_location,
             )
@@ -208,8 +233,11 @@ impl ErrorProcessor {
 
         // 7+8. Write the digest: grouping, issue, the event itself and the
         // project's stored-event counter, in one transaction, retried as a
-        // whole when SQLite reports the database busy.
-        let (issue, issue_created, regressed, installation_count, project_count) = write_digest(
+        // whole when SQLite reports the database busy. On SQLite the digests
+        // take turns at the write here, in process (see `write_slot`).
+        #[cfg(feature = "sqlite")]
+        let write_slot = self.write_slot.lock().await;
+        let (issue, issue_created, regressed, counters) = write_digest(
             pool,
             &DigestWrite {
                 event_id,
@@ -227,20 +255,29 @@ impl ErrorProcessor {
             },
         )
         .await?;
+        #[cfg(feature = "sqlite")]
+        drop(write_slot);
 
         // 9b. Sentry-parity platform auto-detection (set once, never overwritten).
         // Best-effort: the digest transaction already committed the event, so
         // ancillary project metadata must not make the durable event fail.
-        if let Some(event_platform) = event_data.get("platform").and_then(|p| p.as_str()) {
-            if let Err(e) =
-                ProjectService::infer_platform_from_event(pool, metadata.project_id, event_platform)
-                    .await
-            {
-                log::warn!(
-                    "platform inference failed for project {} (best-effort; a later event can self-heal): {:?}",
+        // Skipped once the project has a platform: the UPDATE would match no
+        // row, but on SQLite it still takes the write lock on every event.
+        if project.platform.is_none() {
+            if let Some(event_platform) = event_data.get("platform").and_then(|p| p.as_str()) {
+                if let Err(e) = ProjectService::infer_platform_from_event(
+                    pool,
                     metadata.project_id,
-                    e
-                );
+                    event_platform,
+                )
+                .await
+                {
+                    log::warn!(
+                        "platform inference failed for project {} (best-effort; a later event can self-heal): {:?}",
+                        metadata.project_id,
+                        e
+                    );
+                }
             }
         }
 
@@ -255,8 +292,7 @@ impl ErrorProcessor {
                 pool,
                 metadata.project_id,
                 &self.rate_limit_config,
-                installation_count,
-                project_count,
+                &counters,
             )
             .await
             {
@@ -301,11 +337,10 @@ impl ErrorProcessor {
 
         // 11. Delete after the event and alert writes complete; SQLite also
         // requires a successful durability checkpoint.
-        delete_after_success(
+        self.delete_after_success(
             pool,
-            &self.checkpoint_gate,
-            &self.ingest_dir,
             metadata.project_id,
+            event_id,
             &metadata.event_id,
             storage_location,
         )
@@ -319,6 +354,196 @@ impl ErrorProcessor {
         );
 
         Ok(())
+    }
+
+    /// Removes the durable copy of an event whose digest has committed.
+    ///
+    /// A legacy-location file goes at once. A project-scoped file is what a
+    /// restart replays, so on SQLite it waits for a durability checkpoint
+    /// first: the commit is in the write-ahead log, and with
+    /// `synchronous=NORMAL` only a completed `FULL` checkpoint puts it in the
+    /// database file. The wait happens on the [`DurabilityQueue`], not here,
+    /// so the digest (and the processing slot it holds) is released as soon
+    /// as the commit lands.
+    #[cfg(feature = "sqlite")]
+    async fn delete_after_success(
+        &self,
+        pool: &DbPool,
+        project_id: i32,
+        event_id: Uuid,
+        raw_event_id: &str,
+        storage_location: EventStorageLocation,
+    ) -> AppResult<()> {
+        if matches!(storage_location, EventStorageLocation::Legacy) {
+            delete_event_at(&self.ingest_dir, project_id, raw_event_id, storage_location).await?;
+            return Ok(());
+        }
+        self.durability.enqueue(
+            pool,
+            PendingDelete {
+                project_id,
+                event_id: raw_event_id.to_string(),
+                location: storage_location,
+                attempts: 0,
+                _owner: self.in_flight.register(project_id, event_id),
+            },
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "postgres")]
+    async fn delete_after_success(
+        &self,
+        _pool: &DbPool,
+        project_id: i32,
+        _event_id: Uuid,
+        raw_event_id: &str,
+        storage_location: EventStorageLocation,
+    ) -> AppResult<()> {
+        delete_event_at(&self.ingest_dir, project_id, raw_event_id, storage_location).await?;
+        Ok(())
+    }
+}
+
+/// How long the durability worker lets commits accumulate before it runs a
+/// checkpoint. A `FULL` checkpoint syncs the write-ahead log and the database
+/// file, so one per event cost two fsyncs and a page copy each; one per pacing
+/// window covers every digest that committed in it for the same price.
+#[cfg(feature = "sqlite")]
+const CHECKPOINT_PACING: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// Checkpoint attempts before a queued file is retained for recovery: a busy
+/// checkpoint means a writer or reader would not yield, and a restart replays
+/// the file into a duplicate check rather than losing anything.
+#[cfg(feature = "sqlite")]
+const MAX_CHECKPOINT_ATTEMPTS: u32 = 3;
+
+/// A committed digest whose file waits for the next completed checkpoint.
+#[cfg(feature = "sqlite")]
+struct PendingDelete {
+    project_id: i32,
+    event_id: String,
+    location: EventStorageLocation,
+    attempts: u32,
+    /// Keeps the event registered as in flight, so the recovery worker does
+    /// not replay a file that only awaits its deletion.
+    _owner: super::InFlightGuard,
+}
+
+/// Batches durability checkpoints across digests.
+///
+/// A commit is durably in the database file once any `FULL` checkpoint that
+/// *started* after it completes. The worker takes every queued entry before it
+/// starts a checkpoint, so one checkpoint covers all of them, and entries
+/// queued while it runs wait for the next one. It runs only while something
+/// is queued: the first enqueue after an idle period spawns it and it exits
+/// when the queue drains.
+#[cfg(feature = "sqlite")]
+struct DurabilityQueue {
+    ingest_dir: PathBuf,
+    /// The digests' write turn-taking. A `FULL` checkpoint needs the writers
+    /// out of the way, so it takes its turn in the same queue rather than
+    /// polling SQLite's busy handler against a stream of commits.
+    write_slot: Arc<tokio::sync::Mutex<()>>,
+    state: std::sync::Mutex<DurabilityState>,
+}
+
+#[cfg(feature = "sqlite")]
+#[derive(Default)]
+struct DurabilityState {
+    pending: Vec<PendingDelete>,
+    worker_running: bool,
+}
+
+#[cfg(feature = "sqlite")]
+impl DurabilityQueue {
+    fn new(ingest_dir: PathBuf, write_slot: Arc<tokio::sync::Mutex<()>>) -> Self {
+        Self {
+            ingest_dir,
+            write_slot,
+            state: std::sync::Mutex::new(DurabilityState::default()),
+        }
+    }
+
+    fn enqueue(self: &Arc<Self>, pool: &DbPool, entry: PendingDelete) {
+        let start_worker = {
+            let mut state = self.state.lock().unwrap();
+            state.pending.push(entry);
+            !std::mem::replace(&mut state.worker_running, true)
+        };
+        if start_worker {
+            tokio::spawn(Arc::clone(self).run(pool.clone()));
+        }
+    }
+
+    async fn run(self: Arc<Self>, pool: DbPool) {
+        let mut delay = CHECKPOINT_PACING;
+        loop {
+            tokio::time::sleep(delay).await;
+            let batch = {
+                let mut state = self.state.lock().unwrap();
+                if state.pending.is_empty() {
+                    state.worker_running = false;
+                    return;
+                }
+                std::mem::take(&mut state.pending)
+            };
+
+            let completed = {
+                let _turn = self.write_slot.lock().await;
+                match crate::db::checkpoint_full(&pool).await {
+                    Ok(completed) => completed,
+                    Err(e) => {
+                        log::warn!("SQLite durability checkpoint failed: {:?}", e);
+                        false
+                    }
+                }
+            };
+
+            delay = CHECKPOINT_PACING;
+            if completed {
+                // One round trip to the blocking pool for the whole batch.
+                let mut paths = Vec::with_capacity(batch.len() * 2);
+                for entry in &batch {
+                    match event_paths_at(
+                        &self.ingest_dir,
+                        entry.project_id,
+                        &entry.event_id,
+                        entry.location,
+                    ) {
+                        Ok(entry_paths) => paths.extend(entry_paths),
+                        Err(e) => log::warn!(
+                            "Failed to resolve digested event file {}: {:?}",
+                            entry.event_id,
+                            e
+                        ),
+                    }
+                }
+                if let Err(e) = delete_paths(paths).await {
+                    log::warn!("Failed to delete digested event files: {:?}", e);
+                }
+                // The batch's in-flight guards drop here, after the files.
+                drop(batch);
+                continue;
+            }
+
+            let mut retry = Vec::with_capacity(batch.len());
+            for mut entry in batch {
+                entry.attempts += 1;
+                if entry.attempts >= MAX_CHECKPOINT_ATTEMPTS {
+                    log::warn!(
+                        "SQLite durability checkpoint busy; retaining event file {}",
+                        entry.event_id
+                    );
+                } else {
+                    delay = delay.max(sqlite_retry_delay(entry.attempts as usize - 1));
+                    retry.push(entry);
+                }
+            }
+            if !retry.is_empty() {
+                self.state.lock().unwrap().pending.extend(retry);
+            }
+        }
     }
 }
 
@@ -340,53 +565,6 @@ fn should_retain_event(err: &AppError) -> bool {
     }
 }
 
-#[cfg(feature = "sqlite")]
-async fn delete_after_success(
-    pool: &DbPool,
-    checkpoint_gate: &tokio::sync::Mutex<crate::db::CheckpointGate>,
-    ingest_dir: &std::path::Path,
-    project_id: i32,
-    event_id: &str,
-    storage_location: crate::ingest::storage::EventStorageLocation,
-) -> AppResult<()> {
-    if matches!(
-        storage_location,
-        crate::ingest::storage::EventStorageLocation::Legacy
-    ) {
-        delete_event_at(ingest_dir, project_id, event_id, storage_location).await?;
-        return Ok(());
-    }
-
-    for attempt in 0..3 {
-        if crate::db::ensure_checkpointed(pool, checkpoint_gate).await? {
-            delete_event_at(ingest_dir, project_id, event_id, storage_location).await?;
-            return Ok(());
-        }
-        if attempt < 2 {
-            tokio::time::sleep(sqlite_retry_delay(attempt)).await;
-        }
-    }
-
-    log::warn!(
-        "SQLite durability checkpoint busy; retaining event file {}",
-        event_id
-    );
-    Ok(())
-}
-
-#[cfg(feature = "postgres")]
-async fn delete_after_success(
-    _pool: &DbPool,
-    _checkpoint_gate: &tokio::sync::Mutex<crate::db::CheckpointGate>,
-    ingest_dir: &std::path::Path,
-    project_id: i32,
-    event_id: &str,
-    storage_location: crate::ingest::storage::EventStorageLocation,
-) -> AppResult<()> {
-    delete_event_at(ingest_dir, project_id, event_id, storage_location).await?;
-    Ok(())
-}
-
 /// Write attempts per digest on SQLite. Bounded: sustained contention
 /// fails fast instead of piling up more waiters.
 const MAX_SQLITE_WRITE_ATTEMPTS: usize = 3;
@@ -403,6 +581,7 @@ fn should_retry_quota_state(attempt: usize, contention: bool) -> bool {
 
 /// Backoff before retry `attempt` (0-based): 50ms, then 100ms — brief,
 /// so writers that timed out together don't retry in lockstep.
+#[cfg_attr(feature = "postgres", allow(dead_code))]
 fn sqlite_retry_delay(attempt: usize) -> std::time::Duration {
     std::time::Duration::from_millis(50 << attempt)
 }
@@ -457,7 +636,7 @@ struct DigestWrite<'a> {
 async fn write_digest(
     pool: &DbPool,
     write: &DigestWrite<'_>,
-) -> AppResult<(Issue, bool, bool, i64, i64)> {
+) -> AppResult<(Issue, bool, bool, QuotaCounters)> {
     let mut attempt = 0usize;
     let event_id = write.raw_event_id;
     loop {
@@ -497,7 +676,7 @@ async fn write_digest(
 async fn write_digest_once(
     pool: &DbPool,
     write: &DigestWrite<'_>,
-) -> AppResult<(Issue, bool, bool, i64, i64)> {
+) -> AppResult<(Issue, bool, bool, QuotaCounters)> {
     // Start a write transaction. On SQLite this is `BEGIN IMMEDIATE` so the
     // read-then-write below (SELECT MAX(digest_order) → INSERT) takes the write
     // lock up front instead of failing with "database is locked" on upgrade.
@@ -538,7 +717,7 @@ async fn write_digest_once(
 async fn write_digest_rows(
     tx: &mut sqlx::Transaction<'_, DbBackend>,
     write: &DigestWrite<'_>,
-) -> AppResult<(Issue, bool, bool, i64, i64)> {
+) -> AppResult<(Issue, bool, bool, QuotaCounters)> {
     let (issue, grouping, created, regressed) = find_or_create_issue_and_grouping_inner(
         tx,
         write.project_id,
@@ -580,10 +759,9 @@ async fn write_digest_rows(
     )
     .await?;
 
-    let (installation_count, project_count) =
-        RateLimitService::increment_quota_counters(tx, write.project_id).await?;
+    let counters = RateLimitService::increment_quota_counters(tx, write.project_id).await?;
 
-    Ok((issue, created, regressed, installation_count, project_count))
+    Ok((issue, created, regressed, counters))
 }
 
 /// Inner function that performs the actual find-or-create logic within a transaction
@@ -604,18 +782,27 @@ async fn find_or_create_issue_and_grouping_inner(
     level: Option<&str>,
     platform: Option<&str>,
 ) -> AppResult<(Issue, Grouping, bool, bool)> {
+    // The grouping and the issue columns the update path reads, in one round
+    // trip: on SQLite every statement is a hand-off to the connection's
+    // worker thread, and this one runs under the write lock.
     let find = |hash: String| async move {
-        sqlx::query_as::<_, Grouping>(
+        sqlx::query_as::<_, GroupingWithIssue>(
             r#"
-            SELECT * FROM groupings
-            WHERE project_id = $1 AND grouping_key_hash = $2
+            SELECT g.id, g.project_id, g.issue_id, g.grouping_key, g.grouping_key_hash,
+                   g.created_at,
+                   i.status, i.status_details, i.last_release, i.calculated_type,
+                   i.calculated_value, i.first_seen, i.last_seen, i.last_frame_filename,
+                   i.last_frame_module, i.last_frame_function, i.level
+            FROM groupings g
+            JOIN issues i ON i.id = g.issue_id
+            WHERE g.project_id = $1 AND g.grouping_key_hash = $2
             "#,
         )
         .bind(project_id)
         .bind(hash)
     };
 
-    let mut existing_grouping: Option<Grouping> = find(grouping_key_hash.to_string())
+    let mut existing: Option<GroupingWithIssue> = find(grouping_key_hash.to_string())
         .await
         .fetch_optional(&mut **tx)
         .await?;
@@ -623,43 +810,41 @@ async fn find_or_create_issue_and_grouping_inner(
     // Nothing under the current key: the issue may predate a change to how the
     // key is built. Claim it under the key that release would have produced,
     // and record the current one so later events resolve directly.
-    if existing_grouping.is_none() && legacy_grouping_key_hash != grouping_key_hash {
+    if existing.is_none() && legacy_grouping_key_hash != grouping_key_hash {
         if let Some(legacy) = find(legacy_grouping_key_hash.to_string())
             .await
             .fetch_optional(&mut **tx)
             .await?
         {
-            existing_grouping = Some(
-                sqlx::query_as(
-                    r#"
-                    INSERT INTO groupings (project_id, issue_id, grouping_key, grouping_key_hash)
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING *
-                    "#,
-                )
-                .bind(project_id)
-                .bind(legacy.issue_id)
-                .bind(grouping_key)
-                .bind(grouping_key_hash)
-                .fetch_one(&mut **tx)
-                .await?,
-            );
+            let grouping: Grouping = sqlx::query_as(
+                r#"
+                INSERT INTO groupings (project_id, issue_id, grouping_key, grouping_key_hash)
+                VALUES ($1, $2, $3, $4)
+                RETURNING *
+                "#,
+            )
+            .bind(project_id)
+            .bind(legacy.grouping.issue_id)
+            .bind(grouping_key)
+            .bind(grouping_key_hash)
+            .fetch_one(&mut **tx)
+            .await?;
+            existing = Some(GroupingWithIssue {
+                grouping,
+                issue: legacy.issue,
+            });
         }
     }
 
-    if let Some(grouping) = existing_grouping {
+    if let Some(GroupingWithIssue {
+        grouping,
+        issue: prev,
+    }) = existing
+    {
         // Detect regression: a new event for an already-resolved issue must
         // reopen it as `regressed` (mirrors Sentry's lifecycle) — unless the
         // issue was "resolved in next release" and this event is still from the
         // same release (no new deploy yet), in which case it stays resolved.
-        let prev: PrevIssue = sqlx::query_as(
-            "SELECT status, status_details, last_release, calculated_type, calculated_value, \
-             first_seen, last_seen, last_frame_filename, last_frame_module, \
-             last_frame_function, level FROM issues WHERE id = $1",
-        )
-        .bind(grouping.issue_id)
-        .fetch_one(&mut **tx)
-        .await?;
         let in_next_release = serde_json::from_str::<serde_json::Value>(&prev.status_details)
             .ok()
             .and_then(|v| v.get("in_next_release").and_then(|b| b.as_bool()))
@@ -985,6 +1170,15 @@ fn updated_title<'a>(
     } else {
         incoming
     }
+}
+
+/// A grouping joined to the issue columns the update path reads.
+#[derive(sqlx::FromRow)]
+struct GroupingWithIssue {
+    #[sqlx(flatten)]
+    grouping: Grouping,
+    #[sqlx(flatten)]
+    issue: PrevIssue,
 }
 
 /// The issue columns the update path reads before deciding what to write.
