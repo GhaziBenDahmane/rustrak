@@ -341,6 +341,158 @@ async fn pending_event_recovery_replays_a_scoped_event() {
     assert_eq!(count, 1);
 }
 
+/// Writes one scoped pending event and returns its metadata.
+async fn store_scoped_event(dir: &std::path::Path, project: i32) -> EventMetadata {
+    let event_id = Uuid::new_v4().simple().to_string();
+    let metadata = EventMetadata {
+        event_id: event_id.clone(),
+        project_id: project,
+        ingested_at: chrono::Utc::now(),
+        remote_addr: None,
+    };
+    let event_data = serde_json::json!({
+        "event_id": event_id,
+        "timestamp": 1704801600.0_f64,
+        "platform": "rust",
+        "level": "error",
+        "exception": {"values": [{"type": "Owned", "value": "by a task"}]}
+    });
+    store_event_with_metadata(
+        dir,
+        &metadata.event_id,
+        &serde_json::to_vec(&event_data).unwrap(),
+        &metadata,
+    )
+    .await
+    .unwrap();
+    metadata
+}
+
+fn pending_files(dir: &std::path::Path) -> usize {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".pending.json")
+        })
+        .count()
+}
+
+/// The recovery scan must leave alone a file some task in this process still
+/// owns. Before the in-flight registry, a scan during a backlog replayed the
+/// whole queue on top of the spawned digests: the same event digested twice,
+/// and thousands of failed reads for files the tasks had just deleted.
+#[actix_web::test]
+async fn pending_event_recovery_skips_events_owned_by_this_process() {
+    let db = TestDb::new().await;
+    let (project, _) = create_test_project(&db.pool, "Recovery Skips Owned").await;
+    let temp_dir = TempDir::new().unwrap();
+    let config = create_test_config();
+    let metadata = store_scoped_event(temp_dir.path(), project).await;
+
+    let processors = web::Data::new(rustrak::digest::processors::Processors::new(
+        temp_dir.path().to_path_buf(),
+        config.rate_limit,
+        crate::common::null_sourcemap_provider(),
+        None,
+    ));
+    let owner = processors
+        .errors
+        .in_flight()
+        .register(project, Uuid::parse_str(&metadata.event_id).unwrap());
+
+    routes::ingest::recover_pending_events_once(
+        db.pool.clone(),
+        processors.clone(),
+        temp_dir.path().to_path_buf(),
+    )
+    .await;
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE project_id = $1")
+        .bind(project)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0, "an owned event must not be replayed");
+    assert_eq!(pending_files(temp_dir.path()), 1, "and its file must stay");
+
+    // Once the owner is gone the file is a genuine leftover again.
+    drop(owner);
+    routes::ingest::recover_pending_events_once(
+        db.pool.clone(),
+        processors,
+        temp_dir.path().to_path_buf(),
+    )
+    .await;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE project_id = $1")
+        .bind(project)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+/// On SQLite a scoped file is deleted only after a durability checkpoint that
+/// started after its commit. That checkpoint runs on a background queue, so
+/// the digest returns first and the file follows shortly after; the event
+/// stays registered as in flight until then.
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn scoped_event_file_is_deleted_after_the_durability_checkpoint() {
+    use rustrak::digest::processors::{Processor, ProcessorCtx};
+
+    let db = TestDb::new().await;
+    let (project, _) = create_test_project(&db.pool, "Durability Queue").await;
+    let temp_dir = TempDir::new().unwrap();
+    let config = create_test_config();
+    let processors = rustrak::digest::processors::Processors::new(
+        temp_dir.path().to_path_buf(),
+        config.rate_limit,
+        crate::common::null_sourcemap_provider(),
+        None,
+    );
+
+    let first = store_scoped_event(temp_dir.path(), project).await;
+    let second = store_scoped_event(temp_dir.path(), project).await;
+    for metadata in [&first, &second] {
+        let ctx = ProcessorCtx {
+            pool: db.pool.clone(),
+            project_id: project,
+            event_id: Uuid::parse_str(&metadata.event_id).unwrap(),
+            ingested_at: metadata.ingested_at,
+            remote_addr: None,
+        };
+        processors
+            .errors
+            .process(metadata.clone(), &ctx)
+            .await
+            .expect("digest must succeed");
+    }
+
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM events WHERE project_id = $1")
+        .bind(project)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 2, "both digests have committed");
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while pending_files(temp_dir.path()) > 0 {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "the durability queue must delete both files after its checkpoint"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(
+        processors.errors.in_flight().is_empty(),
+        "deleted files release their in-flight entries"
+    );
+}
+
 /// Relay parity: a malformed item payload never fails the envelope — the
 /// invalid item is dropped (Relay records an Invalid outcome) and every
 /// sibling item is still processed, with the endpoint returning 200.
