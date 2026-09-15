@@ -3,6 +3,16 @@ name: Docker Publish
 on:
   release:
     types: [published]
+  # For a release whose publish failed halfway: re-run it for the same tag
+  # without cutting a new version. Every job checks out the tag, and the npm
+  # step skips a version the registry already has, so a re-run only fills in
+  # what is missing.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, e.g. v0.15.0-rc.0"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -38,7 +48,7 @@ jobs:
       - name: Extract version from release tag
         id: check
         run: |
-          TAG="${{ github.event.release.tag_name }}"
+          TAG="${{ inputs.tag || github.event.release.tag_name }}"
           echo "Release tag: $TAG"
 
           VERSION=$(echo "$TAG" | grep -oE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' | sed 's/^v//')
@@ -75,6 +85,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Prepare platform pair
         run: |
@@ -91,9 +103,13 @@ jobs:
           node-version: "latest"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Through turbo, not `pnpm --filter`: the dashboard imports
+      # `@rustrak/client` from the workspace, and turbo's `^build` compiles it
+      # first. A bare `--filter` build finds no `dist/` there and Vite fails to
+      # resolve the import.
       - name: Build the dashboard into the server's build context
         run: |
-          pnpm --filter @rustrak/dashboard build
+          pnpm turbo run build --filter=@rustrak/dashboard
           bash scripts/bundle-dashboard.sh
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -175,6 +191,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Prepare platform pair
         run: |
@@ -191,9 +209,13 @@ jobs:
           node-version: "latest"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Through turbo, not `pnpm --filter`: the dashboard imports
+      # `@rustrak/client` from the workspace, and turbo's `^build` compiles it
+      # first. A bare `--filter` build finds no `dist/` there and Vite fails to
+      # resolve the import.
       - name: Build the dashboard into the server's build context
         run: |
-          pnpm --filter @rustrak/dashboard build
+          pnpm turbo run build --filter=@rustrak/dashboard
           bash scripts/bundle-dashboard.sh
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -284,6 +306,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Prepare platform pair
         run: |
@@ -361,6 +385,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -378,12 +404,26 @@ jobs:
       # `--tag` is the dist-tag. Without it npm points `latest` at whatever was
       # published last, prerelease included, and `npm install @rustrak/client`
       # would hand out a release candidate.
+      # A version already on the registry is skipped rather than failed, so a
+      # re-run of a half-published release gets past the half that worked.
       - name: Publish @rustrak/client
-        run: pnpm --filter @rustrak/client publish --no-git-checks --access public --tag "${{ needs.version.outputs.channel }}"
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          if npm view "@rustrak/client@$VERSION" version >/dev/null 2>&1; then
+            echo "@rustrak/client@$VERSION is already published, skipping"
+          else
+            pnpm --filter @rustrak/client publish --no-git-checks --access public --tag "${{ needs.version.outputs.channel }}"
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @rustrak/mcp
-        run: pnpm --filter @rustrak/mcp publish --no-git-checks --access public --tag "${{ needs.version.outputs.channel }}"
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          if npm view "@rustrak/mcp@$VERSION" version >/dev/null 2>&1; then
+            echo "@rustrak/mcp@$VERSION is already published, skipping"
+          else
+            pnpm --filter @rustrak/mcp publish --no-git-checks --access public --tag "${{ needs.version.outputs.channel }}"
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
