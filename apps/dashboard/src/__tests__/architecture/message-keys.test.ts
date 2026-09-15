@@ -160,6 +160,38 @@ describe('message dictionaries stay resolvable', () => {
   });
 
   /**
+   * No key may contain a dot, because `t()` reads one as a path separator.
+   *
+   * `"issue.title": "The error title"` looks like a key and is not one: it is
+   * a *flat* entry whose name happens to hold a dot, so `t('variables.issue.
+   * title')` walks `variables -> issue -> title`, finds no `issue` object, and
+   * renders the fallback. The custom webhook template editor shipped ten of
+   * them — every `issue.*` and `project.*` description in its variable palette
+   * — and the reader saw the fallback where the explanation should be.
+   *
+   * Neither rule below could see it. They check the keys a file *asks for*,
+   * and this editor asks with a template literal:
+   * ``t(`variables.${variable.descriptionKey}`)``. Nothing static can resolve
+   * that, which is exactly why the dictionary has to be checkable on its own.
+   *
+   * The check is the gap between this file's two helpers. `leafKeys` builds a
+   * path by joining names with a dot, so a dotted name is indistinguishable
+   * from nesting and it reports something that looks resolvable. `hasKey`
+   * splits on the dot and walks, which is what use-intl does. Every path the
+   * first produces, the second must be able to reach.
+   */
+  it('has no message key that use-intl cannot address', () => {
+    const unreachable = leafKeys(en as Messages).filter(
+      (key) => !hasKey(en as Messages, key),
+    );
+
+    expect(
+      unreachable,
+      'these keys contain a literal dot, so t() cannot resolve them; nest them instead',
+    ).toEqual([]);
+  });
+
+  /**
    * **Per translator, not per file.**
    *
    * The first version of this resolved one namespace for the whole file -- the

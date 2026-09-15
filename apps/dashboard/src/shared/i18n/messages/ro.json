@@ -642,17 +642,21 @@
       "updated": "Webhook personalizat actualizat",
       "created": "Webhook personalizat creat",
       "variables": {
-        "issue.title": "Titlul erorii",
-        "issue.short_id": "Id lizibil al problemei",
-        "issue.level": "error, warning, info… sau absent",
-        "issue.event_count": "De câte ori s-a întâmplat",
-        "issue.id": "Id intern al problemei",
-        "issue.first_seen": "Când a apărut prima dată",
-        "issue.last_seen": "Când a apărut ultima dată",
+        "issue": {
+          "title": "Titlul erorii",
+          "short_id": "Id lizibil al problemei",
+          "level": "error, warning, info… sau absent",
+          "event_count": "De câte ori s-a întâmplat",
+          "id": "Id intern al problemei",
+          "first_seen": "Când a apărut prima dată",
+          "last_seen": "Când a apărut ultima dată"
+        },
         "issue_url": "Link către problemă în Rustrak",
-        "project.name": "Numele proiectului",
-        "project.slug": "Slugul proiectului",
-        "project.id": "Id intern al proiectului",
+        "project": {
+          "name": "Numele proiectului",
+          "slug": "Slugul proiectului",
+          "id": "Id intern al proiectului"
+        },
         "alert_type": "Ce a declanșat alerta",
         "alert_id": "Id-ul acestei trimiteri",
         "triggered_at": "Când s-a declanșat alerta",

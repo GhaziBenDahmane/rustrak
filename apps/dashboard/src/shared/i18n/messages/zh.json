@@ -642,17 +642,21 @@
       "updated": "自定义 Webhook 已更新",
       "created": "自定义 Webhook 已创建",
       "variables": {
-        "issue.title": "错误标题",
-        "issue.short_id": "易读的问题编号",
-        "issue.level": "error、warning、info… 或为空",
-        "issue.event_count": "发生次数",
-        "issue.id": "问题内部编号",
-        "issue.first_seen": "首次出现时间",
-        "issue.last_seen": "最近出现时间",
+        "issue": {
+          "title": "错误标题",
+          "short_id": "易读的问题编号",
+          "level": "error、warning、info… 或为空",
+          "event_count": "发生次数",
+          "id": "问题内部编号",
+          "first_seen": "首次出现时间",
+          "last_seen": "最近出现时间"
+        },
         "issue_url": "在 Rustrak 中的问题链接",
-        "project.name": "项目名称",
-        "project.slug": "项目标识",
-        "project.id": "项目内部编号",
+        "project": {
+          "name": "项目名称",
+          "slug": "项目标识",
+          "id": "项目内部编号"
+        },
         "alert_type": "触发这条告警的原因",
         "alert_id": "本次投递编号",
         "triggered_at": "告警触发时间",

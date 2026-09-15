@@ -642,17 +642,21 @@
       "updated": "Webhook personalizado actualizado",
       "created": "Webhook personalizado creado",
       "variables": {
-        "issue.title": "El título del error",
-        "issue.short_id": "Id legible del problema",
-        "issue.level": "error, warning, info… o ausente",
-        "issue.event_count": "Cuántas veces ha ocurrido",
-        "issue.id": "Id interno del problema",
-        "issue.first_seen": "Cuándo se vio por primera vez",
-        "issue.last_seen": "Cuándo se vio por última vez",
+        "issue": {
+          "title": "El título del error",
+          "short_id": "Id legible del problema",
+          "level": "error, warning, info… o ausente",
+          "event_count": "Cuántas veces ha ocurrido",
+          "id": "Id interno del problema",
+          "first_seen": "Cuándo se vio por primera vez",
+          "last_seen": "Cuándo se vio por última vez"
+        },
         "issue_url": "Enlace al problema en Rustrak",
-        "project.name": "Nombre del proyecto",
-        "project.slug": "Slug del proyecto",
-        "project.id": "Id interno del proyecto",
+        "project": {
+          "name": "Nombre del proyecto",
+          "slug": "Slug del proyecto",
+          "id": "Id interno del proyecto"
+        },
         "alert_type": "Qué disparó esta alerta",
         "alert_id": "Id de este envío",
         "triggered_at": "Cuándo saltó la alerta",

@@ -642,17 +642,21 @@
       "updated": "Custom webhook updated",
       "created": "Custom webhook created",
       "variables": {
-        "issue.title": "The error title",
-        "issue.short_id": "Human-readable issue id",
-        "issue.level": "error, warning, info… or absent",
-        "issue.event_count": "How many times it has happened",
-        "issue.id": "Internal issue id",
-        "issue.first_seen": "When it was first seen",
-        "issue.last_seen": "When it was last seen",
+        "issue": {
+          "title": "The error title",
+          "short_id": "Human-readable issue id",
+          "level": "error, warning, info… or absent",
+          "event_count": "How many times it has happened",
+          "id": "Internal issue id",
+          "first_seen": "When it was first seen",
+          "last_seen": "When it was last seen"
+        },
         "issue_url": "Link to the issue in Rustrak",
-        "project.name": "The project name",
-        "project.slug": "The project slug",
-        "project.id": "Internal project id",
+        "project": {
+          "name": "The project name",
+          "slug": "The project slug",
+          "id": "Internal project id"
+        },
         "alert_type": "What triggered this alert",
         "alert_id": "Id of this delivery",
         "triggered_at": "When the alert fired",
