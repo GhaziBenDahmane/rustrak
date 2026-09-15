@@ -46,30 +46,16 @@ jobs:
       # Check if this is a version commit (no pending changesets = versions were
       # just bumped).
       #
-      # "Pending" is not "present": in prerelease mode `changeset version` keeps
-      # the consumed changeset files on disk and lists their ids in
-      # `pre.json` instead, so they can be replayed into the final changelog on
-      # exit. Counting `.md` files there would see changesets forever and never
-      # cut a release. This is the same filter changesets/action applies.
+      # Top level only, on purpose. In prerelease mode `changeset version`
+      # (@changesets/cli 3) moves each consumed changeset into
+      # `.changeset/pre/` rather than deleting it, so it can be replayed into
+      # the final changelog on `pre exit`. A recursive count would see those
+      # forever and never cut a release; the files still at the top level are
+      # exactly the ones no version has consumed yet.
       - name: Check for changesets
         id: check
         run: |
-          CHANGESETS=$(node -e '
-            const fs = require("node:fs");
-            const dir = ".changeset";
-            const preFile = `${dir}/pre.json`;
-            const consumed = new Set(
-              fs.existsSync(preFile)
-                ? JSON.parse(fs.readFileSync(preFile, "utf8")).changesets
-                : [],
-            );
-            const pending = fs
-              .readdirSync(dir)
-              .filter((f) => f.endsWith(".md") && f !== "README.md")
-              .map((f) => f.slice(0, -".md".length))
-              .filter((id) => !consumed.has(id));
-            console.log(pending.length);
-          ')
+          CHANGESETS=$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md | wc -l | tr -d ' ')
           echo "changesets_count=$CHANGESETS"
 
           if [ "$CHANGESETS" -eq "0" ]; then
