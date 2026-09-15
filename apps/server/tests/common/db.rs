@@ -15,7 +15,7 @@ use tempfile::TempDir;
 // ── Postgres ─────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "postgres")]
-use testcontainers::{runners::AsyncRunner, ContainerAsync};
+use testcontainers::{runners::AsyncRunner, ContainerAsync, ImageExt};
 #[cfg(feature = "postgres")]
 use testcontainers_modules::postgres::Postgres;
 
@@ -33,6 +33,7 @@ pub struct TestDb {
 impl TestDb {
     pub async fn new() -> Self {
         let container = Postgres::default()
+            .with_tag("16-alpine")
             .start()
             .await
             .expect("Failed to start PostgreSQL container");
