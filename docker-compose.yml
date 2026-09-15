@@ -53,6 +53,10 @@ services:
   ui:
     image: rustrak/rustrak-ui:latest
     profiles: ["ui"]
+    # As with `server` above: behind a reverse proxy on the same network,
+    # delete this `ports` block and let the proxy reach the container on 3000.
+    # This is the address people sign in on, so in production it sits behind
+    # TLS like the server does.
     ports:
       - "${UI_PORT:-3000}:3000"
     environment:

@@ -40,6 +40,15 @@ server {
     # Sentry envelopes can be large; the server enforces its own limit.
     client_max_body_size 50m;
 
+    # For an https upstream: nginx verifies nothing by default, and a proxy
+    # that forwards the session cookie to whoever answers the name is worse
+    # than no proxy. SNI is what makes the check meaningful on a host that
+    # serves several names; the bundle is the one the image ships. All three
+    # are inert for an http upstream.
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+
     # --- The API ------------------------------------------------------------
 
     location = /api      { proxy_pass $rustrak_api; }

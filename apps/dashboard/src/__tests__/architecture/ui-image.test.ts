@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,6 +70,19 @@ describe('the standalone dashboard image', () => {
     expect(dockerfile()).toMatch(/^ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=/m);
   });
 
+  it('verifies the server certificate when the upstream is https', () => {
+    // nginx defaults both to off. Without them an https RUSTRAK_API_URL is
+    // proxied to whoever answers the name, and the session cookie goes with
+    // every request. SNI is what makes the certificate check meaningful on a
+    // host that serves several names; the bundle is the one the base image
+    // ships. For an http upstream all three are inert.
+    expect(template()).toMatch(/^\s*proxy_ssl_server_name on;/m);
+    expect(template()).toMatch(/^\s*proxy_ssl_verify on;/m);
+    expect(template()).toMatch(
+      /^\s*proxy_ssl_trusted_certificate \/etc\/ssl\/certs\/ca-certificates\.crt;/m,
+    );
+  });
+
   it('does not run nginx as root', () => {
     // `nginx-unprivileged` is the upstream image built for this: it listens
     // on an unprivileged port and never needs to drop privileges, so there is
@@ -98,5 +112,71 @@ describe('the standalone dashboard image caches the way the server does', () => 
     // The shell names hashed bundles a deploy may have replaced. `no-cache`
     // keeps it revalidated; `no-store` would refetch it on every navigation.
     expect(root?.[1]).toMatch(/Cache-Control "no-cache"/);
+  });
+});
+
+/**
+ * `RUSTRAK_API_URL` after the entrypoint has looked at it: the value the
+ * template will see, or the reason the container refused to start.
+ *
+ * The script is sourced by nginx's entrypoint before envsubst runs, so this
+ * sources it the same way, in `sh`, with the variable set as an operator
+ * would set it.
+ */
+function apiUrlSeenByNginx(value: string): {
+  url: string;
+  exit: number;
+  stderr: string;
+} {
+  const script = resolve(here, '../../../docker/15-rustrak-api-url.envsh');
+  const result = spawnSync(
+    'sh',
+    ['-c', `. "${script}" && printf '%s' "$RUSTRAK_API_URL"`],
+    { env: { PATH: process.env.PATH ?? '', RUSTRAK_API_URL: value } },
+  );
+  return {
+    url: result.stdout.toString(),
+    exit: result.status ?? -1,
+    stderr: result.stderr.toString(),
+  };
+}
+
+describe('the standalone dashboard image reads RUSTRAK_API_URL the way an operator writes it', () => {
+  it('is sourced by the entrypoint before the template is rendered', () => {
+    // Scripts under /docker-entrypoint.d/ run in name order, and only the
+    // `.envsh` ones are sourced, which is what lets this one change the
+    // variable envsubst (20-) will read.
+    expect(dockerfile()).toMatch(
+      /COPY\s+\S*docker\/15-rustrak-api-url\.envsh\s+\/docker-entrypoint\.d\//,
+    );
+  });
+
+  it('drops a trailing slash rather than proxying every request to /', () => {
+    // `proxy_pass` with a variable sends the request URI as-is only when the
+    // value has no path of its own. `https://api.example.com/` has one, `/`,
+    // and every `/api/...` would reach the server as `/`.
+    expect(apiUrlSeenByNginx('https://api.example.com/').url).toBe(
+      'https://api.example.com',
+    );
+    expect(apiUrlSeenByNginx('http://server:8080//').url).toBe(
+      'http://server:8080',
+    );
+    expect(apiUrlSeenByNginx('http://server:8080').url).toBe(
+      'http://server:8080',
+    );
+  });
+
+  it('refuses a value that carries a path', () => {
+    // There is no right answer for `https://example.com/rustrak`: the
+    // dashboard would need every prefix rewritten, which the template does
+    // not do. Refusing at start is the honest failure.
+    const refused = apiUrlSeenByNginx('https://example.com/rustrak');
+    expect(refused.exit).not.toBe(0);
+    expect(refused.stderr).toMatch(/RUSTRAK_API_URL/);
+  });
+
+  it('refuses a value that is not an http(s) origin', () => {
+    expect(apiUrlSeenByNginx('server:8080').exit).not.toBe(0);
+    expect(apiUrlSeenByNginx('').exit).not.toBe(0);
   });
 });

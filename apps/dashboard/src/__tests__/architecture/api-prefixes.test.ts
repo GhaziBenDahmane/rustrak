@@ -54,23 +54,39 @@ function viteProxyPrefixes(): string[] {
 
 /**
  * `location /api/ { ... }` and `location = /api { ... }` blocks in the nginx
- * template: a prefix is proxied when both forms exist, the same two shapes
- * the server matches (`path == prefix || path.starts_with("{prefix}/")`).
+ * template whose body is a `proxy_pass`. A prefix is proxied when both forms
+ * exist, the same two shapes the server matches
+ * (`path == prefix || path.starts_with("{prefix}/")`); a location that serves
+ * files rather than proxying, like `/assets/`, is not a prefix at all.
  */
 function nginxProxyPrefixes(): string[] {
-  const source = read('../../../docker/nginx.conf.template');
-  const withSlash = new Set(
-    [...source.matchAll(/^\s*location\s+(\/[^\s/]+)\/\s*\{/gm)].map(
-      (match) => match[1],
-    ),
-  );
-  const exact = new Set(
-    [...source.matchAll(/^\s*location\s+=\s+(\/[^\s/]+)\s*\{/gm)].map(
-      (match) => match[1],
-    ),
-  );
+  return nginxProxyPrefixesOf(read('../../../docker/nginx.conf.template'));
+}
 
-  return [...withSlash].filter((prefix) => exact.has(prefix));
+function nginxProxyPrefixesOf(source: string): string[] {
+  const withSlash = new Set<string>();
+  const exact = new Set<string>();
+
+  for (const [, form, prefix, body] of source.matchAll(
+    /^\s*location\s+(=\s+)?(\/[^\s/{]+)\/?\s*\{([^}]*)\}/gm,
+  )) {
+    if (!/\bproxy_pass\b/.test(body)) continue;
+    (form ? exact : withSlash).add(prefix);
+  }
+
+  const lopsided = [
+    ...[...withSlash].filter((prefix) => !exact.has(prefix)),
+    ...[...exact].filter((prefix) => !withSlash.has(prefix)),
+  ];
+  if (lopsided.length > 0) {
+    throw new Error(
+      `nginx.conf.template proxies ${lopsided.join(', ')} in only one of the ` +
+        'two forms. A prefix needs both `location = /x` and `location /x/`, ' +
+        'or `/x` itself falls through to the shell while `/x/y` is proxied.',
+    );
+  }
+
+  return [...withSlash];
 }
 
 /** `pub const API_PREFIXES: [&str; N] = ["/api", ...]` in `dashboard.rs`. */
@@ -106,6 +122,14 @@ describe('the API prefixes do not drift', () => {
     expect([...viteProxyPrefixes()].sort()).toEqual(
       [...serverApiPrefixes()].sort(),
     );
+  });
+
+  it('refuses an nginx prefix that has only one of its two forms', () => {
+    // The reader is a pure function of the template's text, so a lopsided
+    // template is fed to it directly rather than written to disk.
+    expect(() =>
+      nginxProxyPrefixesOf('location /admin/ { proxy_pass $rustrak_api; }'),
+    ).toThrow(/admin/);
   });
 
   it('proxies from the standalone image exactly what the server keeps', () => {
