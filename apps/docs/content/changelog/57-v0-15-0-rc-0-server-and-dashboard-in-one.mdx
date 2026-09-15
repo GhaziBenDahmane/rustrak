@@ -1,0 +1,75 @@
+---
+version: v0.15.0-rc.0
+title: Server and Dashboard in One
+description: One container now does everything. The server serves the dashboard itself, so a single process and a single image answer the page and the API on one origin, with no second container, no second port and no address to tell one half about the other. The dashboard is rebuilt on Vite and TanStack Router, the sign-in page moves to /login, and rustrak-ui becomes an optional nginx image for a dashboard hosted away from its server
+date: 2026-09-15
+tags: [server, dashboard, deployment, docker]
+---
+
+> **Release candidate.** This is `rustrak/rustrak-server:next` (and
+> `:v0.15.0-rc.0`, `:next-postgres`), `@rustrak/client@next` and
+> `@rustrak/mcp@next`. `latest` stays on 0.14 until 0.15 ships. It carries no
+> schema change, so moving to it and back touches no data.
+
+## One container does everything
+
+The dashboard used to be a Next.js application in its own container, reaching
+the server through `RUSTRAK_API_URL`. It is now a set of static files compiled
+into the server image, and the same Actix process that answers `/api/projects`
+answers `/`. There is no second container, no second port and no address to
+tell one half about the other: open the server's own address, `:8080` by
+default, and sign in there.
+
+- **One origin.** The browser calls the API on the origin it loaded the page
+  from, so the session cookie is first-party and no CORS policy applies to the
+  dashboard's own requests. Behind a reverse proxy there is one upstream to
+  configure, and `PUBLIC_URL` is the only address that has to be right
+- **The sign-in page is at `/login`**, where it was `/auth/login`. `/auth` is
+  the API's namespace and cannot also be a page now that the two share an
+  origin. Every other address is unchanged
+- **Still optional.** The dashboard is mounted only when `RUSTRAK_DASHBOARD_DIR`
+  (default `./static`) holds an `index.html`, so an image built without one
+  serves the API exactly as before. `RUSTRAK_DASHBOARD=off` keeps a built image
+  API-only; a value that is neither on nor off refuses to start rather than
+  guess
+- Under `/api`, `/auth`, `/health`, `/docs` and `/api-docs` a path no handler
+  claims is still a JSON 404, never the application shell. Hashed bundles are
+  served `immutable` for a year; the shell revalidates with an ETag
+- The database schema is the one 0.14.13 introduced. Moving to 0.15 and back
+  touches no data
+
+## The dashboard on its own host
+
+`rustrak/rustrak-ui` continues, as nginx serving the same bundle and proxying
+the API prefixes to `RUSTRAK_API_URL`, for the installation that keeps the
+dashboard on a different machine from its data. The browser still sees one
+origin.
+
+- About 30 MB on disk and under 15 MB of memory idle, against 325 MB and
+  55 MB for the Next.js image it replaces
+- `RUSTRAK_API_URL` is read when the container starts, not when the image is
+  built. A trailing slash is dropped, a path refuses to start, and on an
+  `https://` upstream the server's certificate is verified against the
+  system bundle
+- `docker-compose.yml` no longer starts a `ui` service; `docker compose
+  --profile ui up` brings it back, with `RUSTRAK_DASHBOARD=off` on the server
+  for the API-only half
+
+## Moving from 0.14
+
+Change the server image tag, delete the `ui` service, and open the server's
+port instead of the dashboard's. Set `DASHBOARD_URL` to the server's public
+address so issue links in notifications follow. The
+[installation](/getting-started/installation) and
+[production](/configuration/production) guides describe the new shape.
+
+## Improvements
+
+- The dashboard is a Vite and TanStack Router application instead of Next.js.
+  Nothing about it looks or behaves differently; the framework change is what
+  lets it compile to static files
+- The version check runs in the browser against the release feed, rather than
+  in a server process once an hour per instance
+- Release tooling gains a `next` prerelease line: `vX.Y.Z-rc.N` tags,
+  `rustrak-server:next` and `rustrak-ui:next` on Docker Hub and the `next`
+  dist-tag on npm, with `latest` untouched
