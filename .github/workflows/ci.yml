@@ -24,7 +24,10 @@ jobs:
     # CI on main. A job skipped by `if` reports as successful to branch
     # protection, so required checks still go green. `head_ref` is empty on
     # non-PR events, so this never blocks anything else.
-    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    #
+    # The same-repo check is what keeps the skip from being a bypass: a fork can
+    # name its branch anything, but it cannot make its head repository ours.
+    if: ${{ !(startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -82,7 +85,7 @@ jobs:
   # against a real Postgres via testcontainers — the only suite that compiles
   # under the postgres feature.
   postgres-e2e:
-    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    if: ${{ !(startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
