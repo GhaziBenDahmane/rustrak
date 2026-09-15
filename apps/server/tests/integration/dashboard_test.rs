@@ -11,6 +11,7 @@
 //! text/html` and every client parses it as a bug in itself).
 
 use actix_web::{test, App};
+use rustrak::config::DashboardConfig;
 use rustrak::middleware::auth::RequireAuth;
 use rustrak::routes::dashboard::Dashboard;
 use serde_json::Value;
@@ -300,6 +301,28 @@ async fn there_is_no_dashboard_without_an_index() {
     let empty = tempfile::tempdir().expect("temp dir");
     assert!(Dashboard::detect(empty.path()).is_none());
     assert!(Dashboard::detect(Path::new("/rustrak/definitely/not/here")).is_none());
+}
+
+/// `RUSTRAK_DASHBOARD=off` wins over a build that is right there. This is the
+/// deployment that runs `rustrak-ui` on another host and wants the machine
+/// holding the data to serve no frontend, with no image rebuilt and no
+/// directory renamed to get there.
+#[actix_web::test]
+async fn the_switch_keeps_a_present_build_unmounted() {
+    let dir = build_output();
+    let root = dir.path().to_str().expect("utf-8 temp path").to_string();
+
+    let off = DashboardConfig {
+        dir: root.clone(),
+        enabled: false,
+    };
+    assert!(Dashboard::from_config(&off).is_none());
+
+    let on = DashboardConfig {
+        dir: root,
+        enabled: true,
+    };
+    assert!(Dashboard::from_config(&on).is_some());
 }
 
 // =============================================================================

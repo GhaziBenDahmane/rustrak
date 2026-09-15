@@ -8,7 +8,7 @@
 use crate::common::TestDb;
 use actix_web::{test, web, App};
 use chrono::{Duration, Utc};
-use rustrak::config::{Config, DatabaseConfig, RateLimitConfig};
+use rustrak::config::{Config, DashboardConfig, DatabaseConfig, RateLimitConfig};
 use rustrak::models::CreateProject;
 use rustrak::routes;
 use rustrak::services::grouping::DenormalizedFields;
@@ -44,7 +44,10 @@ fn create_test_config() -> Config {
         max_chunk_size_bytes: 10 * 1024 * 1024,
         session_flush_interval_secs: 30,
         session_cardinality_cap: 10_000,
-        dashboard_dir: "./static".to_string(),
+        dashboard: DashboardConfig {
+            dir: "./static".to_string(),
+            enabled: true,
+        },
     }
 }
 

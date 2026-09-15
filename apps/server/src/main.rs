@@ -151,12 +151,15 @@ async fn main() -> std::io::Result<()> {
     // worker thread, which would otherwise mean one stat of the filesystem per
     // core at startup and a server that disagrees with itself if the directory
     // appears halfway through.
-    let dashboard = routes::dashboard::Dashboard::detect(&config.dashboard_dir);
+    let dashboard = routes::dashboard::Dashboard::from_config(&config.dashboard);
     match &dashboard {
         Some(found) => log::info!("Serving the dashboard from {}", found.root().display()),
+        None if !config.dashboard.enabled => {
+            log::info!("Dashboard switched off by RUSTRAK_DASHBOARD — serving the API only")
+        }
         None => log::info!(
             "No dashboard build at {} — serving the API only",
-            config.dashboard_dir
+            config.dashboard.dir
         ),
     }
     let serve_dashboard = dashboard.is_some();

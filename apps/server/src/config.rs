@@ -27,13 +27,24 @@ pub struct Config {
     /// Max distinct (release, environment) pairs tracked per project before folding into <overflow>.
     /// Default: 10000. Override with SESSION_CARDINALITY_CAP env var.
     pub session_cardinality_cap: usize,
-    /// Where the compiled dashboard lives, relative to the working directory
-    /// or absolute. Default: `./static`. Override with RUSTRAK_DASHBOARD_DIR.
+    /// The compiled dashboard: where it is and whether to serve it.
+    pub dashboard: DashboardConfig,
+}
+
+/// The compiled dashboard, as the environment describes it.
+#[derive(Debug, Clone)]
+pub struct DashboardConfig {
+    /// Where the build lives, relative to the working directory or absolute.
+    /// Default: `./static`. Override with RUSTRAK_DASHBOARD_DIR.
     ///
     /// A path, not a switch: the dashboard is mounted when the directory
-    /// actually holds an `index.html` and skipped when it does not, so a
-    /// server-only deployment needs no configuration to stay server-only.
-    pub dashboard_dir: String,
+    /// actually holds an `index.html` and skipped when it does not, so an
+    /// image built without one needs no configuration to stay API-only.
+    pub dir: String,
+    /// Whether to serve it at all. Default: on. Override with
+    /// RUSTRAK_DASHBOARD=off, for the deployment that has a build in the image
+    /// and runs the dashboard from another host anyway.
+    pub enabled: bool,
 }
 
 /// Database connection pool configuration
@@ -123,10 +134,7 @@ impl Config {
                 .unwrap_or_else(|_| "10000".to_string())
                 .parse()
                 .unwrap_or(10_000),
-            dashboard_dir: env::var("RUSTRAK_DASHBOARD_DIR")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| "./static".to_string()),
+            dashboard: DashboardConfig::from_env()?,
         })
     }
 }
@@ -196,9 +204,40 @@ impl DatabaseConfig {
     }
 }
 
+impl DashboardConfig {
+    /// Load dashboard configuration from environment variables
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Ok(Self {
+            dir: env::var("RUSTRAK_DASHBOARD_DIR")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "./static".to_string()),
+            enabled: Self::switch(env::var("RUSTRAK_DASHBOARD").ok())?,
+        })
+    }
+
+    /// `RUSTRAK_DASHBOARD`: on unless it says otherwise.
+    ///
+    /// Refuses anything it does not recognise rather than defaulting, because
+    /// the two ways to misread a switch are not symmetric here: a typo that
+    /// silently left the dashboard *on* would expose a UI the operator meant
+    /// to keep off the box.
+    fn switch(value: Option<String>) -> Result<bool, ConfigError> {
+        let Some(value) = value else {
+            return Ok(true);
+        };
+        match value.trim().to_ascii_lowercase().as_str() {
+            "on" | "true" | "1" => Ok(true),
+            "off" | "false" | "0" => Ok(false),
+            _ => Err(ConfigError::InvalidDashboardSwitch { value }),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ConfigError {
     InvalidPort,
+    InvalidDashboardSwitch { value: String },
     MissingDatabaseUrl,
     MissingSessionSecret,
     SessionSecretTooShort { len: usize },
@@ -208,6 +247,10 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConfigError::InvalidPort => write!(f, "PORT must be a valid number"),
+            ConfigError::InvalidDashboardSwitch { value } => write!(
+                f,
+                "RUSTRAK_DASHBOARD is {value:?}, but it must be on or off"
+            ),
             ConfigError::MissingDatabaseUrl => {
                 write!(f, "DATABASE_URL environment variable is required")
             }

@@ -8,7 +8,7 @@ use crate::common::TestDb;
 use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use actix_web::{cookie::Key, test, web, App};
 use chrono::Utc;
-use rustrak::config::{Config, DatabaseConfig, RateLimitConfig, SecurityConfig};
+use rustrak::config::{Config, DashboardConfig, DatabaseConfig, RateLimitConfig, SecurityConfig};
 use rustrak::db::DbPool;
 use rustrak::models::{
     CreateAuthToken, CreateProject, CreateUserRequest, Issue, ProjectRole, User, UserRole,
@@ -53,7 +53,10 @@ fn create_test_config() -> Config {
         max_chunk_size_bytes: 10 * 1024 * 1024,
         session_flush_interval_secs: 30,
         session_cardinality_cap: 10_000,
-        dashboard_dir: "./static".to_string(),
+        dashboard: DashboardConfig {
+            dir: "./static".to_string(),
+            enabled: true,
+        },
     }
 }
 

@@ -46,6 +46,7 @@ use actix_web::{web, Error, HttpMessage, HttpRequest, HttpResponse, ResponseErro
 use bytes::Bytes;
 use std::path::{Path, PathBuf};
 
+use crate::config::DashboardConfig;
 use crate::error::AppError;
 
 /// The path prefixes the API owns.
@@ -104,6 +105,17 @@ impl Dashboard {
         ));
 
         Some(Self { root, shell, etag })
+    }
+
+    /// The dashboard the configuration describes, if it is to be served.
+    ///
+    /// `None` for two different reasons, and `main` tells them apart for the
+    /// log: the switch is off, or there is no build where the directory says.
+    pub fn from_config(config: &DashboardConfig) -> Option<Self> {
+        if !config.enabled {
+            return None;
+        }
+        Self::detect(&config.dir)
     }
 
     /// Where the build was found. Logged at startup so an operator can see
