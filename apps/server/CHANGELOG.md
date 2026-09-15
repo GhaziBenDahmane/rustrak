@@ -1,5 +1,11 @@
 # @rustrak/server
 
+## 0.14.14
+
+### Patch Changes
+
+- [`1392c19`](https://github.com/rustrak/rustrak/commit/1392c19442217e78b7fd4aa6482607d456d2a5ad) Thanks [@AbianS](https://github.com/AbianS)! - Ingest and digest run on less memory and CPU and get through a burst faster, with the durability contract and the envelope wire contract unchanged. A digest task waiting for a processing slot no longer carries its whole state machine, so a queue of thousands of events costs a few hundred bytes each instead of several kilobytes: peak RSS during a 20k-event burst drops from ~195 MB to ~53 MB. The recovery worker skips events a task in this process already owns, which under load had it re-reading and re-digesting the live queue. The pending-file store is one blocking-pool round trip instead of nine `tokio::fs` hops, and every digest issues fewer statements: project and installation rows read once, grouping and issue in one JOIN, no `RETURNING *` of the event payload, platform inference skipped once set, and rate-limit window counts served by the `(project_id, digested_at)` index. On SQLite, digests take turns at the write lock in process instead of through the busy handler, and durability checkpoints are batched on a background queue. Measured on a 4-core box against SQLite (20k events, 32 connections): ingest ~2.3k → ~5k req/s with p99 27 ms → 12 ms, digest ~510 → ~1000 events/s, server CPU 56 s → 31 s. rustls is bumped to 0.23.45 for RUSTSEC-2026-0285.
+
 ## 0.14.13
 
 ### Patch Changes
