@@ -32,10 +32,10 @@ Error tracking usually comes two ways: a SaaS bill that scales with your worst
 day, or a self-hosted stack that wants its own machine. Rustrak is the third
 option: the same protocol, on hardware you already have.
 
-Two design decisions do most of that work. **The dashboard is a separate image
-from the server**, so you can run the API on a small box and the dashboard on
-your laptop or on Vercel; the machine holding your data never serves frontend
-assets. And **ingestion is two-phase**. The endpoint parses the envelope, writes
+Two design decisions do most of that work. **The dashboard is static files the
+server hands out**, so one small process answers both the API and the UI, and
+an image built without the dashboard is a complete product on its own. And
+**ingestion is two-phase**. The endpoint parses the envelope, writes
 it to disk and returns `200`; a spawned task then does the database work.
 Accepting an event never waits on the database, which is what stops a traffic
 spike from becoming a timeout inside your app. On a 4-core box with SQLite, a

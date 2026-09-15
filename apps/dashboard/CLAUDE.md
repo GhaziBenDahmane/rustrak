@@ -91,12 +91,12 @@ component:** one that redirects has already painted what it was protecting.
 | | means | the guard |
 |---|---|---|
 | `authenticated` | `/auth/me` returned a user | renders the page |
-| `anonymous` | the server answered 401 | redirects to `/auth/login` |
+| `anonymous` | the server answered 401 | redirects to `/login` |
 | `unavailable` | network, timeout, 5xx, 403, bad schema | renders "the server did not answer" |
 
 The third row matters: only `anonymous` means signed out. Collapsing a dropped
-connection into it bounces to `/auth/login`, where the login request fails for
-the same reason, on a loop.
+connection into it bounces to `/login`, where the login request fails for the
+same reason, on a loop.
 
 The store is a module singleton, so `shared/i18n` can read it during bootstrap
 before a router exists. `ensure()` memoises the in-flight promise — nested

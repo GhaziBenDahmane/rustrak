@@ -173,7 +173,11 @@ Global SMTP settings for email notifications. Channels can override these.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DASHBOARD_URL` | `http://localhost:3000` | URL for issue links in notifications |
+| `DASHBOARD_URL` | `http://localhost:3000` | Base URL for the issue links in notifications |
+
+The server serves the dashboard itself, so in production this is the public URL
+of the server (`https://rustrak.example.com`). The default is the Vite dev
+server, which is where the dashboard lives during development.
 
 ## Bootstrap
 
