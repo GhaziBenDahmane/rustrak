@@ -149,6 +149,12 @@ impl ParsedMapCache {
 
     fn insert(&self, key: &str, map: Arc<sourcemap::DecodedMap>, size: usize) {
         if size > self.budget {
+            log::warn!(
+                "source map {} is {} MB, above the {} MB cache budget; it will be parsed again for every event (raise SOURCEMAP_CACHE_MB)",
+                key,
+                size / (1024 * 1024),
+                self.budget / (1024 * 1024)
+            );
             return;
         }
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
