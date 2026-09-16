@@ -6960,6 +6960,42 @@
         ]
       }
     },
+    "/api/telemetry/preview": {
+      "get": {
+        "tags": [
+          "Telemetry"
+        ],
+        "summary": "GET /api/telemetry/preview",
+        "operationId": "preview",
+        "responses": {
+          "200": {
+            "description": "What the next heartbeat would carry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetryPreview"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/tokens": {
       "get": {
         "tags": [
@@ -10039,6 +10075,36 @@
           },
           "role": {
             "type": "string"
+          }
+        }
+      },
+      "TelemetryPreview": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "report"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why nothing is sent, when `enabled` is false."
+          },
+          "report": {
+            "type": "object",
+            "description": "The next heartbeat, exactly as it would leave. Shown even when\ndisabled, so the decision can be made on the real thing."
+          },
+          "sink": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where it goes, when `enabled` is true."
           }
         }
       },

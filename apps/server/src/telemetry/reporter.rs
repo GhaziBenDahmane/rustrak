@@ -91,7 +91,8 @@ impl Reporter {
     }
 
     async fn assemble(&self, drain: bool) -> AppResult<Report> {
-        if let Some(mb) = probe::rss_mb() {
+        let disk = self.read_disk().await;
+        if let Some(mb) = disk.rss_mb {
             self.sampler.record_rss_mb(mb);
         }
         let (first_since_boot, rss_mb, health) = if drain {
@@ -113,17 +114,17 @@ impl Reporter {
             version: env!("CARGO_PKG_VERSION").to_string(),
             os: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
-            container: probe::container(),
+            container: disk.container,
             db_backend: crate::db::backend_name().to_string(),
             db_version: crate::db::engine_version(&self.pool).await.ok(),
             dashboard_served: self.context.dashboard_served,
             uptime_secs: self.boot.elapsed().as_secs(),
             first_since_boot,
             cpu_count: std::thread::available_parallelism().map_or(1, |n| n.get() as u64),
-            mem_total_mb: probe::mem_total_mb().map(super::blur_count),
+            mem_total_mb: disk.mem_total_mb.map(super::blur_count),
             rss_mb,
-            sqlite_db_mb: self.sqlite_db_mb(),
-            ingest_dir_pending: self.ingest_dir_pending(),
+            sqlite_db_mb: disk.sqlite_db_mb,
+            ingest_dir_pending: super::blur_count(disk.ingest_dir_pending),
             volume: Volume::collect(&self.pool).await?,
             health,
             config: ConfigFacts {
@@ -146,9 +147,7 @@ impl Reporter {
                     .min(self.schedule.interval - slept);
                 tokio::time::sleep(step).await;
                 slept += step;
-                if let Some(mb) = probe::rss_mb() {
-                    self.sampler.record_rss_mb(mb);
-                }
+                self.sample_rss().await;
             }
         }
     }
@@ -176,15 +175,40 @@ impl Reporter {
         }
     }
 
-    fn sqlite_db_mb(&self) -> Option<u64> {
-        let path = self.context.sqlite_path.as_ref()?;
-        let bytes = std::fs::metadata(path).ok()?.len();
-        Some(super::blur_count(bytes / (1024 * 1024)))
+    /// Everything that touches the filesystem, on the blocking pool: the
+    /// preview runs on a request and a large ingest backlog makes `read_dir`
+    /// slow. Falls back to nothing rather than failing the report.
+    async fn read_disk(&self) -> DiskFacts {
+        let sqlite_path = self.context.sqlite_path.clone();
+        let ingest_dir = self.context.ingest_dir.clone();
+        tokio::task::spawn_blocking(move || DiskFacts {
+            rss_mb: probe::rss_mb(),
+            mem_total_mb: probe::mem_total_mb(),
+            container: probe::container(),
+            sqlite_db_mb: sqlite_path
+                .and_then(|p| std::fs::metadata(p).ok())
+                .map(|m| super::blur_count(m.len() / (1024 * 1024))),
+            ingest_dir_pending: std::fs::read_dir(ingest_dir)
+                .map(|entries| entries.count() as u64)
+                .unwrap_or(0),
+        })
+        .await
+        .unwrap_or_default()
     }
 
-    fn ingest_dir_pending(&self) -> u64 {
-        std::fs::read_dir(&self.context.ingest_dir)
-            .map(|entries| entries.count() as u64)
-            .unwrap_or(0)
+    /// The per-minute sample, also off the async thread.
+    async fn sample_rss(&self) {
+        if let Ok(Some(mb)) = tokio::task::spawn_blocking(probe::rss_mb).await {
+            self.sampler.record_rss_mb(mb);
+        }
     }
+}
+
+#[derive(Default)]
+struct DiskFacts {
+    rss_mb: Option<u64>,
+    mem_total_mb: Option<u64>,
+    container: bool,
+    sqlite_db_mb: Option<u64>,
+    ingest_dir_pending: u64,
 }

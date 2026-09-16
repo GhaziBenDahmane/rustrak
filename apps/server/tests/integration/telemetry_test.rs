@@ -19,6 +19,15 @@ struct Collector {
 
 impl Collector {
     async fn start(status: u16) -> Self {
+        Self::start_with(status, false).await
+    }
+
+    /// Answers every request with a 307 back to itself.
+    async fn start_redirecting() -> Self {
+        Self::start_with(307, true).await
+    }
+
+    async fn start_with(status: u16, redirect_to_self: bool) -> Self {
         let received: Arc<Mutex<Vec<Value>>> = Arc::default();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind collector");
         let addr = listener.local_addr().expect("collector addr");
@@ -29,10 +38,13 @@ impl Collector {
                 let sink = sink.clone();
                 async move {
                     sink.lock().unwrap().push(body.into_inner());
-                    HttpResponse::build(
+                    let mut response = HttpResponse::build(
                         actix_web::http::StatusCode::from_u16(status).expect("valid status"),
-                    )
-                    .finish()
+                    );
+                    if redirect_to_self {
+                        response.insert_header(("Location", format!("http://{addr}/i/v0/e/")));
+                    }
+                    response.finish()
                 }
             }))
         })
@@ -84,13 +96,38 @@ async fn a_rejected_heartbeat_reports_the_status_and_is_not_retried() {
 
 #[actix_web::test]
 async fn an_unreachable_sink_is_a_transport_error() {
-    // Port 9 (discard) is bound by nothing on a developer machine.
-    let sink = PostHogSink::new("http://127.0.0.1:9/i/v0/e/", "phc_test");
+    // A port the kernel just handed out and that nothing listens on any more.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("bind")
+        .local_addr()
+        .expect("addr")
+        .port();
+    let sink = PostHogSink::new(format!("http://127.0.0.1:{port}/i/v0/e/"), "phc_test");
     let error = sink
         .send(&sample_report())
         .await
         .expect_err("nothing listens");
     assert!(matches!(error, SinkError::Transport(_)), "{error:?}");
+}
+
+/// The endpoint is fixed and HTTPS. A redirect is not followed, so the key
+/// and the report can never be re-posted somewhere else by a 307.
+#[actix_web::test]
+async fn a_redirect_is_not_followed() {
+    let collector = Collector::start_redirecting().await;
+    let sink = PostHogSink::new(&collector.url, "phc_test");
+
+    let error = sink
+        .send(&sample_report())
+        .await
+        .expect_err("a 307 is not a delivery");
+
+    assert!(matches!(error, SinkError::Status(307)), "{error:?}");
+    assert_eq!(
+        collector.received().len(),
+        1,
+        "posted once, never re-posted"
+    );
 }
 
 // =============================================================================

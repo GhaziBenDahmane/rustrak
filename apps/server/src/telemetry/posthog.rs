@@ -30,8 +30,11 @@ impl PostHogSink {
         Self {
             endpoint: endpoint.into(),
             api_key: api_key.into(),
+            // The endpoint is fixed; a redirect must not re-post the key
+            // and the report somewhere else.
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
         }
