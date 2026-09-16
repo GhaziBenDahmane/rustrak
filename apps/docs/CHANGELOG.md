@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.10-rc.1
+
+### Patch Changes
+
+- [`ba439b8`](https://github.com/rustrak/rustrak/commit/ba439b8493bd60c67d48a7105deb4c035ae5ecd4) Thanks [@AbianS](https://github.com/AbianS)! - A release candidate banner and a "Try 0.15" page on what changes, how to run the candidate and how to move a 0.14 installation to it and back. `SOURCEMAP_CACHE_MB` joins the environment reference.
+
 ## 0.15.10-rc.0
 
 ### Patch Changes
