@@ -6,6 +6,7 @@
 
 pub mod db;
 pub mod fixtures;
+pub mod telemetry;
 
 pub use db::TestDb;
 pub use fixtures::{create_envelope, create_envelope_no_length, EventBuilder, StackFrame};

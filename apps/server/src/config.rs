@@ -32,6 +32,19 @@ pub struct Config {
     pub session_cardinality_cap: usize,
     /// The compiled dashboard: where it is and whether to serve it.
     pub dashboard: DashboardConfig,
+    /// Anonymous usage telemetry, as the environment describes it.
+    pub telemetry: TelemetryConfig,
+}
+
+/// The anonymous telemetry switches. Whether anything is actually sent is
+/// decided in `crate::telemetry`, which also needs to know whether a key was
+/// compiled into the binary.
+#[derive(Debug, Clone)]
+pub struct TelemetryConfig {
+    /// `RUSTRAK_TELEMETRY`: on unless it says otherwise.
+    pub enabled: bool,
+    /// `DO_NOT_TRACK=1`, the cross-tool convention from consoledonottrack.com.
+    pub do_not_track: bool,
 }
 
 /// The compiled dashboard, as the environment describes it.
@@ -143,6 +156,28 @@ impl Config {
                 .parse()
                 .unwrap_or(10_000),
             dashboard: DashboardConfig::from_env()?,
+            telemetry: TelemetryConfig::from_env()?,
+        })
+    }
+}
+
+impl TelemetryConfig {
+    /// Load telemetry configuration from environment variables
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let enabled = match env::var("RUSTRAK_TELEMETRY").ok() {
+            None => true,
+            Some(value) => match value.trim().to_ascii_lowercase().as_str() {
+                "on" | "true" | "1" => true,
+                "off" | "false" | "0" => false,
+                _ => return Err(ConfigError::InvalidTelemetrySwitch { value }),
+            },
+        };
+        let do_not_track = env::var("DO_NOT_TRACK")
+            .map(|v| matches!(v.trim(), "1" | "true"))
+            .unwrap_or(false);
+        Ok(Self {
+            enabled,
+            do_not_track,
         })
     }
 }
@@ -246,6 +281,7 @@ impl DashboardConfig {
 pub enum ConfigError {
     InvalidPort,
     InvalidDashboardSwitch { value: String },
+    InvalidTelemetrySwitch { value: String },
     MissingDatabaseUrl,
     MissingSessionSecret,
     SessionSecretTooShort { len: usize },
@@ -258,6 +294,10 @@ impl std::fmt::Display for ConfigError {
             ConfigError::InvalidDashboardSwitch { value } => write!(
                 f,
                 "RUSTRAK_DASHBOARD is {value:?}, but it must be on or off"
+            ),
+            ConfigError::InvalidTelemetrySwitch { value } => write!(
+                f,
+                "RUSTRAK_TELEMETRY is {value:?}, but it must be on or off"
             ),
             ConfigError::MissingDatabaseUrl => {
                 write!(f, "DATABASE_URL environment variable is required")

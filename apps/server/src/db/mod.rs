@@ -166,3 +166,28 @@ pub async fn checkpoint_full(pool: &DbPool) -> Result<bool, sqlx::Error> {
         .await?;
     Ok(busy == 0)
 }
+
+/// Which engine this binary was built for.
+pub fn backend_name() -> &'static str {
+    #[cfg(feature = "postgres")]
+    {
+        "postgres"
+    }
+    #[cfg(not(feature = "postgres"))]
+    {
+        "sqlite"
+    }
+}
+
+/// The engine's own version, `major.minor` only.
+pub async fn engine_version(pool: &DbPool) -> Result<String, sqlx::Error> {
+    #[cfg(feature = "postgres")]
+    let raw: String = sqlx::query_scalar("SHOW server_version")
+        .fetch_one(pool)
+        .await?;
+    #[cfg(not(feature = "postgres"))]
+    let raw: String = sqlx::query_scalar("SELECT sqlite_version()")
+        .fetch_one(pool)
+        .await?;
+    Ok(crate::telemetry::major_minor(&raw))
+}

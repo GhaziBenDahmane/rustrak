@@ -17,4 +17,5 @@ pub mod openapi;
 pub mod pagination;
 pub mod routes;
 pub mod services;
+pub mod telemetry;
 pub mod workers;

@@ -275,6 +275,17 @@ VITE_RUSTRAK_VERSION_CHECK_ENABLED=false pnpm --filter @rustrak/dashboard build
 For an installation that must make no outbound requests at all and does not
 build its own image, blocking the host at the network is the reliable answer.
 
+## Telemetry
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RUSTRAK_TELEMETRY` | `on` | Anonymous usage report every 6 hours. `off` sends nothing |
+| `DO_NOT_TRACK` | unset | `1` sends nothing either; the cross-tool convention |
+
+Either variable on its own is enough to turn it off. What the report
+contains, field by field, is on the [Telemetry](/configuration/telemetry)
+page.
+
 ## Complete Example
 
 ### SQLite (development / personal)

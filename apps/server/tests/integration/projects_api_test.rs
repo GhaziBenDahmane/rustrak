@@ -46,6 +46,10 @@ fn create_test_config() -> Config {
             dir: "./static".to_string(),
             enabled: true,
         },
+        telemetry: rustrak::config::TelemetryConfig {
+            enabled: false,
+            do_not_track: false,
+        },
     }
 }
 

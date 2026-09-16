@@ -252,6 +252,22 @@ npx @rustrak/mcp              # Claude, Cursor, Continue
 
 An OpenAPI spec is served at `/docs` and mirrored in the documentation site.
 
+## Telemetry
+
+The server sends one anonymous report every six hours: version, platform,
+memory, and counters such as "how many ingests were rejected" or "which
+routes returned 500". Never IPs, names, URLs, events or messages. It is what
+lets a memory regression or a new panic show up across installations after
+a release, and it costs one atomic increment per request.
+
+```bash
+RUSTRAK_TELEMETRY=off   # or DO_NOT_TRACK=1; either one is enough
+```
+
+Every field is listed in the
+[telemetry page](https://rustrak.github.io/rustrak/configuration/telemetry),
+and `GET /api/telemetry/preview` shows the exact document before it leaves.
+
 ## Documentation
 
 | | |

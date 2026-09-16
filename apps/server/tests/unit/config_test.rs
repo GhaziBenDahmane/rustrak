@@ -449,3 +449,103 @@ fn the_dashboard_switch_refuses_what_it_does_not_recognise() {
         assert!(error.to_string().contains("RUSTRAK_DASHBOARD"), "{error}");
     });
 }
+
+// =============================================================================
+// RUSTRAK_TELEMETRY switch
+// =============================================================================
+
+/// Runs `body` with `DATABASE_URL` set and the telemetry variables as given,
+/// restoring everything afterwards.
+fn with_telemetry_env<T>(
+    switch: Option<&str>,
+    do_not_track: Option<&str>,
+    body: impl FnOnce() -> T,
+) -> T {
+    const VARS: [&str; 3] = ["DATABASE_URL", "RUSTRAK_TELEMETRY", "DO_NOT_TRACK"];
+    let saved: Vec<Option<String>> = VARS.iter().map(|v| std::env::var(v).ok()).collect();
+
+    std::env::set_var("DATABASE_URL", "postgres://test:test@localhost/test");
+    for (name, value) in [
+        ("RUSTRAK_TELEMETRY", switch),
+        ("DO_NOT_TRACK", do_not_track),
+    ] {
+        match value {
+            Some(v) => std::env::set_var(name, v),
+            None => std::env::remove_var(name),
+        }
+    }
+
+    let out = body();
+
+    for (name, value) in VARS.iter().zip(saved) {
+        match value {
+            Some(v) => std::env::set_var(name, v),
+            None => std::env::remove_var(name),
+        }
+    }
+    out
+}
+
+#[test]
+#[serial]
+fn telemetry_is_enabled_unless_switched_off() {
+    with_telemetry_env(None, None, || {
+        let config = Config::from_env().expect("Config::from_env() should succeed");
+        assert!(config.telemetry.enabled);
+        assert!(!config.telemetry.do_not_track);
+    });
+}
+
+#[test]
+#[serial]
+fn the_telemetry_switch_reads_the_usual_spellings() {
+    for (value, expected) in [
+        ("off", false),
+        ("false", false),
+        ("0", false),
+        ("OFF", false),
+        (" off ", false),
+        ("on", true),
+        ("true", true),
+        ("1", true),
+    ] {
+        with_telemetry_env(Some(value), None, || {
+            let config = Config::from_env().expect("Config::from_env() should succeed");
+            assert_eq!(
+                config.telemetry.enabled, expected,
+                "RUSTRAK_TELEMETRY={value:?}"
+            );
+        });
+    }
+}
+
+/// Same asymmetry as the dashboard switch: a typo must not be read as "on"
+/// when the operator meant to keep data from leaving the box.
+#[test]
+#[serial]
+fn the_telemetry_switch_refuses_what_it_does_not_recognise() {
+    with_telemetry_env(Some("of"), None, || {
+        let error = Config::from_env().expect_err("a typo must not be read as on or off");
+        assert!(
+            matches!(error, rustrak::config::ConfigError::InvalidTelemetrySwitch { ref value } if value == "of"),
+            "got {error:?}"
+        );
+        assert!(error.to_string().contains("RUSTRAK_TELEMETRY"), "{error}");
+    });
+}
+
+/// `DO_NOT_TRACK=1` is the cross-tool convention from consoledonottrack.com.
+/// Only `1` and `true` count; anything else leaves it unset.
+#[test]
+#[serial]
+fn do_not_track_is_read_from_the_conventional_variable() {
+    for (value, expected) in [("1", true), ("true", true), ("0", false), ("", false)] {
+        with_telemetry_env(None, Some(value), || {
+            let config = Config::from_env().expect("Config::from_env() should succeed");
+            assert_eq!(
+                config.telemetry.do_not_track, expected,
+                "DO_NOT_TRACK={value:?}"
+            );
+        });
+    }
+}

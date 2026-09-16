@@ -798,6 +798,10 @@ impl AlertService {
             .await;
         let attempt_count = next_attempt_count(previous_attempt_count);
 
+        if !result.success {
+            crate::telemetry::Counters::global()
+                .alert_failed(&integration.provider_type.to_string());
+        }
         if result.success {
             sqlx::query(
                 "UPDATE alert_history SET status = 'sent', sent_at = CURRENT_TIMESTAMP, http_status_code = $2 WHERE id = $1",
