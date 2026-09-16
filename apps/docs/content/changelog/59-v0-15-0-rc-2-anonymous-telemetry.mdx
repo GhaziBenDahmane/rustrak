@@ -1,0 +1,62 @@
+---
+version: v0.15.0-rc.2
+title: Anonymous Telemetry
+description: The server sends one anonymous heartbeat every six hours, so a memory regression or a new panic shows up across installations after a release. Every field is documented, nothing that came from an SDK, a user or a project ever leaves, an admin endpoint shows the exact document before it is sent, and one variable turns it off
+date: 2026-09-16
+tags: [server, telemetry, configuration]
+---
+
+> **Release candidate.** This is `rustrak/rustrak-server:next` (and
+> `:v0.15.0-rc.2`, `:next-postgres`), `@rustrak/client@next` and
+> `@rustrak/mcp@next`. `latest` stays on 0.14 until 0.15 ships. It adds one
+> nullable column, `installation.telemetry_id`, and touches nothing else.
+
+## Anonymous telemetry
+
+Rustrak runs on machines we never see, so "is this version leaking memory
+for anyone?" and "does anyone still run SQLite on ARM?" were guesses. The
+server now sends one `heartbeat` document, about 2 KB, every six hours. The
+first one leaves ten minutes after startup, which is time to read the notice
+in the log and set the switch.
+
+- **Identity and build.** A random UUID minted on first start and stored in
+  the database, never derived from the host; the version, OS, architecture,
+  whether it runs in a container, the database engine and version, whether
+  the dashboard is mounted, and uptime
+- **Resources.** CPU count, host memory, and the process's resident memory
+  over the window, sampled once a minute
+- **Volume.** Projects, users, open issues, and events, transactions,
+  sessions and logs in the last 24 hours, each blurred to two significant
+  digits before it leaves: 4,517 events is reported as 4,500
+- **Health.** Counters since the previous report: ingests accepted and
+  rejected by reason, ingest latency p50 and p99, digest successes and
+  failures, server errors per route *pattern* (`/api/issues/{id}`, never the
+  real path), failed alert deliveries per provider kind, and panics per
+  source location inside Rustrak's own code, without the message
+- **Configuration.** Booleans and kinds only: whether SSL proxy, `PUBLIC_URL`,
+  SMTP and a session secret are set, and which alert provider kinds exist
+
+Never sent: IP addresses, hostnames, `PUBLIC_URL`, `DATABASE_URL`, email
+addresses, project or team names, DSNs, event payloads, stack traces, error
+messages, request paths, release or environment names, panic messages, log
+lines. The [telemetry page](/configuration/telemetry) lists every field.
+
+## Turning it off, and seeing what would go
+
+```bash
+RUSTRAK_TELEMETRY=off   # or DO_NOT_TRACK=1; either one is enough
+```
+
+- `RUSTRAK_TELEMETRY` accepts `on`, `off`, `true`, `false`, `1` and `0`. Any
+  other value refuses to start, so a typo is never read as "on"
+- The startup log says which state it is in and prints the instance id
+- `GET /api/telemetry/preview`, as an admin, returns the next heartbeat
+  exactly as it would leave, plus `enabled` and the reason if it is off. It
+  works either way, so the decision can be made on the real document
+- A binary built from source without the project's key (a fork, a local
+  `cargo build`) has telemetry off and says so at startup. The published
+  images receive the key as a BuildKit secret, so it never lands in the
+  image metadata
+- Cost on the server: one atomic increment per request, one small `/proc`
+  read per minute, three count queries and one POST with a 10 second timeout
+  every six hours. A failed send is a `debug` line and is not retried
