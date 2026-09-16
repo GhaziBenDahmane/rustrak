@@ -129,6 +129,11 @@ tempfile = "3.27.0"
 # Email sending
 lettre = { version = "0.11.23", default-features = false, features = ["tokio1", "tokio1-rustls-tls", "builder", "smtp-transport"] }
 
+# Global allocator. glibc malloc keeps one arena per thread and never gives an
+# arena back once its thread exits; the blocking pool creates and retires threads
+# on every burst, so RSS climbed to the arena limit and stayed there.
+mimalloc = "0.1.52"
+
 # OpenAPI spec generation (optional, behind `openapi` feature flag)
 utoipa = { version = "5.5.0", features = ["actix_extras", "uuid", "chrono"], optional = true }
 utoipa-scalar = { version = "0.3.0", features = ["actix-web"], optional = true }

@@ -34,6 +34,158 @@ pub trait SourceMapProvider: Send + Sync {
         debug_id: &str,
         file_type: &str,
     ) -> AppResult<Option<SourceMapEntry>>;
+
+    /// The parsed source map for `debug_id`, or `None` when there is none or
+    /// it does not parse. Implementations may serve this from a cache.
+    async fn fetch_decoded(
+        &self,
+        project_id: i32,
+        debug_id: &str,
+    ) -> Option<Arc<sourcemap::DecodedMap>> {
+        let entry = match self
+            .fetch_sourcemap(project_id, debug_id, "source_map")
+            .await
+        {
+            Ok(Some(e)) => e,
+            Ok(None) => return None,
+            Err(e) => {
+                log::warn!("fetch_sourcemap error for {}: {:?}", debug_id, e);
+                return None;
+            }
+        };
+        parse_sourcemap(debug_id, &entry.data).map(Arc::new)
+    }
+}
+
+/// DecodedMap auto-detects Hermes (`x_facebook_sources`) vs regular maps;
+/// SourceMap::from_reader alone returns IncompatibleSourceMap for Hermes.
+fn parse_sourcemap(debug_id: &str, data: &[u8]) -> Option<sourcemap::DecodedMap> {
+    match sourcemap::DecodedMap::from_reader(Cursor::new(data)) {
+        Ok(m) => Some(m),
+        Err(e) => {
+            log::warn!("failed to parse source map for {}: {}", debug_id, e);
+            None
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ParsedMapCache: parsed source maps shared across events
+// ---------------------------------------------------------------------------
+
+/// Keyed by the store key, which is the SHA-1 of the file's contents, so a
+/// re-upload under the same debug_id can never hit a stale parse. Bounded by
+/// the summed size of the source files, evicting the least recently used.
+struct ParsedMapCache {
+    budget: usize,
+    inner: std::sync::Mutex<ParsedMapCacheInner>,
+    /// One lock per key being loaded, so concurrent misses on the same file
+    /// wait for the first read and parse instead of repeating it.
+    loading: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+}
+
+#[derive(Default)]
+struct ParsedMapCacheInner {
+    entries: HashMap<String, CachedMap>,
+    used: usize,
+    clock: u64,
+}
+
+struct CachedMap {
+    map: Arc<sourcemap::DecodedMap>,
+    size: usize,
+    last_used: u64,
+}
+
+impl ParsedMapCache {
+    fn new(budget: usize) -> Self {
+        Self {
+            budget,
+            inner: std::sync::Mutex::new(ParsedMapCacheInner::default()),
+            loading: std::sync::Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// The map for `key`, loading it through `load` on a miss. Only one
+    /// loader runs per key at a time; the others find the result in the cache.
+    async fn get_or_load<F, Fut>(&self, key: &str, load: F) -> Option<Arc<sourcemap::DecodedMap>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Option<(Arc<sourcemap::DecodedMap>, usize)>>,
+    {
+        if let Some(hit) = self.get(key) {
+            return Some(hit);
+        }
+        let lock = Arc::clone(
+            self.loading
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .entry(key.to_string())
+                .or_default(),
+        );
+        let _loading = lock.lock().await;
+        if let Some(hit) = self.get(key) {
+            return Some(hit);
+        }
+        let loaded = load().await;
+        if let Some((map, size)) = &loaded {
+            self.insert(key, Arc::clone(map), *size);
+        }
+        self.loading
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(key);
+        loaded.map(|(map, _)| map)
+    }
+
+    fn get(&self, key: &str) -> Option<Arc<sourcemap::DecodedMap>> {
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        inner.clock += 1;
+        let clock = inner.clock;
+        let entry = inner.entries.get_mut(key)?;
+        entry.last_used = clock;
+        Some(Arc::clone(&entry.map))
+    }
+
+    fn insert(&self, key: &str, map: Arc<sourcemap::DecodedMap>, size: usize) {
+        if size > self.budget {
+            log::warn!(
+                "source map {} is {} MB, above the {} MB cache budget; it will be parsed again for every event (raise SOURCEMAP_CACHE_MB)",
+                key,
+                size / (1024 * 1024),
+                self.budget / (1024 * 1024)
+            );
+            return;
+        }
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(old) = inner.entries.remove(key) {
+            inner.used -= old.size;
+        }
+        while inner.used + size > self.budget {
+            let Some(victim) = inner
+                .entries
+                .iter()
+                .min_by_key(|(_, e)| e.last_used)
+                .map(|(k, _)| k.clone())
+            else {
+                break;
+            };
+            if let Some(evicted) = inner.entries.remove(&victim) {
+                inner.used -= evicted.size;
+            }
+        }
+        inner.clock += 1;
+        let last_used = inner.clock;
+        inner.used += size;
+        inner.entries.insert(
+            key.to_string(),
+            CachedMap {
+                map,
+                size,
+                last_used,
+            },
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -43,22 +195,36 @@ pub trait SourceMapProvider: Send + Sync {
 pub struct DbSourceMapProvider {
     pool: DbPool,
     store: Arc<dyn SourceMapStore>,
+    cache: ParsedMapCache,
 }
+
+/// Default budget for parsed source maps kept across events.
+pub const DEFAULT_SOURCEMAP_CACHE_BYTES: usize = 64 * 1024 * 1024;
 
 impl DbSourceMapProvider {
     pub fn new(pool: DbPool, store: Arc<dyn SourceMapStore>) -> Self {
-        Self { pool, store }
+        Self {
+            pool,
+            store,
+            cache: ParsedMapCache::new(DEFAULT_SOURCEMAP_CACHE_BYTES),
+        }
     }
-}
 
-#[async_trait::async_trait]
-impl SourceMapProvider for DbSourceMapProvider {
-    async fn fetch_sourcemap(
+    /// Bytes of parsed source maps (measured as the size of the files they
+    /// came from) kept across events.
+    pub fn with_cache_budget(mut self, bytes: usize) -> Self {
+        self.cache = ParsedMapCache::new(bytes);
+        self
+    }
+
+    /// Which stored file serves `debug_id` right now, as
+    /// `(source_file_metadata.id, storage_path)`. Also counts the use.
+    async fn locate(
         &self,
         project_id: i32,
         debug_id: &str,
         file_type: &str,
-    ) -> AppResult<Option<SourceMapEntry>> {
+    ) -> AppResult<Option<(String, String)>> {
         // 1. Parse debug_id as UUID for typed query
         let debug_uuid = match Uuid::parse_str(debug_id) {
             Ok(u) => u,
@@ -102,23 +268,7 @@ impl SourceMapProvider for DbSourceMapProvider {
             None => return Ok(None),
         };
 
-        // 3. Read file from store
-        let data = match self.store.get(&storage_path).await {
-            Ok(d) => d,
-            Err(crate::services::sourcemap_store::StoreError::NotFound(_)) => {
-                log::warn!(
-                    "source_file_metadata row exists but file missing on disk: {}",
-                    storage_path
-                );
-                return Ok(None);
-            }
-            Err(e) => {
-                log::warn!("failed to read source map from store: {}", e);
-                return Ok(None);
-            }
-        };
-
-        // 4. Increment times_used (best-effort, fire-and-forget)
+        // 3. Increment times_used (best-effort, fire-and-forget)
         // Parse the string sfm_id back to UUID for the UPDATE (works for both backends).
         if let Ok(sfm_uuid) = Uuid::parse_str(&sfm_id) {
             #[cfg(feature = "postgres")]
@@ -138,7 +288,66 @@ impl SourceMapProvider for DbSourceMapProvider {
             .await;
         }
 
-        Ok(Some(SourceMapEntry { data }))
+        Ok(Some((sfm_id, storage_path)))
+    }
+
+    async fn read(&self, storage_path: &str) -> Option<Bytes> {
+        match self.store.get(storage_path).await {
+            Ok(d) => Some(d),
+            Err(crate::services::sourcemap_store::StoreError::NotFound(_)) => {
+                log::warn!(
+                    "source_file_metadata row exists but file missing on disk: {}",
+                    storage_path
+                );
+                None
+            }
+            Err(e) => {
+                log::warn!("failed to read source map from store: {}", e);
+                None
+            }
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl SourceMapProvider for DbSourceMapProvider {
+    async fn fetch_sourcemap(
+        &self,
+        project_id: i32,
+        debug_id: &str,
+        file_type: &str,
+    ) -> AppResult<Option<SourceMapEntry>> {
+        let Some((_, storage_path)) = self.locate(project_id, debug_id, file_type).await? else {
+            return Ok(None);
+        };
+        Ok(self
+            .read(&storage_path)
+            .await
+            .map(|data| SourceMapEntry { data }))
+    }
+
+    /// The database lookup runs on every event, so a deleted or replaced file
+    /// stops resolving at once; only the read and the parse are cached.
+    async fn fetch_decoded(
+        &self,
+        project_id: i32,
+        debug_id: &str,
+    ) -> Option<Arc<sourcemap::DecodedMap>> {
+        let storage_path = match self.locate(project_id, debug_id, "source_map").await {
+            Ok(Some((_, path))) => path,
+            Ok(None) => return None,
+            Err(e) => {
+                log::warn!("fetch_sourcemap error for {}: {:?}", debug_id, e);
+                return None;
+            }
+        };
+        self.cache
+            .get_or_load(&storage_path, || async {
+                let data = self.read(&storage_path).await?;
+                let map = Arc::new(parse_sourcemap(debug_id, &data)?);
+                Some((map, data.len()))
+            })
+            .await
     }
 }
 
@@ -681,10 +890,48 @@ pub async fn rewrite_frames(
         return Ok(());
     }
 
-    rewrite_frames_under(provider, project_id, event_data, "exception", &images_map).await?;
-    rewrite_frames_under(provider, project_id, event_data, "threads", &images_map).await?;
+    // Parsed maps live for the whole event: one fetch and one parse per
+    // debug_id, shared by every frame under either root key. Symbolicator does
+    // the same in `SourceMapLookup::get_module`.
+    let mut parsed: ParsedMaps = HashMap::new();
+    rewrite_frames_under(
+        provider,
+        project_id,
+        event_data,
+        "exception",
+        &images_map,
+        &mut parsed,
+    )
+    .await?;
+    rewrite_frames_under(
+        provider,
+        project_id,
+        event_data,
+        "threads",
+        &images_map,
+        &mut parsed,
+    )
+    .await?;
 
     Ok(())
+}
+
+/// Source maps already resolved for the event in flight, by debug_id. `None`
+/// records a miss so the next frame does not ask the provider again.
+type ParsedMaps = HashMap<String, Option<Arc<sourcemap::DecodedMap>>>;
+
+async fn load_decoded_map(
+    provider: &dyn SourceMapProvider,
+    project_id: i32,
+    debug_id: &str,
+    parsed: &mut ParsedMaps,
+) -> Option<Arc<sourcemap::DecodedMap>> {
+    if let Some(hit) = parsed.get(debug_id) {
+        return hit.clone();
+    }
+    let decoded = provider.fetch_decoded(project_id, debug_id).await;
+    parsed.insert(debug_id.to_string(), decoded.clone());
+    decoded
 }
 
 /// Rewrites every frame under `event_data[root_key]["values"][*]["stacktrace"]["frames"]`.
@@ -695,6 +942,7 @@ async fn rewrite_frames_under(
     event_data: &mut serde_json::Value,
     root_key: &str,
     images_map: &HashMap<String, String>,
+    parsed: &mut ParsedMaps,
 ) -> AppResult<()> {
     // Iterate by index to avoid holding a &mut borrow across .await points.
     let value_count = event_data[root_key]["values"]
@@ -749,31 +997,14 @@ async fn rewrite_frames_under(
                 None => continue,
             };
 
-            // 3c. Fetch source map — file_type is "source_map" (NOT "minified")
-            let entry = match provider
-                .fetch_sourcemap(project_id, &debug_id, "source_map")
-                .await
-            {
-                Ok(Some(e)) => e,
-                Ok(None) => continue,
-                Err(e) => {
-                    log::warn!("fetch_sourcemap error for {}: {:?}", debug_id, e);
-                    continue;
-                }
-            };
-
-            // 3d. Parse source map — DecodedMap auto-detects Hermes (`x_facebook_sources`)
-            // vs regular maps. SourceMap::from_reader returns IncompatibleSourceMap for Hermes.
-            let decoded = match sourcemap::DecodedMap::from_reader(Cursor::new(&entry.data)) {
-                Ok(m) => m,
-                Err(e) => {
-                    log::warn!("failed to parse source map for {}: {}", debug_id, e);
-                    continue;
-                }
+            // 3c+3d. Fetch and parse the source map, once per debug_id per event.
+            let Some(decoded) = load_decoded_map(provider, project_id, &debug_id, parsed).await
+            else {
+                continue;
             };
 
             // Indexed maps need embedded sections for lookup + contents; skip them.
-            let sm: &sourcemap::SourceMap = match &decoded {
+            let sm: &sourcemap::SourceMap = match &*decoded {
                 sourcemap::DecodedMap::Regular(sm) => sm,
                 sourcemap::DecodedMap::Hermes(smh) => smh,
                 sourcemap::DecodedMap::Index(_) => continue,

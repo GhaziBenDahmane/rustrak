@@ -18,6 +18,9 @@ pub struct Config {
     /// Directory where assembled source map files are stored on disk (CAS layout).
     /// Default: /data/sourcemaps. Override with SOURCEMAP_STORAGE_PATH env var.
     pub sourcemap_storage_path: String,
+    /// Budget for parsed source maps kept in memory across events, in bytes.
+    /// Default: 64 MB. Override with SOURCEMAP_CACHE_MB env var.
+    pub sourcemap_cache_bytes: usize,
     /// Maximum allowed size of a single uploaded chunk in bytes.
     /// Default: 10 MB. Override with MAX_CHUNK_SIZE_BYTES env var.
     pub max_chunk_size_bytes: usize,
@@ -110,6 +113,11 @@ impl Config {
             ingest_dir: env::var("INGEST_DIR").ok(),
             sourcemap_storage_path: env::var("SOURCEMAP_STORAGE_PATH")
                 .unwrap_or_else(|_| "/data/sourcemaps".to_string()),
+            sourcemap_cache_bytes: env::var("SOURCEMAP_CACHE_MB")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .and_then(|mb| mb.checked_mul(1024 * 1024))
+                .unwrap_or(crate::services::sourcemap::DEFAULT_SOURCEMAP_CACHE_BYTES),
             max_chunk_size_bytes: env::var("MAX_CHUNK_SIZE_BYTES")
                 .unwrap_or_else(|_| (10 * 1024 * 1024).to_string())
                 .parse()

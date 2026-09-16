@@ -555,3 +555,92 @@ async fn test_rewrite_hermes_map() {
         "context_line must come from the original Hermes source"
     );
 }
+
+// ---------------------------------------------------------------------------
+// One fetch per source map per event, however many frames point at it
+// ---------------------------------------------------------------------------
+
+struct CountingProvider {
+    data: Option<Bytes>,
+    fetches: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait]
+impl SourceMapProvider for CountingProvider {
+    async fn fetch_sourcemap(
+        &self,
+        _project_id: i32,
+        _debug_id: &str,
+        _file_type: &str,
+    ) -> AppResult<Option<SourceMapEntry>> {
+        self.fetches
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(self
+            .data
+            .as_ref()
+            .map(|d| SourceMapEntry { data: d.clone() }))
+    }
+}
+
+#[tokio::test]
+async fn test_rewrite_fetches_each_sourcemap_once_per_event() {
+    let provider = CountingProvider {
+        data: Some(make_simple_sourcemap()),
+        fetches: std::sync::atomic::AtomicUsize::new(0),
+    };
+    let frame = |lineno: u64| json!({"filename": "app.js", "lineno": lineno, "colno": 0});
+    let mut event = json!({
+        "debug_meta": {"images": [{"code_file": "app.js", "debug_id": "abc123"}]},
+        "exception": {"values": [
+            {"stacktrace": {"frames": [frame(1), frame(2), frame(3)]}},
+            {"stacktrace": {"frames": [frame(4), frame(5)]}}
+        ]},
+        "threads": {"values": [
+            {"stacktrace": {"frames": [frame(1), frame(2)]}}
+        ]}
+    });
+
+    rewrite_frames(&provider, 1, &mut event).await.unwrap();
+
+    assert_eq!(
+        provider.fetches.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "the same debug_id must be fetched and parsed once per event"
+    );
+    // Every frame still gets rewritten.
+    for (v, n) in [(0, 3), (1, 2)] {
+        for i in 0..n {
+            let f = &event["exception"]["values"][v]["stacktrace"]["frames"][i];
+            assert_eq!(f["filename"], "src/app/page.tsx", "exception frame {v}/{i}");
+        }
+    }
+    for i in 0..2 {
+        let f = &event["threads"]["values"][0]["stacktrace"]["frames"][i];
+        assert_eq!(f["filename"], "src/app/page.tsx", "thread frame {i}");
+    }
+}
+
+#[tokio::test]
+async fn test_rewrite_asks_once_per_event_for_a_missing_sourcemap() {
+    let provider = CountingProvider {
+        data: None,
+        fetches: std::sync::atomic::AtomicUsize::new(0),
+    };
+    let frame = |lineno: u64| json!({"filename": "app.js", "lineno": lineno, "colno": 0});
+    let mut event = json!({
+        "debug_meta": {"images": [{"code_file": "app.js", "debug_id": "missing"}]},
+        "exception": {"values": [
+            {"stacktrace": {"frames": [frame(1), frame(2), frame(3), frame(4), frame(5)]}}
+        ]}
+    });
+
+    rewrite_frames(&provider, 1, &mut event).await.unwrap();
+
+    assert_eq!(
+        provider.fetches.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "a miss is remembered for the rest of the event"
+    );
+    let f = &event["exception"]["values"][0]["stacktrace"]["frames"][4];
+    assert_eq!(f["filename"], "app.js", "frames stay untouched on a miss");
+}
