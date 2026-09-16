@@ -82,28 +82,31 @@ jobs:
       # Changing the title or the label name re-enables the bots here.
       # The action opens the PR against the branch that triggered it, so on
       # `next` the head is `changeset-release/next` and the base is `next`.
+      # v2 is the line built for @changesets/cli 3. v1 still reads a
+      # `.changeset/` subdirectory as a v1-format changeset, so the `pre/`
+      # folder cli 3 fills in prerelease mode made it fail on `pre/changes.md`.
       - name: Create Release Pull Request
         id: changesets
         if: steps.check.outputs.has_changesets == 'true'
-        uses: changesets/action@v1.7.0
+        uses: changesets/action@v2.1.2
         with:
-          version: pnpm version-packages
-          title: "chore: version packages"
-          commit: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+          version-script: pnpm version-packages
+          pr-title: "chore: version packages"
+          commit-message: "chore: version packages"
+          push-with-git-cli: true
+          github-token: ${{ secrets.PAT_TOKEN }}
 
       # `skip-review` is a general opt-out, not a release-only one: put it on
       # any PR by hand and the AI reviewers stay quiet. Created here with
       # --force so the label never has to exist as manual repo state.
       - name: Label the version PR as skip-review
-        if: steps.changesets.outputs.pullRequestNumber
+        if: steps.changesets.outputs.pr-number
         run: |
           gh label create skip-review \
             --color ededed \
             --description "Skip the AI code reviewers (CodeRabbit, Greptile)" \
             --force
-          gh pr edit "${{ steps.changesets.outputs.pullRequestNumber }}" \
+          gh pr edit "${{ steps.changesets.outputs.pr-number }}" \
             --add-label skip-review
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
