@@ -27,5 +27,6 @@ mod spans_api_test;
 mod stats_api_test;
 mod storage_api_test;
 mod team_rbac_test;
+mod telemetry_test;
 mod tokens_api_test;
 mod transactions_api_test;

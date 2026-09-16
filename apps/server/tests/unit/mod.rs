@@ -19,4 +19,5 @@ mod sourcemap_test;
 mod span_test;
 mod span_v2_test;
 mod storage_test;
+mod telemetry_test;
 mod transaction_processor_test;

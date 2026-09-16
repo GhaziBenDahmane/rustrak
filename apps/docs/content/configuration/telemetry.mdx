@@ -1,0 +1,150 @@
+# Telemetry
+
+The server sends a small anonymous report every six hours. It says which
+version is running, on what kind of machine, and whether things are working.
+It never says who you are, what you track, or where you are.
+
+```bash
+RUSTRAK_TELEMETRY=off   # and nothing leaves, ever
+```
+
+## Why it exists
+
+Rustrak is installed on machines we never see. Without a signal from them,
+"is 0.16 leaking memory for anyone?" and "does anyone still run SQLite on
+ARM?" are guesses. The report is what turns those into answers: which
+versions are alive, what they cost in memory, which routes throw errors,
+and which panics appear after a release.
+
+## What is sent
+
+One `heartbeat` document, about 2 KB of JSON, every 6 hours. The first one
+leaves 10 minutes after startup, which is time enough to read the notice in
+the log and set the switch. This is the complete list of fields.
+
+### Identity and build
+
+| Field | Example | What it is |
+|---|---|---|
+| `instance_id` | `f1c0…` | A random UUID minted the first time the server starts and stored in the database. Not derived from your hostname, IP, MAC address or anything else about the machine |
+| `version` | `0.16.0` | The server version |
+| `schema` | `1` | The report format version |
+| `os`, `arch` | `linux`, `x86_64` | Operating system and CPU architecture |
+| `container` | `true` | Whether the process runs in a container |
+| `db_backend`, `db_version` | `sqlite`, `3.46` | The database engine and its major.minor version |
+| `dashboard_served` | `true` | Whether the dashboard is mounted |
+| `uptime_secs` | `86412` | Seconds since the process started |
+| `first_since_boot` | `false` | Whether this is the first report of the process |
+
+### Resources
+
+| Field | What it is |
+|---|---|
+| `cpu_count` | Logical CPUs available to the process |
+| `mem_total_mb` | Total memory of the host, rounded |
+| `rss_mb.{min,max,last}` | Memory the process held over the window, sampled every minute |
+| `sqlite_db_mb` | Size of the SQLite file, rounded. SQLite only |
+| `ingest_dir_pending` | Events waiting on disk to be digested at report time |
+
+### Volume
+
+Every count below is blurred to two significant digits before it leaves:
+`4,517` events is reported as `4,500`, `123` projects as `120`.
+
+| Field | What it is |
+|---|---|
+| `projects`, `users`, `issues_open` | How many exist |
+| `events_24h`, `transactions_24h`, `sessions_24h`, `logs_24h` | How many arrived in the last 24 hours |
+
+### Health
+
+Counters since the previous report. This is the part that tells us what is
+breaking.
+
+| Field | What it is |
+|---|---|
+| `ingest.accepted` | Ingest requests answered 2xx |
+| `ingest.rejected.{rate_limit,auth,too_large,malformed,other}` | Ingest requests turned away, by reason |
+| `ingest.latency_ms.{p50,p99}` | Ingest latency percentiles, on a fixed scale of buckets |
+| `digest.ok`, `digest.failed` | Events grouped into issues, and events that could not be |
+| `http_5xx_by_route` | Server errors per **route pattern**, such as `/api/issues/{id}`. The real path never appears |
+| `alerts_failed_by_provider` | Alert deliveries that failed, per provider kind (`slack`, `webhook`, …) |
+| `panics` | Panics per source location inside Rustrak's own code (`src/digest/mod.rs:212`). The panic message is never included, because it could carry a path or a query |
+
+### Configuration
+
+Booleans and kinds only, never values.
+
+| Field | What it is |
+|---|---|
+| `ssl_proxy`, `public_url_set`, `smtp_configured`, `session_secret_set` | Whether each is set |
+| `alert_providers` | The kinds of alert channel enabled, such as `["slack", "webhook"]` |
+
+## What is never sent
+
+IP addresses (the receiving end discards them too), hostnames, `PUBLIC_URL`,
+`DATABASE_URL`, email addresses, project or team names, DSNs, event payloads,
+stack traces, error messages, request paths, release or environment names
+from your SDKs, panic messages, log lines. Nothing that came from an SDK, a
+user or a project ever leaves the machine.
+
+## Where it goes
+
+To the Rustrak project's telemetry store, with IP storage and location
+lookups switched off. The maintainers see aggregate charts; there is no way
+to look up a machine from what is stored.
+
+## How to see exactly what would be sent
+
+As an admin:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/telemetry/preview
+```
+
+The response carries `enabled`, the reason if it is off, and `report`, the
+next heartbeat exactly as it would leave. It works whether telemetry is on
+or off, so the decision can be made on the real document. The same document
+is written to the log at `debug` level before every send.
+
+## How to turn it off
+
+Either of these does it on its own:
+
+```bash
+RUSTRAK_TELEMETRY=off
+DO_NOT_TRACK=1          # the cross-tool convention from consoledonottrack.com
+```
+
+`RUSTRAK_TELEMETRY` accepts `on`, `off`, `true`, `false`, `1` and `0`.
+Anything else refuses to start, deliberately: a typo must not be read as
+"on" when you meant to keep data from leaving the box.
+
+The startup log says which it is:
+
+```
+Anonymous telemetry is on (instance f1c0…). RUSTRAK_TELEMETRY=off disables it. https://rustrak.github.io/rustrak/configuration/telemetry
+```
+
+```
+Telemetry is off: RUSTRAK_TELEMETRY is off.
+```
+
+A binary built from source without the project's key (a fork, a local
+`cargo build`) has telemetry off as well, and says so:
+`Telemetry is off: no telemetry key was compiled into this binary.`
+
+## Cost on your server
+
+One atomic increment per request, one small `/proc` read per minute, three
+count queries and one HTTP POST every six hours with a 10 second timeout. A
+failed send is a `debug` log line and is not retried; the next window
+carries on. An air-gapped installation loses nothing and logs nothing at
+`info` or above.
+
+## Deleting what was sent
+
+The instance id is printed at startup and returned by the preview endpoint.
+It is a random value that says nothing about you, so it is safe to post:
+open an issue on [GitHub](https://github.com/rustrak/rustrak/issues) titled
+"Telemetry deletion" with the id, and the corresponding records are deleted.

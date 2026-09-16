@@ -310,7 +310,7 @@ pub async fn ingest_envelope(
 
 /// Digests one stored event, retrying transient write contention. Failures
 /// leave the durable file in place for the recovery worker.
-async fn digest_stored_event(processors: &Processors, pool: &DbPool, metadata: &EventMetadata) {
+pub async fn digest_stored_event(processors: &Processors, pool: &DbPool, metadata: &EventMetadata) {
     let ctx = ProcessorCtx {
         pool: pool.clone(),
         project_id: metadata.project_id,
@@ -320,7 +320,10 @@ async fn digest_stored_event(processors: &Processors, pool: &DbPool, metadata: &
     };
     for attempt in 0..4 {
         match processors.errors.process_ref(metadata, &ctx).await {
-            Ok(()) => break,
+            Ok(()) => {
+                processors.counters().digest_ok();
+                break;
+            }
             Err(e) if is_retryable_write_contention(&e) && attempt < 3 => {
                 let delay = std::time::Duration::from_millis(250 << attempt);
                 log::warn!(
@@ -332,6 +335,7 @@ async fn digest_stored_event(processors: &Processors, pool: &DbPool, metadata: &
                 tokio::time::sleep(delay).await;
             }
             Err(e) => {
+                processors.counters().digest_failed();
                 log::error!(
                     "Failed to digest event {}; it remains queued: {:?}",
                     metadata.event_id,

@@ -116,6 +116,9 @@ pub struct Processors {
     /// not in a static, so every app instance (each test server) gets
     /// its own budget.
     pub processing_slot: Arc<tokio::sync::Semaphore>,
+    /// Where digest outcomes are counted for the anonymous telemetry. The
+    /// process-wide set unless a test hands in its own.
+    counters: &'static crate::telemetry::Counters,
 }
 
 impl Processors {
@@ -133,7 +136,17 @@ impl Processors {
             spans: SpanProcessor,
             spans_v2: SpanV2Processor,
             processing_slot: Arc::new(tokio::sync::Semaphore::const_new(MAX_CONCURRENT_PROCESSING)),
+            counters: crate::telemetry::Counters::global(),
         }
+    }
+
+    pub fn with_counters(mut self, counters: &'static crate::telemetry::Counters) -> Self {
+        self.counters = counters;
+        self
+    }
+
+    pub fn counters(&self) -> &'static crate::telemetry::Counters {
+        self.counters
     }
 }
 

@@ -276,6 +276,10 @@ mod tests {
                 dir: "./static".to_string(),
                 enabled: true,
             },
+            telemetry: crate::config::TelemetryConfig {
+                enabled: false,
+                do_not_track: false,
+            },
         }
     }
 

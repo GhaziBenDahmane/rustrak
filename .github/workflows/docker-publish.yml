@@ -126,6 +126,7 @@ jobs:
           context: ./apps/server
           platforms: ${{ matrix.platform }}
           build-args: FEATURES=sqlite
+          secrets: rustrak_telemetry_key=${{ secrets.RUSTRAK_TELEMETRY_KEY }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: rustrak/rustrak-server
           cache-from: type=gha,scope=server-sqlite-${{ matrix.runner }}
@@ -232,6 +233,7 @@ jobs:
           context: ./apps/server
           platforms: ${{ matrix.platform }}
           build-args: FEATURES=postgres
+          secrets: rustrak_telemetry_key=${{ secrets.RUSTRAK_TELEMETRY_KEY }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           tags: rustrak/rustrak-server
           cache-from: type=gha,scope=server-postgres-${{ matrix.runner }}
