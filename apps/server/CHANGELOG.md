@@ -1,5 +1,11 @@
 # @rustrak/server
 
+## 0.15.0-rc.2
+
+### Patch Changes
+
+- [`036c0f0`](https://github.com/rustrak/rustrak/commit/036c0f02bc977f5e152d688d3817a2b152d43754) Thanks [@AbianS](https://github.com/AbianS)! - The server sends one anonymous heartbeat every six hours: version, platform, database backend, memory over the window, blurred counts of projects, users and last-day volume, and health counters since the previous report (ingests accepted and rejected by reason, ingest latency percentiles, digest outcomes, 5xx per route pattern, failed alert deliveries per provider, panics per source location). Never IPs, hostnames, URLs, names, DSNs, payloads, messages or paths. The instance id is a random UUID stored in a new `installation.telemetry_id` column. `RUSTRAK_TELEMETRY=off` or `DO_NOT_TRACK=1` sends nothing; a value that is neither on nor off refuses to start. The first report leaves ten minutes after startup, the startup log says which state it is in, and `GET /api/telemetry/preview` (admin) returns the exact document that would be sent, whether telemetry is on or off. The key is compiled in from a BuildKit secret in the published images; a binary built without it has telemetry off and says so.
+
 ## 0.15.0-rc.1
 
 ### Patch Changes

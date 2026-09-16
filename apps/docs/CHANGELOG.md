@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.10-rc.2
+
+### Patch Changes
+
+- [`036c0f0`](https://github.com/rustrak/rustrak/commit/036c0f02bc977f5e152d688d3817a2b152d43754) Thanks [@AbianS](https://github.com/AbianS)! - A Telemetry page under Configuration listing every field the anonymous heartbeat carries, what is never sent, how to preview it and how to turn it off. `RUSTRAK_TELEMETRY` and `DO_NOT_TRACK` join the environment reference.
+
 ## 0.15.10-rc.1
 
 ### Patch Changes
