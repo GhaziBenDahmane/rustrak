@@ -116,7 +116,7 @@ impl Config {
             sourcemap_cache_bytes: env::var("SOURCEMAP_CACHE_MB")
                 .ok()
                 .and_then(|v| v.parse::<usize>().ok())
-                .map(|mb| mb * 1024 * 1024)
+                .and_then(|mb| mb.checked_mul(1024 * 1024))
                 .unwrap_or(crate::services::sourcemap::DEFAULT_SOURCEMAP_CACHE_BYTES),
             max_chunk_size_bytes: env::var("MAX_CHUNK_SIZE_BYTES")
                 .unwrap_or_else(|_| (10 * 1024 * 1024).to_string())

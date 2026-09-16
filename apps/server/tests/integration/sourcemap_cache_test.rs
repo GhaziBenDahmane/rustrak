@@ -20,6 +20,9 @@ use std::sync::{Arc, Mutex};
 struct CountingStore {
     files: Mutex<HashMap<String, Bytes>>,
     reads: AtomicUsize,
+    /// When set, every `get` waits here before returning, so a test can hold
+    /// several readers at the miss at once.
+    gate: Option<Arc<tokio::sync::Notify>>,
 }
 
 impl CountingStore {
@@ -27,6 +30,15 @@ impl CountingStore {
         Arc::new(Self {
             files: Mutex::new(HashMap::new()),
             reads: AtomicUsize::new(0),
+            gate: None,
+        })
+    }
+
+    fn gated(gate: Arc<tokio::sync::Notify>) -> Arc<Self> {
+        Arc::new(Self {
+            files: Mutex::new(HashMap::new()),
+            reads: AtomicUsize::new(0),
+            gate: Some(gate),
         })
     }
 
@@ -44,6 +56,9 @@ impl SourceMapStore for CountingStore {
 
     async fn get(&self, key: &str) -> Result<Bytes, StoreError> {
         self.reads.fetch_add(1, Ordering::SeqCst);
+        if let Some(gate) = &self.gate {
+            gate.notified().await;
+        }
         self.files
             .lock()
             .unwrap()
@@ -311,4 +326,49 @@ async fn cache_evicts_least_recently_used_when_over_budget() {
         .unwrap();
     assert_eq!(resolved_filename(&event), "src/a.ts");
     assert_eq!(store.reads(), 3, "A was evicted and is read again");
+}
+
+#[tokio::test]
+async fn concurrent_misses_share_one_read() {
+    let (db, project_id) = setup("smcache-stampede").await;
+    let gate = Arc::new(tokio::sync::Notify::new());
+    let store = CountingStore::gated(Arc::clone(&gate));
+    let debug_id = uuid::Uuid::new_v4().to_string();
+    register_sourcemap(
+        &db.pool,
+        &store,
+        project_id,
+        &debug_id,
+        SHA_A,
+        sourcemap_with_source("src/a.ts"),
+    )
+    .await;
+    let provider = Arc::new(DbSourceMapProvider::new(db.pool.clone(), store.clone()));
+
+    let tasks: Vec<_> = (0..5)
+        .map(|_| {
+            let provider = Arc::clone(&provider);
+            let debug_id = debug_id.clone();
+            tokio::spawn(async move {
+                let mut event = event_for(&debug_id);
+                rewrite_frames(provider.as_ref(), project_id, &mut event)
+                    .await
+                    .unwrap();
+                resolved_filename(&event).to_string()
+            })
+        })
+        .collect();
+
+    // Let every task reach the store (or the wait behind the first reader).
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    gate.notify_waiters();
+    for task in tasks {
+        assert_eq!(task.await.unwrap(), "src/a.ts");
+    }
+
+    assert_eq!(
+        store.reads(),
+        1,
+        "concurrent misses must wait for the first load"
+    );
 }

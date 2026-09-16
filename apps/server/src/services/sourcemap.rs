@@ -79,6 +79,9 @@ fn parse_sourcemap(debug_id: &str, data: &[u8]) -> Option<sourcemap::DecodedMap>
 struct ParsedMapCache {
     budget: usize,
     inner: std::sync::Mutex<ParsedMapCacheInner>,
+    /// One lock per key being loaded, so concurrent misses on the same file
+    /// wait for the first read and parse instead of repeating it.
+    loading: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 #[derive(Default)]
@@ -99,7 +102,40 @@ impl ParsedMapCache {
         Self {
             budget,
             inner: std::sync::Mutex::new(ParsedMapCacheInner::default()),
+            loading: std::sync::Mutex::new(HashMap::new()),
         }
+    }
+
+    /// The map for `key`, loading it through `load` on a miss. Only one
+    /// loader runs per key at a time; the others find the result in the cache.
+    async fn get_or_load<F, Fut>(&self, key: &str, load: F) -> Option<Arc<sourcemap::DecodedMap>>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Option<(Arc<sourcemap::DecodedMap>, usize)>>,
+    {
+        if let Some(hit) = self.get(key) {
+            return Some(hit);
+        }
+        let lock = Arc::clone(
+            self.loading
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .entry(key.to_string())
+                .or_default(),
+        );
+        let _loading = lock.lock().await;
+        if let Some(hit) = self.get(key) {
+            return Some(hit);
+        }
+        let loaded = load().await;
+        if let Some((map, size)) = &loaded {
+            self.insert(key, Arc::clone(map), *size);
+        }
+        self.loading
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(key);
+        loaded.map(|(map, _)| map)
     }
 
     fn get(&self, key: &str) -> Option<Arc<sourcemap::DecodedMap>> {
@@ -299,14 +335,13 @@ impl SourceMapProvider for DbSourceMapProvider {
                 return None;
             }
         };
-        if let Some(hit) = self.cache.get(&storage_path) {
-            return Some(hit);
-        }
-        let data = self.read(&storage_path).await?;
-        let map = Arc::new(parse_sourcemap(debug_id, &data)?);
         self.cache
-            .insert(&storage_path, Arc::clone(&map), data.len());
-        Some(map)
+            .get_or_load(&storage_path, || async {
+                let data = self.read(&storage_path).await?;
+                let map = Arc::new(parse_sourcemap(debug_id, &data)?);
+                Some((map, data.len()))
+            })
+            .await
     }
 }
 
