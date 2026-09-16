@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 
 use super::report::{Report, Sink, SinkError};
 
-/// PostHog Cloud EU, single-event capture.
-pub const ENDPOINT: &str = "https://eu.i.posthog.com/i/v0/e/";
+/// PostHog Cloud US, single-event capture.
+pub const ENDPOINT: &str = "https://us.i.posthog.com/i/v0/e/";
 
 /// How the sink is named to operators, in the startup line and the preview.
 /// The vendor is an implementation detail and stays out of the docs.
