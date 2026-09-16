@@ -1,0 +1,53 @@
+---
+version: v0.15.0-rc.1
+title: Memory and Source Map Cache
+description: The server switches to mimalloc, which stops resident memory from climbing with every burst and staying there, and keeps parsed source maps across events, so a burst that took five minutes to digest takes under ten seconds
+date: 2026-09-16
+tags: [server, performance, sourcemaps]
+---
+
+> **Release candidate.** This is `rustrak/rustrak-server:next` (and
+> `:v0.15.0-rc.1`, `:next-postgres`), `@rustrak/client@next` and
+> `@rustrak/mcp@next`. `latest` stays on 0.14 until 0.15 ships. It carries no
+> schema change, so moving to it and back touches no data.
+
+## Memory that comes back down
+
+The server now uses mimalloc as its global allocator. glibc keeps one malloc
+arena per thread and never returns an arena once its thread exits; the
+blocking pool creates and retires threads on every burst, so resident memory
+climbed to the arena limit and stayed there. In production that was 700 MB at
+one event per second, and 2 GB under a source-map-heavy burst. The same load
+now peaks around 520 MB and returns to 150 MB when idle.
+
+## Source maps parsed once
+
+Each frame used to fetch and parse its whole source map again, so five frames
+over one 17 MB map meant 85 MB read and parsed per event, and the digest fell
+to four or five events per second under a burst.
+
+- A source map is read and parsed once per event, shared by every frame under
+  `exception` and `threads`
+- The parsed form is kept across events in a cache bounded by
+  `SOURCEMAP_CACHE_MB` (default 64), evicting the least recently used map
+  first. It is keyed by file content, so a re-upload under the same `debug_id`
+  never serves a stale parse, and the `debug_id` lookup still runs per event,
+  so a deleted map stops resolving at once
+- Concurrent misses on the same map wait for the first load instead of
+  repeating it
+- A map larger than the whole budget is parsed every time and logs a warning
+  naming the variable to raise
+
+The same burst that took about five minutes to digest now takes under ten
+seconds, with resident memory under 100 MB.
+
+## Improvements
+
+- `docker-publish.yml` can be re-run for an existing tag through
+  `workflow_dispatch`. Every job checks out the tag and the npm step skips a
+  version the registry already has, so a half-published release gets past the
+  half that worked without cutting a new version
+- The server image builds the dashboard through turbo so `@rustrak/client` is
+  compiled first
+- A prerelease no longer deploys the docs site; the site follows the stable
+  line
