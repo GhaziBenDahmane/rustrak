@@ -38,6 +38,7 @@ pub struct PreviewReport {
     tag = "Telemetry",
     responses(
         (status = 200, description = "What the next heartbeat would carry", body = TelemetryPreview),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
