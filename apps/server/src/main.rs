@@ -21,6 +21,9 @@ use rustrak::openapi;
 #[cfg(feature = "openapi")]
 use utoipa::OpenApi;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Load .env file if present
