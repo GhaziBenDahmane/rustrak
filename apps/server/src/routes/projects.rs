@@ -268,6 +268,7 @@ mod tests {
             },
             ingest_dir: None,
             sourcemap_storage_path: "/tmp/test_sourcemaps".to_string(),
+            sourcemap_cache_bytes: 64 * 1024 * 1024,
             max_chunk_size_bytes: 10 * 1024 * 1024,
             session_flush_interval_secs: 30,
             session_cardinality_cap: 10_000,

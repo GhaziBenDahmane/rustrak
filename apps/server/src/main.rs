@@ -99,10 +99,10 @@ async fn main() -> std::io::Result<()> {
     // Create source map store and provider
     let sourcemap_store: Arc<dyn rustrak::services::sourcemap_store::SourceMapStore> =
         Arc::new(LocalSourceMapStore::new(&config.sourcemap_storage_path));
-    let sourcemap_provider: Arc<dyn SourceMapProvider> = Arc::new(DbSourceMapProvider::new(
-        db_pool.clone(),
-        Arc::clone(&sourcemap_store),
-    ));
+    let sourcemap_provider: Arc<dyn SourceMapProvider> = Arc::new(
+        DbSourceMapProvider::new(db_pool.clone(), Arc::clone(&sourcemap_store))
+            .with_cache_budget(config.sourcemap_cache_bytes),
+    );
 
     // Spawn assembly worker
     {

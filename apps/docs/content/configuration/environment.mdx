@@ -144,6 +144,7 @@ Use an IANA zone name (e.g. `Asia/Shanghai`, `America/New_York`, `Europe/Madrid`
 |----------|---------|-------------|
 | `INGEST_DIR` | `/tmp/rustrak/ingest` | Temporary event storage |
 | `SOURCEMAP_STORAGE_PATH` | `/data/sourcemaps` | Directory for source map chunk storage |
+| `SOURCEMAP_CACHE_MB` | `64` | Memory kept for parsed source maps across events |
 
 ### SOURCEMAP_STORAGE_PATH
 
@@ -156,6 +157,16 @@ SOURCEMAP_STORAGE_PATH=/var/lib/rustrak/sourcemaps
 **Storage sizing:** Each source map chunk is typically around 2MB. Multiply by the number of distinct source files across all your deployments. A typical JavaScript app with 50 source files uses around 100MB.
 
 **Production / multi-server deployments:** All server instances must read and write from the same `SOURCEMAP_STORAGE_PATH`. Mount a shared volume (NFS, EFS, a network filesystem) and point every instance at it. Without this, chunks uploaded to one instance won't be visible to others during bundle assembly.
+
+### SOURCEMAP_CACHE_MB
+
+Once a source map has been read and parsed for one event, Rustrak keeps the parsed form in memory so the next event that hits the same file skips both steps. This budget caps that memory, measured as the size of the source map files it holds, and the least recently used map is dropped first. A map larger than the whole budget is never kept.
+
+```bash
+SOURCEMAP_CACHE_MB=64
+```
+
+The cache only saves the file read and the parse. Which file a `debug_id` points to is looked up in the database on every event, so a deleted or re-uploaded source map takes effect immediately. Size it to hold the maps your errors actually hit: a handful of large Next.js server bundles is usually enough, and the default covers a 15 MB map four times over.
 
 ## Email Alerts (SMTP)
 
