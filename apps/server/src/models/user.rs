@@ -78,6 +78,16 @@ pub struct LoginRequest {
 }
 
 impl User {
+    /// Canonical form for storage and lookup: trimmed and lowercased.
+    ///
+    /// Email delivery is case-insensitive in practice, so `User@X.com` and
+    /// `user@x.com` must refer to the same account. Normalizing on write
+    /// prevents case-variant duplicates; lookups use `LOWER(email)` as well
+    /// so rows written before this normalization still match.
+    pub fn normalize_email(email: &str) -> String {
+        email.trim().to_lowercase()
+    }
+
     /// Hash a password using Argon2id
     pub fn hash_password(password: &str) -> Result<String, AppError> {
         let hash = Argon2::default()
@@ -123,6 +133,18 @@ mod tests {
     fn unknown_role_falls_back_to_member() {
         assert_eq!(UserRole::from_db("superuser"), UserRole::Member);
         assert_eq!(UserRole::from_db(""), UserRole::Member);
+    }
+
+    #[test]
+    fn email_normalizes_to_trimmed_lowercase() {
+        assert_eq!(
+            User::normalize_email("User@Example.com"),
+            "user@example.com"
+        );
+        assert_eq!(
+            User::normalize_email("  USER@EXAMPLE.COM  "),
+            "user@example.com"
+        );
     }
 
     fn user_with_hash(password_hash: &str) -> User {

@@ -19,6 +19,7 @@ impl UsersService {
         E: sqlx::Executor<'e, Database = crate::db::Db>,
     {
         let password_hash = User::hash_password(&req.password)?;
+        let email = User::normalize_email(&req.email);
 
         let user = sqlx::query_as::<_, User>(
             r#"
@@ -27,7 +28,7 @@ impl UsersService {
             RETURNING id, email, password_hash, is_active, role, created_at, last_login, language, timezone
             "#,
         )
-        .bind(&req.email)
+        .bind(&email)
         .bind(&password_hash)
         .bind(role.as_str())
         .fetch_one(executor)
@@ -42,13 +43,14 @@ impl UsersService {
         Ok(user)
     }
 
-    /// Gets a user by email
+    /// Gets a user by email (case-insensitive: `LOWER(email)` matches rows
+    /// written before address normalization as well as normalized ones).
     pub async fn get_by_email(pool: &DbPool, email: &str) -> AppResult<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT id, email, password_hash, is_active, role, created_at, last_login, language, timezone
             FROM users
-            WHERE email = $1
+            WHERE LOWER(email) = LOWER($1)
             "#,
         )
         .bind(email)

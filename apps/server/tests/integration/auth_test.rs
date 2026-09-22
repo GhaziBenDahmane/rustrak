@@ -784,12 +784,19 @@ async fn test_register_with_very_long_email() {
 }
 
 #[actix_web::test]
-async fn test_login_case_sensitive_email() {
+async fn test_login_case_insensitive_email() {
     let db = TestDb::new().await;
     let config = create_test_config();
     let session_key = Key::from(&[0u8; 64]);
 
     create_test_user(&db.pool, "CaseSensitive@example.com", "password123", false).await;
+
+    // Stored addresses are normalized to lowercase.
+    let stored = UsersService::get_by_email(&db.pool, "casesensitive@example.com")
+        .await
+        .unwrap()
+        .expect("user exists");
+    assert_eq!(stored.email, "casesensitive@example.com");
 
     let app = test::init_service(
         App::new()
@@ -804,19 +811,25 @@ async fn test_login_case_sensitive_email() {
     )
     .await;
 
-    // Try login with different case
-    let req = test::TestRequest::post()
-        .uri("/auth/login")
-        .insert_header(("Content-Type", "application/json"))
-        .set_json(json!({
-            "email": "casesensitive@example.com",
-            "password": "password123"
-        }))
-        .to_request();
+    // Login works with any casing of the same address
+    for email in [
+        "casesensitive@example.com",
+        "CaseSensitive@example.com",
+        "CASESENSITIVE@EXAMPLE.COM",
+        "  CaseSensitive@Example.com  ",
+    ] {
+        let req = test::TestRequest::post()
+            .uri("/auth/login")
+            .insert_header(("Content-Type", "application/json"))
+            .set_json(json!({
+                "email": email,
+                "password": "password123"
+            }))
+            .to_request();
 
-    let resp = test::call_service(&app, req).await;
-    // Email lookup is case-sensitive in PostgreSQL
-    assert_eq!(resp.status(), 401);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 200, "login with {email:?} should succeed");
+    }
 }
 
 #[actix_web::test]
