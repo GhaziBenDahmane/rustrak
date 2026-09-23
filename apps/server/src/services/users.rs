@@ -43,14 +43,17 @@ impl UsersService {
         Ok(user)
     }
 
-    /// Gets a user by email (case-insensitive: `LOWER(email)` matches rows
-    /// written before address normalization as well as normalized ones).
+    /// Gets a user by email, case-insensitively. Rows written before
+    /// normalization may differ only in casing; an exact match wins, then
+    /// the oldest account.
     pub async fn get_by_email(pool: &DbPool, email: &str) -> AppResult<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT id, email, password_hash, is_active, role, created_at, last_login, language, timezone
             FROM users
             WHERE LOWER(email) = LOWER($1)
+            ORDER BY (email = $1) DESC, id ASC
+            LIMIT 1
             "#,
         )
         .bind(email)

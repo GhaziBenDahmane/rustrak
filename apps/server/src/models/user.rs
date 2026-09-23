@@ -78,14 +78,12 @@ pub struct LoginRequest {
 }
 
 impl User {
-    /// Canonical form for storage and lookup: trimmed and lowercased.
+    /// Canonical form for storage: trimmed, ASCII letters lowercased.
     ///
-    /// Email delivery is case-insensitive in practice, so `User@X.com` and
-    /// `user@x.com` must refer to the same account. Normalizing on write
-    /// prevents case-variant duplicates; lookups use `LOWER(email)` as well
-    /// so rows written before this normalization still match.
+    /// ASCII-only so it agrees with SQLite's `LOWER()`, which the lookup in
+    /// `UsersService::get_by_email` relies on.
     pub fn normalize_email(email: &str) -> String {
-        email.trim().to_lowercase()
+        email.trim().to_ascii_lowercase()
     }
 
     /// Hash a password using Argon2id
@@ -144,6 +142,15 @@ mod tests {
         assert_eq!(
             User::normalize_email("  USER@EXAMPLE.COM  "),
             "user@example.com"
+        );
+    }
+
+    #[test]
+    fn email_normalization_folds_ascii_only() {
+        // Matches SQLite's LOWER(), which leaves non-ASCII letters untouched.
+        assert_eq!(
+            User::normalize_email("Üser@Example.com"),
+            "Üser@example.com"
         );
     }
 
