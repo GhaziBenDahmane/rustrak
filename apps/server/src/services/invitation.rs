@@ -126,6 +126,17 @@ impl InvitationService {
             return Err(AppError::Validation("Password is required".to_string()));
         }
 
+        // An invitation from before email normalization can name a case
+        // variant of an existing account.
+        if UsersService::get_by_email(pool, &invitation.email)
+            .await?
+            .is_some()
+        {
+            return Err(AppError::Conflict(
+                "A user with that email already exists".to_string(),
+            ));
+        }
+
         let role = UserRole::from_db(&invitation.role);
         let req = CreateUserRequest {
             email: invitation.email.clone(),

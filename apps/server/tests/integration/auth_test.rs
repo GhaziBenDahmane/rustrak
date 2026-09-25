@@ -906,6 +906,39 @@ async fn test_login_legacy_case_variant_accounts_stay_reachable() {
     );
 }
 
+/// An invitation created before emails were normalized can name a case
+/// variant of an account that already exists. Accepting it must not create a
+/// second account that `get_by_email` then treats as the same person.
+#[actix_web::test]
+async fn test_accepting_an_invitation_for_an_existing_case_variant_is_refused() {
+    let db = TestDb::new().await;
+    insert_legacy_user(&db.pool, "Bob@Example.com", "password123").await;
+    sqlx::query(
+        "INSERT INTO invitations (token, email, role, status, expires_at) VALUES ($1, $2, 'member', 'pending', $3)",
+    )
+    .bind("legacy-invite")
+    .bind("bob@example.com")
+    .bind(chrono::Utc::now() + chrono::Duration::days(1))
+    .execute(&db.pool)
+    .await
+    .expect("Failed to insert legacy invitation");
+
+    let result =
+        rustrak::services::InvitationService::accept(&db.pool, "legacy-invite", "new-pass").await;
+
+    assert!(
+        matches!(result, Err(rustrak::error::AppError::Conflict(_))),
+        "expected a conflict, got {:?}",
+        result.map(|user| user.email)
+    );
+    let accounts: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE LOWER(email) = 'bob@example.com'")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(accounts, 1);
+}
+
 // Postgres' email_format constraint rejects non-ASCII addresses.
 #[cfg(feature = "sqlite")]
 #[actix_web::test]
