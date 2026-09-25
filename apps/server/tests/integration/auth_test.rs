@@ -1432,6 +1432,71 @@ async fn test_oidc_unverified_email_provisions_new_account_when_no_existing_acco
 }
 
 #[actix_web::test]
+async fn test_oidc_links_exact_case_variant_when_multiple_legacy_accounts_exist() {
+    let db = TestDb::new().await;
+    let lower_password = format!("pass-{}", uuid::Uuid::new_v4());
+    let upper_password = format!("pass-{}", uuid::Uuid::new_v4());
+    insert_legacy_user(&db.pool, "user@example.com", &lower_password).await;
+    insert_legacy_user(&db.pool, "User@Example.com", &upper_password).await;
+
+    // SSO login with exact casing links to the upper-case account, not the lower-case one.
+    let linked_upper = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "upper-subject",
+        "User@Example.com",
+        true,
+        true,
+    )
+    .await
+    .expect("exact casing should link to the matching legacy account");
+
+    assert_eq!(linked_upper.email, "User@Example.com");
+    assert!(linked_upper.verify_password(&upper_password).unwrap());
+
+    // SSO login with lower casing links to the lower-case account.
+    let linked_lower = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "lower-subject",
+        "user@example.com",
+        true,
+        true,
+    )
+    .await
+    .expect("exact casing should link to the matching legacy account");
+
+    assert_eq!(linked_lower.email, "user@example.com");
+    assert!(linked_lower.verify_password(&lower_password).unwrap());
+    assert_ne!(linked_upper.id, linked_lower.id);
+}
+
+#[actix_web::test]
+async fn test_oidc_refuses_ambiguous_linking_when_multiple_legacy_accounts_exist() {
+    let db = TestDb::new().await;
+    let lower_password = format!("pass-{}", uuid::Uuid::new_v4());
+    let upper_password = format!("pass-{}", uuid::Uuid::new_v4());
+    insert_legacy_user(&db.pool, "user@example.com", &lower_password).await;
+    insert_legacy_user(&db.pool, "User@Example.com", &upper_password).await;
+
+    // A casing that matches neither exact account cannot link to either.
+    let result = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "ambiguous-subject",
+        "USER@EXAMPLE.COM",
+        true,
+        true,
+    )
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(rustrak::error::AppError::Forbidden(_))
+    ));
+}
+
+#[actix_web::test]
 async fn test_oidc_auto_provision_can_be_disabled() {
     let db = TestDb::new().await;
     let result = UsersService::find_or_provision_oidc(

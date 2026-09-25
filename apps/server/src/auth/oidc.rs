@@ -195,7 +195,7 @@ impl OidcService {
 
         let email = claims
             .email()
-            .map(|value| value.as_str().trim().to_ascii_lowercase())
+            .map(|value| value.as_str().trim().to_string())
             .filter(|value| !value.is_empty())
             .ok_or_else(|| {
                 AppError::Forbidden("SSO provider did not supply an email address".to_string())
@@ -210,12 +210,14 @@ impl OidcService {
         }
 
         if !self.config.allowed_domains.is_empty() {
-            let domain = email.rsplit_once('@').map(|(_, domain)| domain);
+            let domain = email
+                .rsplit_once('@')
+                .map(|(_, domain)| domain.to_ascii_lowercase());
             if !domain.is_some_and(|domain| {
                 self.config
                     .allowed_domains
                     .iter()
-                    .any(|allowed| allowed == domain)
+                    .any(|allowed| allowed == &domain)
             }) {
                 return Err(AppError::Forbidden(
                     "Email domain is not allowed to use SSO".to_string(),

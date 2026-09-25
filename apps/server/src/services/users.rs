@@ -105,6 +105,7 @@ impl UsersService {
             ));
         }
 
+        let raw_email = email.trim();
         let normalized_email = User::normalize_email(email);
 
         // A provisioned account is OIDC-only: this password exists because the
@@ -129,20 +130,38 @@ impl UsersService {
             .execute(&mut *tx)
             .await?;
 
-        let mut user = sqlx::query_as::<_, User>(
+        let candidates = sqlx::query_as::<_, User>(
             r#"
             SELECT id, email, password_hash, is_active, role, created_at, last_login, language, timezone
             FROM users
             WHERE LOWER(email) = LOWER($1)
-            ORDER BY (email = $1) DESC, id ASC
-            LIMIT 1
+            ORDER BY (email = $2) DESC, id ASC
             "#,
         )
         .bind(&normalized_email)
-        .fetch_optional(&mut *tx)
+        .bind(raw_email)
+        .fetch_all(&mut *tx)
         .await?;
 
-        if let Some(existing) = &user {
+        let user = match candidates.len() {
+            0 => None,
+            1 => Some(candidates.into_iter().next().unwrap()),
+            _ => {
+                // Legacy rows written before normalization may differ only in casing.
+                // When multiple accounts match, require an exact case match with the
+                // provider email to prevent linking the identity to the wrong account.
+                if candidates[0].email == raw_email {
+                    Some(candidates.into_iter().next().unwrap())
+                } else {
+                    return Err(AppError::Forbidden(
+                        "Multiple legacy accounts match this email address; exact case match required to link SSO identity"
+                            .to_string(),
+                    ));
+                }
+            }
+        };
+
+        let user = if let Some(existing) = user {
             if !existing.is_active {
                 return Err(AppError::Unauthorized("Account is disabled".to_string()));
             }
@@ -151,6 +170,7 @@ impl UsersService {
                     "Cannot link an unverified SSO email to an existing account".to_string(),
                 ));
             }
+            existing
         } else {
             let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
                 .fetch_one(&mut *tx)
@@ -160,20 +180,10 @@ impl UsersService {
             } else {
                 UserRole::Member
             };
-            user = Some(
-                Self::create_user_with_password_hash(
-                    &mut *tx,
-                    &normalized_email,
-                    &password_hash,
-                    role,
-                )
-                .await?,
-            );
-        }
+            Self::create_user_with_password_hash(&mut *tx, &normalized_email, &password_hash, role)
+                .await?
+        };
 
-        let user = user.ok_or_else(|| {
-            AppError::Internal("Failed to resolve or create SSO account".to_string())
-        })?;
         let inserted = sqlx::query(
             r#"
             INSERT INTO oidc_identities (user_id, issuer, subject, email_at_link)
@@ -184,7 +194,7 @@ impl UsersService {
         .bind(user.id)
         .bind(issuer)
         .bind(subject)
-        .bind(&normalized_email)
+        .bind(raw_email)
         .execute(&mut *tx)
         .await?;
 
