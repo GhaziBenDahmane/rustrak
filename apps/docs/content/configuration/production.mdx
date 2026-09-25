@@ -76,7 +76,7 @@ services:
   server:
     image: rustrak/rustrak-server:latest
     environment:
-      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:?generate one with openssl rand -hex 32}
       - SSL_PROXY=true
       - PUBLIC_URL=https://rustrak.example.com
     volumes:
@@ -254,12 +254,25 @@ docker run --rm -v rustrak_data:/data -v "$PWD":/backup alpine \
 docker start rustrak
 ```
 
-To back up the database while the server runs, use SQLite's online backup
-rather than `cp`, which can capture a write half done:
+With Docker Compose, the service is `server` and Compose prefixes the volume
+with the project name (`docker volume ls` shows it, usually
+`<directory>_rustrak_data`):
 
 ```bash
-docker run --rm -v rustrak_data:/data alpine sh -c \
-  'apk add -q sqlite && sqlite3 /data/rustrak.db ".backup /data/rustrak-backup.db"'
+docker compose stop server
+docker run --rm -v <directory>_rustrak_data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/rustrak-$(date +%Y%m%d).tgz -C /data .
+docker compose start server
+```
+
+To back up only the database while the server runs, use SQLite's online
+backup rather than `cp`, which can capture a write half done. It writes the
+copy to the current directory, off the volume, and does not include source
+maps:
+
+```bash
+docker run --rm -v rustrak_data:/data -v "$PWD":/backup alpine sh -c \
+  'apk add -q sqlite && sqlite3 /data/rustrak.db ".backup /backup/rustrak-$(date +%Y%m%d).db"'
 ```
 
 **Source maps with PostgreSQL** live in the server's `/data` volume, not in the

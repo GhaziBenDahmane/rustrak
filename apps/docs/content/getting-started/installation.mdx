@@ -45,7 +45,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:?generate one with openssl rand -hex 32}
       - CREATE_SUPERUSER=${CREATE_SUPERUSER}
       - PUBLIC_URL=${PUBLIC_URL:-http://localhost:8080}
     volumes:
@@ -56,20 +56,20 @@ volumes:
   rustrak_data:
 ```
 
-With a `.env` next to it:
+Create a `.env` next to it and start it:
 
 ```bash
-# openssl rand -hex 32. The server refuses to start without a valid one.
-SESSION_SECRET_KEY=
-# email:password. Only used when no user exists yet.
+cat > .env <<EOF
+SESSION_SECRET_KEY=$(openssl rand -hex 32)
 CREATE_SUPERUSER=admin@example.com:changeme123
-# The address SDKs reach, e.g. https://rustrak.example.com
 PUBLIC_URL=http://localhost:8080
-```
-
-```bash
+EOF
 docker compose up -d
 ```
+
+`CREATE_SUPERUSER` is `email:password` and is only used while no user exists.
+`PUBLIC_URL` is the address SDKs reach, e.g. `https://rustrak.example.com`.
+Compose refuses to start without `SESSION_SECRET_KEY`.
 
 > **Reverse proxy?** Behind Traefik, nginx or Caddy, delete the `ports` block
 > and let the proxy reach the container on `8080`. Set `PUBLIC_URL` to your
@@ -86,7 +86,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: rustrak
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?generate one with openssl rand -hex 16}
       POSTGRES_DB: rustrak
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -103,7 +103,7 @@ services:
       - "8080:8080"
     environment:
       - DATABASE_URL=postgres://rustrak:${POSTGRES_PASSWORD}@postgres:5432/rustrak
-      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:?generate one with openssl rand -hex 32}
       - CREATE_SUPERUSER=${CREATE_SUPERUSER}
       - PUBLIC_URL=${PUBLIC_URL:-http://localhost:8080}
     volumes:
@@ -119,8 +119,13 @@ volumes:
   rustrak_data:
 ```
 
-Add `POSTGRES_PASSWORD` to the `.env` above and run
-`docker compose -f docker-compose.postgres.yml up -d`. To use a database you
+Add a database password to the `.env` above and start it:
+
+```bash
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" >> .env
+docker compose -f docker-compose.postgres.yml up -d
+```
+ To use a database you
 already run, drop the `postgres` service and point `DATABASE_URL` at it. See
 [Database backends](/configuration/database).
 

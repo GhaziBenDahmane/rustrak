@@ -53,11 +53,16 @@ Yes. Build from source, from the repository root:
 ```bash
 pnpm install
 pnpm build --filter=@rustrak/server   # builds the dashboard, then the server
-cd apps/server && ./target/release/rustrak
+cd apps/server
+DATABASE_URL=sqlite://./rustrak.db \
+  SOURCEMAP_STORAGE_PATH=./data/sourcemaps \
+  ./target/release/rustrak
 ```
 
-This build uses SQLite, stored at `DATABASE_URL` (default
-`sqlite:///data/rustrak.db`). For PostgreSQL, build with
+This build uses SQLite. Without `DATABASE_URL` the database goes to
+`/data/rustrak.db`, the path the Docker image uses, which a machine without a
+writable `/data` cannot create; set it, and `SOURCEMAP_STORAGE_PATH`, to a
+local path as above. For PostgreSQL, build with
 `cargo build --release --no-default-features --features postgres`. A plain
 `cargo build` works too, without Node, and gives a server with no dashboard.
 

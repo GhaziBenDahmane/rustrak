@@ -22,8 +22,9 @@ pnpm install
 ### Start development
 
 ```bash
-# Run the server on :8080, with SQLite
-cd apps/server && cargo run
+# Run the server on :8080, with SQLite. The .env keeps the database and
+# source maps inside the checkout instead of /data.
+cd apps/server && cp .env.example .env && cargo run
 
 # Run the dashboard on :3000, proxying the API to :8080 (separate terminal)
 cd apps/dashboard && pnpm dev
