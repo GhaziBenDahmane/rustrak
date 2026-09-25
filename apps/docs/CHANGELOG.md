@@ -1,5 +1,11 @@
 # docs
 
+## 0.15.10-rc.3
+
+### Patch Changes
+
+- [#341](https://github.com/rustrak/rustrak/pull/341) [`6ed27b3`](https://github.com/rustrak/rustrak/commit/6ed27b3cdba2ea4f2760e972b09b0e56337c70e2) Thanks [@AbianS](https://github.com/AbianS)! - An Upgrading section: an overview of how versions work, what to do before any upgrade and how to go back, and an "Upgrade to 0.15" guide covering each change that needs a step, the backup and restore commands for SQLite and PostgreSQL, how to check the upgrade worked and how to return to 0.14. The "Try 0.15" page and the release candidate banner go, and Telemetry drops its release candidate label. `DASHBOARD_URL` is documented as following `PUBLIC_URL` by default.
+
 ## 0.15.10-rc.2
 
 ### Patch Changes
