@@ -69,6 +69,19 @@ On the same host it only adds a container, so remove it unless you want the
 dashboard on a different host from your data
 ([Dashboard on its own host](/configuration/production#dashboard-on-its-own-host)).
 
+### Source maps are kept in the data volume
+
+**What changed.** Uploaded source maps are stored in `/data/sourcemaps`, inside
+the `/data` volume, so they persist with the rest of the data and nothing needs
+to be set. In 0.14, a server started with only `-v rustrak_data:/data` kept
+them in a separate unnamed volume that a new container did not reuse.
+
+**What to do.** Nothing, if you mount a volume at `/data/sourcemaps` or set
+[`SOURCEMAP_STORAGE_PATH`](/usage/source-maps#storage) to a mounted path, as
+the Compose file does. If you ran the server with only
+`-v rustrak_data:/data`, source maps uploaded before the upgrade are not
+carried over: upload them again, or your next deploy will.
+
 ### The dashboard is reachable wherever the server is
 
 **What changed.** Any address that reaches the server now also shows the
@@ -227,6 +240,8 @@ docker run --rm -v rustrak_data:/data -v "$PWD":/backup alpine \
 ```bash
 docker compose stop server
 docker compose exec -T postgres pg_restore -U rustrak -d rustrak --clean --if-exists < rustrak-0.14.dump
+docker run --rm -v <project>_sourcemap_data:/data -v "$PWD":/backup alpine \
+  sh -c 'rm -rf /data/* && tar xzf /backup/rustrak-sourcemaps-0.14.tgz -C /data'
 ```
 
 Restoring discards everything received after the backup. If you would rather
