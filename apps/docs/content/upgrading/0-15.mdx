@@ -80,7 +80,8 @@ them in a separate unnamed volume that a new container did not reuse.
 [`SOURCEMAP_STORAGE_PATH`](/usage/source-maps#storage) to a mounted path, as
 the Compose file does. If you ran the server with only
 `-v rustrak_data:/data`, source maps uploaded before the upgrade are not
-carried over: upload them again, or your next deploy will.
+carried over. Upload them again for the releases you still need symbolicated;
+your application's next deploy uploads the maps for its new release.
 
 ### The dashboard is reachable wherever the server is
 

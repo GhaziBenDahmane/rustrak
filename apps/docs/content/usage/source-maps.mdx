@@ -210,6 +210,9 @@ services:
       - sourcemap_data:/data/sourcemaps
     environment:
       - SOURCEMAP_STORAGE_PATH=/data/sourcemaps
+
+volumes:
+  sourcemap_data:
 ```
 
 The directory must be writable by the Rustrak process.
