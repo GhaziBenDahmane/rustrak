@@ -1320,3 +1320,133 @@ async fn test_patch_me_unauthenticated_is_rejected() {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401);
 }
+
+// =============================================================================
+// OpenID Connect provisioning tests
+// =============================================================================
+
+#[actix_web::test]
+async fn test_oidc_first_login_provisions_admin_and_reuses_subject() {
+    let db = TestDb::new().await;
+
+    let first = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "pocket-id-subject",
+        "Owner@Example.com",
+        true,
+        true,
+    )
+    .await
+    .expect("first OIDC login should provision a user");
+
+    assert_eq!(first.email, "owner@example.com");
+    assert!(
+        first.is_admin(),
+        "the first account must bootstrap as admin"
+    );
+    let probe = uuid::Uuid::new_v4().to_string();
+    assert!(
+        !first
+            .verify_password(&probe)
+            .expect("the account must carry a well-formed hash for the NOT NULL column"),
+        "an OIDC-provisioned account must not accept a password"
+    );
+
+    let returning = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "pocket-id-subject",
+        "new-address@example.com",
+        true,
+        true,
+    )
+    .await
+    .expect("returning OIDC login should resolve its linked account");
+
+    assert_eq!(returning.id, first.id);
+    assert_eq!(UsersService::user_count(&db.pool).await.unwrap(), 1);
+}
+
+#[actix_web::test]
+async fn test_oidc_links_existing_verified_email_account() {
+    let db = TestDb::new().await;
+    let existing_password = format!("pass-{}", uuid::Uuid::new_v4());
+    let existing =
+        create_test_user(&db.pool, "existing@example.com", &existing_password, true).await;
+
+    let linked = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "existing-subject",
+        "EXISTING@example.com",
+        true,
+        true,
+    )
+    .await
+    .expect("verified email should link to the existing account");
+
+    assert_eq!(linked.id, existing.id);
+    assert!(linked.verify_password(&existing_password).unwrap());
+    assert_eq!(UsersService::user_count(&db.pool).await.unwrap(), 1);
+}
+
+#[actix_web::test]
+async fn test_oidc_rejects_linking_existing_account_with_unverified_email() {
+    let db = TestDb::new().await;
+    let existing_password = format!("pass-{}", uuid::Uuid::new_v4());
+    let _existing =
+        create_test_user(&db.pool, "victim@example.com", &existing_password, true).await;
+
+    let result = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "attacker-subject",
+        "victim@example.com",
+        false,
+        true,
+    )
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(rustrak::error::AppError::Forbidden(_))
+    ));
+}
+
+#[actix_web::test]
+async fn test_oidc_unverified_email_provisions_new_account_when_no_existing_account() {
+    let db = TestDb::new().await;
+    let user = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "new-subject",
+        "brandnew@example.com",
+        false,
+        true,
+    )
+    .await
+    .expect("new account can be provisioned even if email is unverified");
+
+    assert_eq!(user.email, "brandnew@example.com");
+}
+
+#[actix_web::test]
+async fn test_oidc_auto_provision_can_be_disabled() {
+    let db = TestDb::new().await;
+    let result = UsersService::find_or_provision_oidc(
+        &db.pool,
+        "https://id.example.com",
+        "unknown-subject",
+        "unknown@example.com",
+        true,
+        false,
+    )
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(rustrak::error::AppError::Forbidden(_))
+    ));
+    assert_eq!(UsersService::user_count(&db.pool).await.unwrap(), 0);
+}
