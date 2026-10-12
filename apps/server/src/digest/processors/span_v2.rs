@@ -1,10 +1,10 @@
-use super::{Processor, ProcessorCtx};
+use super::span::{insert_span_rows, SpanRow};
+use super::{clamp, clamp_opt, epoch_to_utc, Processor, ProcessorCtx};
 use crate::error::AppResult;
 use crate::models::span_v2::{parse_span_v2_container, SpanV2Entry};
 use crate::services::gen_ai::extract_gen_ai_columns;
 use bytes::Bytes;
-use chrono::{DateTime, TimeZone, Utc};
-use uuid::Uuid;
+use chrono::{DateTime, Utc};
 
 pub struct SpanV2Processor;
 
@@ -21,8 +21,7 @@ impl Processor for SpanV2Processor {
     async fn process(&self, work: Bytes, ctx: &ProcessorCtx) -> AppResult<()> {
         let entries = parse_span_v2_container(&work)?;
 
-        let mut tx = ctx.pool.begin().await?;
-
+        let mut rows = Vec::with_capacity(entries.len());
         for entry in entries {
             // Mirrors the legacy SpanProcessor's validation (Relay's
             // DiscardReason::InvalidSpan/Timestamp) — skip only this entry,
@@ -70,80 +69,39 @@ impl Processor for SpanV2Processor {
             // What the legacy schema kept as top-level span fields, v2 carries
             // as `sentry.*` attributes — read after gen_ai normalization so the
             // columns agree with the stored `data` bag.
-            let segment_id = entry.segment_id(&flat);
+            // Each cut to its VARCHAR column, which Postgres enforces.
+            let segment_id = clamp_opt(entry.segment_id(&flat), 32);
             let exclusive_time_ms = SpanV2Entry::exclusive_time_ms(&flat);
-            let platform = SpanV2Entry::platform(&flat);
-            let release = SpanV2Entry::release(&flat);
-            let environment = SpanV2Entry::environment(&flat);
+            let platform = clamp_opt(SpanV2Entry::platform(&flat), 64);
+            let release = clamp_opt(SpanV2Entry::release(&flat), 200);
+            let environment = clamp_opt(SpanV2Entry::environment(&flat), 64);
 
-            sqlx::query(
-                r#"
-                INSERT INTO spans (
-                    id, transaction_id, project_id,
-                    span_id, trace_id, parent_span_id,
-                    op, description, status,
-                    start_timestamp, timestamp, duration_ms, exclusive_time_ms,
-                    is_segment, segment_id,
-                    platform, release, environment,
-                    tags, data,
-                    gen_ai_operation_type, gen_ai_agent_name,
-                    gen_ai_request_model, gen_ai_response_model,
-                    gen_ai_tool_name, gen_ai_conversation_id,
-                    gen_ai_usage_input_tokens, gen_ai_usage_output_tokens, gen_ai_usage_total_tokens,
-                    gen_ai_usage_cached_input_tokens, gen_ai_usage_reasoning_output_tokens
-                ) VALUES (
-                    $1, NULL, $2,
-                    $3, $4, $5,
-                    $6, $7, $8,
-                    $9, $10, $11, $12,
-                    $13, $14,
-                    $15, $16, $17,
-                    $18, $19,
-                    $20, $21,
-                    $22, $23,
-                    $24, $25,
-                    $26, $27, $28, $29, $30
-                )
-                ON CONFLICT (project_id, trace_id, span_id)
-                    WHERE transaction_id IS NULL
-                      AND trace_id IS NOT NULL
-                      AND span_id IS NOT NULL DO NOTHING
-                "#,
-            )
-            .bind(Uuid::new_v4())
-            .bind(ctx.project_id)
-            .bind(&entry.span_id)
-            .bind(&entry.trace_id)
-            .bind(entry.parent_span_id.clone())
-            .bind(op)
-            .bind(entry.name.clone())
-            .bind(entry.status.clone())
-            .bind(start_timestamp)
-            .bind(timestamp)
-            .bind(duration_ms)
-            .bind(exclusive_time_ms)
-            .bind(entry.is_segment)
-            .bind(segment_id)
-            .bind(platform)
-            .bind(release)
-            .bind(environment)
-            .bind(None::<serde_json::Value>) // tags — v2 has no separate tags concept, everything lives in attributes
-            .bind(serde_json::json!(flat))
-            .bind(gen_ai.operation_type)
-            .bind(gen_ai.agent_name)
-            .bind(gen_ai.request_model)
-            .bind(gen_ai.response_model)
-            .bind(gen_ai.tool_name)
-            .bind(gen_ai.conversation_id)
-            .bind(gen_ai.usage_input_tokens)
-            .bind(gen_ai.usage_output_tokens)
-            .bind(gen_ai.usage_total_tokens)
-            .bind(gen_ai.usage_cached_input_tokens)
-            .bind(gen_ai.usage_reasoning_output_tokens)
-            .execute(&mut *tx)
-            .await?;
+            rows.push(SpanRow {
+                transaction_id: None,
+                span_id: Some(clamp(&entry.span_id, 32)),
+                trace_id: Some(clamp(&entry.trace_id, 64)),
+                start_timestamp: Some(start_timestamp),
+                timestamp: Some(timestamp),
+                duration_ms,
+                exclusive_time_ms,
+                op: clamp_opt(op, 128),
+                gen_ai,
+                parent_span_id: clamp_opt(entry.parent_span_id, 32),
+                description: entry.name,
+                status: clamp_opt(entry.status, 32),
+                segment_id,
+                is_segment: entry.is_segment,
+                platform,
+                release,
+                environment,
+                // v2 has no separate tags concept, everything lives in attributes.
+                tags: None,
+                data: serde_json::json!(flat),
+            });
         }
 
+        let mut tx = ctx.pool.begin().await?;
+        insert_span_rows(&mut tx, ctx.project_id, rows).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -157,7 +115,5 @@ fn epoch_to_datetime(epoch: f64) -> Option<DateTime<Utc>> {
     if !epoch.is_finite() || epoch <= 0.0 {
         return None;
     }
-    let secs = epoch.floor() as i64;
-    let nanos = ((epoch - epoch.floor()) * 1_000_000_000.0) as u32;
-    Utc.timestamp_opt(secs, nanos).single()
+    epoch_to_utc(epoch)
 }

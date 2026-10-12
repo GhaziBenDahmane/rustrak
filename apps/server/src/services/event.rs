@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::db::DbPool;
+use crate::digest::processors::{clamp, extract_timestamp, relay_level};
 use crate::error::{AppError, AppResult};
 use crate::models::{AlertType, Event, EventSummary};
 use crate::pagination::{EventCursor, SortOrder};
@@ -167,57 +168,25 @@ impl EventService {
         E: sqlx::Executor<'e, Database = crate::db::Db>,
     {
         // Extract fields from event_data
-        let timestamp = event_data
-            .get("timestamp")
-            .and_then(|t| {
-                if let Some(ts) = t.as_f64() {
-                    DateTime::from_timestamp(ts as i64, ((ts.fract()) * 1_000_000_000.0) as u32)
-                } else if let Some(ts_str) = t.as_str() {
-                    DateTime::parse_from_rfc3339(ts_str)
-                        .ok()
-                        .map(|dt| dt.to_utc())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(ingested_at);
+        let timestamp = extract_timestamp(event_data, "timestamp").unwrap_or(ingested_at);
 
+        // Each cut to its VARCHAR column, which Postgres enforces; Relay's
+        // own limits are 200 for `release` and 64 for `environment`.
+        let field = |value: Option<&serde_json::Value>, default: &str, max_chars: usize| {
+            clamp(value.and_then(|v| v.as_str()).unwrap_or(default), max_chars)
+        };
+        let sdk = event_data.get("sdk");
         let level = event_data
             .get("level")
-            .and_then(|l| l.as_str())
-            .unwrap_or("error");
-
-        let platform = event_data
-            .get("platform")
-            .and_then(|p| p.as_str())
-            .unwrap_or("");
-
-        let release = event_data
-            .get("release")
-            .and_then(|r| r.as_str())
-            .unwrap_or("");
-
-        let environment = event_data
-            .get("environment")
-            .and_then(|e| e.as_str())
-            .unwrap_or("");
-
-        let server_name = event_data
-            .get("server_name")
-            .and_then(|s| s.as_str())
-            .unwrap_or("");
-
-        let sdk_name = event_data
-            .get("sdk")
-            .and_then(|s| s.get("name"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("");
-
-        let sdk_version = event_data
-            .get("sdk")
-            .and_then(|s| s.get("version"))
             .and_then(|v| v.as_str())
-            .unwrap_or("");
+            .and_then(relay_level)
+            .unwrap_or("error");
+        let platform = field(event_data.get("platform"), "", 64);
+        let release = field(event_data.get("release"), "", 200);
+        let environment = field(event_data.get("environment"), "", 64);
+        let server_name = field(event_data.get("server_name"), "", 255);
+        let sdk_name = field(sdk.and_then(|s| s.get("name")), "", 255);
+        let sdk_version = field(sdk.and_then(|s| s.get("version")), "", 255);
 
         // Store remote_addr as string
         let remote_addr_str: Option<String> = remote_addr.map(|s| s.to_string());

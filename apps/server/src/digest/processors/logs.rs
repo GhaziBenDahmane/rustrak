@@ -1,8 +1,8 @@
-use super::{Processor, ProcessorCtx};
+use super::{clamp, clamp_opt, epoch_to_utc, Processor, ProcessorCtx};
 use crate::error::AppResult;
 use crate::models::log::{LogContainer, LogItem};
 use bytes::Bytes;
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, Utc};
 use sha1::{Digest as _, Sha1};
 use uuid::Uuid;
 
@@ -54,8 +54,8 @@ impl Processor for LogsProcessor {
             .bind(id)
             .bind(ctx.project_id)
             .bind(dedupe_key)
-            .bind(empty_to_none(&log.trace_id))
-            .bind(log.span_id.as_deref())
+            .bind(clamp_opt(empty_to_none(&log.trace_id), 64))
+            .bind(clamp_opt(log.span_id.clone(), 32))
             .bind(&level)
             .bind(severity_number)
             .bind(&log.body)
@@ -83,18 +83,17 @@ fn epoch_to_datetime(epoch: f64) -> Option<DateTime<Utc>> {
     if !epoch.is_finite() || epoch <= 0.0 {
         return None;
     }
-    let secs = epoch.floor() as i64;
-    let nanos = ((epoch - epoch.floor()) * 1_000_000_000.0) as u32;
-    Utc.timestamp_opt(secs, nanos).single()
+    epoch_to_utc(epoch)
 }
 
 /// Normalizes the log level, defaulting to "info" when the SDK omits it.
-/// Unknown values are kept verbatim (forward-compat with Relay's `OurLogLevel`).
+/// Unknown values are kept (forward-compat with Relay's `OurLogLevel`), cut
+/// to the VARCHAR(20) column, which Postgres enforces.
 fn normalize_level(level: &str) -> String {
     if level.is_empty() {
         "info".to_string()
     } else {
-        level.to_string()
+        clamp(level, 20)
     }
 }
 

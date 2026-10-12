@@ -485,6 +485,77 @@ mod middleware {
         );
     }
 
+    /// Reads the whole body, then marks the server's own work as started, the
+    /// way the ingest handler does.
+    async fn answer_after_body(req: actix_web::HttpRequest, _body: web::Bytes) -> HttpResponse {
+        rustrak::middleware::telemetry::mark_body_received(&req);
+        HttpResponse::Ok().finish()
+    }
+
+    /// A client on a slow link takes its time uploading the envelope. That is
+    /// the network, not the server, and must not show up as ingest latency:
+    /// the heartbeat's p50/p99 exist to spot a slow server.
+    #[actix_web::test]
+    async fn a_slow_upload_is_not_reported_as_server_latency() {
+        let counters = leaked_counters();
+        let app = test::init_service(App::new().wrap(TelemetryMiddleware::new(counters)).route(
+            "/api/{project_id}/envelope/",
+            web::post().to(answer_after_body),
+        ))
+        .await;
+        let slow_body = futures_util::stream::once(async {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            Ok::<_, actix_web::error::PayloadError>(web::Bytes::from_static(b"{}"))
+        });
+        let (req, _) = test::TestRequest::post()
+            .uri("/api/1/envelope/")
+            .to_request()
+            .replace_payload(actix_web::dev::Payload::Stream {
+                payload: Box::pin(slow_body)
+                    as std::pin::Pin<Box<dyn futures_util::Stream<Item = _>>>,
+            });
+
+        let res = test::call_service(&app, req).await;
+
+        assert!(res.status().is_success());
+        let latency = counters.snapshot_and_reset().ingest.latency_ms;
+        assert!(
+            latency.p50.is_some_and(|ms| ms < 100),
+            "the upload's 300ms was counted as server time: {latency:?}"
+        );
+    }
+
+    /// A 5xx caused by the database also counts the error's code, the one
+    /// signal that tells a failing constraint from a failing connection.
+    #[actix_web::test]
+    async fn a_database_error_behind_a_5xx_is_counted_by_its_code() {
+        let db = crate::common::TestDb::new().await;
+        let error = sqlx::query("SELECT * FROM no_such_table")
+            .execute(&db.pool)
+            .await
+            .unwrap_err();
+        let code = error
+            .as_database_error()
+            .and_then(|e| e.code())
+            .expect("a database error carries a code")
+            .into_owned();
+        let count = || {
+            Counters::global()
+                .snapshot()
+                .db_errors_by_code
+                .get(&code)
+                .copied()
+                .unwrap_or(0)
+        };
+        let before = count();
+
+        let response =
+            actix_web::ResponseError::error_response(&rustrak::error::AppError::from(error));
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(count() > before, "code {code} was not counted");
+    }
+
     #[actix_web::test]
     async fn server_errors_are_counted_by_route_pattern_not_path() {
         let counters = leaked_counters();

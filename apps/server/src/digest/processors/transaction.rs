@@ -1,8 +1,8 @@
-use super::{Processor, ProcessorCtx};
+use super::span::{insert_span_rows, SpanRow};
+use super::{clamp, clamp_opt, extract_timestamp, is_stale, relay_level, Processor, ProcessorCtx};
 use crate::error::{AppError, AppResult};
 use crate::services::gen_ai::{extract_gen_ai_columns, GenAiColumns};
 use bytes::Bytes;
-use chrono::{DateTime, TimeZone, Utc};
 use uuid::Uuid;
 
 pub struct TransactionProcessor;
@@ -18,27 +18,39 @@ impl Processor for TransactionProcessor {
         let mut data: serde_json::Value = serde_json::from_slice(&work)
             .map_err(|e| AppError::Validation(format!("Invalid transaction JSON: {}", e)))?;
 
+        // Relay drops a transaction from before 1970, and removes such spans.
+        if is_stale(&data, "timestamp") || is_stale(&data, "start_timestamp") {
+            return Err(AppError::Validation(
+                "transaction timestamp is before 1970".to_string(),
+            ));
+        }
+        if let Some(spans) = data.get_mut("spans").and_then(|s| s.as_array_mut()) {
+            spans.retain(|span| !is_stale(span, "start_timestamp") && !is_stale(span, "timestamp"));
+        }
+
         let timestamp = extract_timestamp(&data, "timestamp").unwrap_or(ctx.ingested_at);
         let start_timestamp = extract_timestamp(&data, "start_timestamp");
-        let transaction_name = extract_str(&data, "transaction");
+        // Relay: `transaction` max_chars = 200.
+        let transaction_name = extract_str(&data, "transaction", 200);
 
         // Denormalize the trace context (contexts.trace.*) into queryable columns
         // — mirrors Relay, which surfaces op/status/span_id for performance views.
         let trace = data.get("contexts").and_then(|c| c.get("trace"));
-        let trace_id = trace_str(trace, "trace_id");
-        let span_id = trace_str(trace, "span_id");
-        let parent_span_id = trace_str(trace, "parent_span_id");
-        let op = trace_str(trace, "op");
-        let status = trace_str(trace, "status");
+        let trace_id = trace_str(trace, "trace_id", 64);
+        let span_id = trace_str(trace, "span_id", 32);
+        let parent_span_id = trace_str(trace, "parent_span_id", 32);
+        let op = trace_str(trace, "op", 64);
+        let status = trace_str(trace, "status", 32);
         // transaction_info.source carries Relay's TransactionSource. Stored
         // verbatim (Relay keeps unrecognized values via its `Other(String)`
         // variant); defaults to "unknown" when the SDK omits transaction_info.
-        let source = data
-            .get("transaction_info")
-            .and_then(|ti| ti.get("source"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
+        let source = clamp(
+            data.get("transaction_info")
+                .and_then(|ti| ti.get("source"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown"),
+            32,
+        );
 
         // Precompute duration at write time (milliseconds, microsecond precision).
         let duration_ms = start_timestamp.and_then(|st| {
@@ -49,27 +61,19 @@ impl Processor for TransactionProcessor {
 
         // Denormalize the fields the list/detail views surface so they don't
         // have to parse the JSON payload on every read.
-        let platform = extract_str(&data, "platform");
-        let release = extract_str(&data, "release");
-        let environment = extract_str(&data, "environment");
-        let server_name = extract_str(&data, "server_name");
+        let platform = extract_str(&data, "platform", 64);
+        // Relay: `release` max_chars = 200, `environment` 64.
+        let release = extract_str(&data, "release", 200);
+        let environment = extract_str(&data, "environment", 64);
+        let server_name = extract_str(&data, "server_name", 255);
         let level = data
             .get("level")
             .and_then(|v| v.as_str())
-            .unwrap_or("info")
-            .to_string();
-        let sdk_name = data
-            .get("sdk")
-            .and_then(|s| s.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let sdk_version = data
-            .get("sdk")
-            .and_then(|s| s.get("version"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+            .and_then(relay_level)
+            .unwrap_or("info");
+        let sdk = data.get("sdk").unwrap_or(&serde_json::Value::Null);
+        let sdk_name = extract_str(sdk, "name", 255);
+        let sdk_version = extract_str(sdk, "version", 255);
 
         let id = Uuid::new_v4();
 
@@ -132,24 +136,26 @@ impl Processor for TransactionProcessor {
         // Extract each span into the indexed `spans` table. Mirrors Relay's span
         // extraction (DataCategory::SpanIndexed): individually queryable rows
         // linked to the parent transaction. A span inherits the transaction's
-        // trace_id when it doesn't carry its own.
-        if let Some(spans) = data.get_mut("spans").and_then(|s| s.as_array_mut()) {
-            // Mutate each span's own `data` attributes bag in place; the parent
-            // transaction was already serialized above.
-            for span in spans {
-                insert_span(
+        // trace_id when it doesn't carry its own. The parent transaction was
+        // already serialized above, so the spans can be moved out of `data`.
+        let spans = data
+            .get_mut("spans")
+            .and_then(|s| s.as_array_mut())
+            .map(std::mem::take)
+            .unwrap_or_default();
+        let mut rows: Vec<SpanRow> = spans
+            .into_iter()
+            .map(|span| {
+                span_row(
                     span,
                     id,
-                    ctx.project_id,
                     trace_id.as_deref(),
                     non_empty(&platform),
                     non_empty(&release),
                     non_empty(&environment),
-                    &mut *tx,
                 )
-                .await?;
-            }
-        }
+            })
+            .collect();
 
         // Promote contexts.trace into its own `spans` row when it's an
         // AI-instrumented trace root. Some SDKs (verified: @sentry/node +
@@ -177,31 +183,40 @@ impl Processor for TransactionProcessor {
                 None => GenAiColumns::default(),
             };
             if gen_ai.operation_type.is_some() {
-                insert_root_span(
-                    root_span_id,
-                    root_trace_id,
-                    parent_span_id.as_deref(),
-                    op.as_deref(),
-                    status.as_deref(),
-                    &transaction_name,
+                // The whole `contexts.trace` object is the row's `data`, so
+                // gen_ai fields sit at `$.data.gen_ai.*`.
+                rows.push(SpanRow {
+                    transaction_id: Some(id),
+                    span_id: Some(root_span_id.clone()),
+                    trace_id: Some(root_trace_id.clone()),
                     start_timestamp,
-                    timestamp,
+                    timestamp: Some(timestamp),
                     duration_ms,
-                    id,
-                    ctx.project_id,
-                    trace_context,
-                    // `extract_str` yields "" for an absent field, but the
-                    // spans table's nullable columns mean "not reported" —
-                    // and an empty string would surface as a filter option.
-                    non_empty(&platform),
-                    non_empty(&release),
-                    non_empty(&environment),
+                    exclusive_time_ms: None,
+                    op: op.clone(),
                     gen_ai,
-                    &mut *tx,
-                )
-                .await?;
+                    parent_span_id: parent_span_id.clone(),
+                    description: Some(transaction_name.clone()),
+                    status: status.clone(),
+                    // The root is its own segment.
+                    segment_id: Some(root_span_id.clone()),
+                    is_segment: true,
+                    // Inherited from the transaction event: contexts.trace
+                    // carries none of these, and a promoted root with a NULL
+                    // environment would vanish from any environment-filtered
+                    // aggregate while its own children survived. `extract_str`
+                    // yields "" for an absent field, but the spans table's
+                    // nullable columns mean "not reported".
+                    platform: non_empty(&platform).map(str::to_string),
+                    release: non_empty(&release).map(str::to_string),
+                    environment: non_empty(&environment).map(str::to_string),
+                    tags: None,
+                    data: trace_context.clone(),
+                });
             }
         }
+
+        insert_span_rows(&mut tx, ctx.project_id, rows).await?;
 
         tx.commit().await?;
 
@@ -209,24 +224,11 @@ impl Processor for TransactionProcessor {
     }
 }
 
-/// The concrete SQLx database backend, selected by Cargo feature.
-#[cfg(feature = "postgres")]
-type Db = sqlx::Postgres;
-#[cfg(feature = "sqlite")]
-type Db = sqlx::Sqlite;
-
-/// Inserts a single extracted span row linked to its parent transaction.
-/// Generic over the executor so it can run inside the parent's DB transaction.
-/// Takes an owned `span` (not borrowed) so gen_ai normalization can mutate
-/// its `data` attributes bag freely.
-// Same shape as `insert_root_span`: one more parameter than clippy's
-// ceiling, for the same reason -- the transaction's scope has to reach the
-// row, and there is one call site.
-#[allow(clippy::too_many_arguments)]
-async fn insert_span<'e, E>(
-    span: &mut serde_json::Value,
+/// The `spans` row for one child of a transaction. Takes the span by value:
+/// gen_ai normalization mutates its `data` attributes bag, which is stored.
+fn span_row(
+    mut span: serde_json::Value,
     transaction_id: Uuid,
-    project_id: i32,
     txn_trace_id: Option<&str>,
     // The parent transaction's scope. `spans.platform/release/environment`
     // were originally documented as "standalone spans only, a child inherits
@@ -236,46 +238,28 @@ async fn insert_span<'e, E>(
     platform: Option<&str>,
     release: Option<&str>,
     environment: Option<&str>,
-    executor: E,
-) -> AppResult<()>
-where
-    E: sqlx::Executor<'e, Database = Db>,
-{
-    let span_id = span
-        .get("span_id")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let parent_span_id = span
-        .get("parent_span_id")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let op = span.get("op").and_then(|v| v.as_str()).map(str::to_string);
+) -> SpanRow {
+    let span_id = trace_str(Some(&span), "span_id", 32);
+    let parent_span_id = trace_str(Some(&span), "parent_span_id", 32);
+    // Relay: span `op` max_chars = 128. `description` is TEXT.
+    let op = trace_str(Some(&span), "op", 128);
     let description = span
         .get("description")
         .and_then(|v| v.as_str())
         .map(str::to_string);
-    let status = span
-        .get("status")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let segment_id = span
-        .get("segment_id")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+    let status = trace_str(Some(&span), "status", 32);
+    let segment_id = trace_str(Some(&span), "segment_id", 32);
     let is_segment = span
         .get("is_segment")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
     // A span carries its own trace_id only rarely; inherit the transaction's.
-    let trace_id = span
-        .get("trace_id")
-        .and_then(|v| v.as_str())
-        .map(str::to_string)
-        .or_else(|| txn_trace_id.map(str::to_string));
+    let trace_id =
+        trace_str(Some(&span), "trace_id", 64).or_else(|| txn_trace_id.map(str::to_string));
 
-    let start_timestamp = extract_timestamp(span, "start_timestamp");
-    let timestamp = extract_timestamp(span, "timestamp");
+    let start_timestamp = extract_timestamp(&span, "start_timestamp");
+    let timestamp = extract_timestamp(&span, "timestamp");
     let duration_ms = match (start_timestamp, timestamp) {
         (Some(st), Some(ts)) => (ts - st)
             .num_microseconds()
@@ -295,166 +279,27 @@ where
         None => GenAiColumns::default(),
     };
 
-    sqlx::query(
-        r#"
-        INSERT INTO spans (
-            id, transaction_id, project_id,
-            span_id, trace_id, parent_span_id,
-            op, description, status,
-            start_timestamp, timestamp, duration_ms, exclusive_time_ms,
-            is_segment, segment_id, tags, data,
-            platform, release, environment,
-            gen_ai_operation_type, gen_ai_agent_name,
-            gen_ai_request_model, gen_ai_response_model,
-            gen_ai_tool_name, gen_ai_conversation_id,
-            gen_ai_usage_input_tokens, gen_ai_usage_output_tokens, gen_ai_usage_total_tokens,
-                    gen_ai_usage_cached_input_tokens, gen_ai_usage_reasoning_output_tokens
-        ) VALUES (
-            $1, $2, $3,
-            $4, $5, $6,
-            $7, $8, $9,
-            $10, $11, $12, $13,
-            $14, $15, $16, $17,
-            $18, $19, $20,
-            $21, $22,
-            $23, $24,
-            $25, $26,
-            $27, $28, $29,
-            $30, $31
-        )
-        "#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(transaction_id)
-    .bind(project_id)
-    .bind(span_id)
-    .bind(trace_id)
-    .bind(parent_span_id)
-    .bind(op)
-    .bind(description)
-    .bind(status)
-    .bind(start_timestamp)
-    .bind(timestamp)
-    .bind(duration_ms)
-    .bind(exclusive_time_ms)
-    .bind(is_segment)
-    .bind(segment_id)
-    .bind(tags)
-    .bind(sqlx::types::Json(&*span))
-    .bind(platform)
-    .bind(release)
-    .bind(environment)
-    .bind(gen_ai.operation_type)
-    .bind(gen_ai.agent_name)
-    .bind(gen_ai.request_model)
-    .bind(gen_ai.response_model)
-    .bind(gen_ai.tool_name)
-    .bind(gen_ai.conversation_id)
-    .bind(gen_ai.usage_input_tokens)
-    .bind(gen_ai.usage_output_tokens)
-    .bind(gen_ai.usage_total_tokens)
-    .bind(gen_ai.usage_cached_input_tokens)
-    .bind(gen_ai.usage_reasoning_output_tokens)
-    .execute(executor)
-    .await?;
-
-    Ok(())
-}
-
-/// Inserts a synthesized root/segment span row from an AI-recognized
-/// `contexts.trace`, linked to its parent transaction. `trace_context` is the
-/// whole `contexts.trace` object — stored verbatim as the `data` column, so
-/// gen_ai fields sit at `$.data.gen_ai.*` — and `gen_ai` holds the columns
-/// already extracted from its nested `data` bag. Both must be computed by the
-/// caller; this function only performs the INSERT. Generic over the executor
-/// so it can run inside the parent's DB transaction.
-#[allow(clippy::too_many_arguments)]
-async fn insert_root_span<'e, E>(
-    span_id: &str,
-    trace_id: &str,
-    parent_span_id: Option<&str>,
-    op: Option<&str>,
-    status: Option<&str>,
-    description: &str,
-    start_timestamp: Option<DateTime<Utc>>,
-    timestamp: DateTime<Utc>,
-    duration_ms: Option<f64>,
-    transaction_id: Uuid,
-    project_id: i32,
-    trace_context: &serde_json::Value,
-    platform: Option<&str>,
-    release: Option<&str>,
-    environment: Option<&str>,
-    gen_ai: GenAiColumns,
-    executor: E,
-) -> AppResult<()>
-where
-    E: sqlx::Executor<'e, Database = Db>,
-{
-    sqlx::query(
-        r#"
-        INSERT INTO spans (
-            id, transaction_id, project_id,
-            span_id, trace_id, parent_span_id,
-            op, description, status,
-            start_timestamp, timestamp, duration_ms, exclusive_time_ms,
-            is_segment, segment_id, tags, data,
-            platform, release, environment,
-            gen_ai_operation_type, gen_ai_agent_name,
-            gen_ai_request_model, gen_ai_response_model,
-            gen_ai_tool_name, gen_ai_conversation_id,
-            gen_ai_usage_input_tokens, gen_ai_usage_output_tokens, gen_ai_usage_total_tokens,
-                    gen_ai_usage_cached_input_tokens, gen_ai_usage_reasoning_output_tokens
-        ) VALUES (
-            $1, $2, $3,
-            $4, $5, $6,
-            $7, $8, $9,
-            $10, $11, $12, NULL,
-            TRUE, $13, NULL, $14,
-            $15, $16, $17,
-            $18, $19,
-            $20, $21,
-            $22, $23,
-            $24, $25, $26,
-            $27, $28
-        )
-        "#,
-    )
-    .bind(Uuid::new_v4())
-    .bind(transaction_id)
-    .bind(project_id)
-    .bind(span_id)
-    .bind(trace_id)
-    .bind(parent_span_id)
-    .bind(op)
-    .bind(description)
-    .bind(status)
-    .bind(start_timestamp)
-    .bind(timestamp)
-    .bind(duration_ms)
-    .bind(span_id) // segment_id: the root is its own segment
-    .bind(sqlx::types::Json(trace_context))
-    // Inherited from the transaction event: contexts.trace carries none of
-    // these, and a promoted root with a NULL environment would vanish from
-    // any environment-filtered aggregate while its own children survived.
-    .bind(platform)
-    .bind(release)
-    .bind(environment)
-    .bind(gen_ai.operation_type)
-    .bind(gen_ai.agent_name)
-    .bind(gen_ai.request_model)
-    .bind(gen_ai.response_model)
-    .bind(gen_ai.tool_name)
-    .bind(gen_ai.conversation_id)
-    .bind(gen_ai.usage_input_tokens)
-    .bind(gen_ai.usage_output_tokens)
-    .bind(gen_ai.usage_total_tokens)
-    .bind(gen_ai.usage_cached_input_tokens)
-    .bind(gen_ai.usage_reasoning_output_tokens)
-    .execute(executor)
-    .await?;
-
-    Ok(())
+    SpanRow {
+        transaction_id: Some(transaction_id),
+        span_id,
+        trace_id,
+        start_timestamp,
+        timestamp,
+        duration_ms,
+        exclusive_time_ms,
+        op,
+        gen_ai,
+        parent_span_id,
+        description,
+        status,
+        segment_id,
+        is_segment,
+        platform: platform.map(str::to_string),
+        release: release.map(str::to_string),
+        environment: environment.map(str::to_string),
+        tags,
+        data: span,
+    }
 }
 
 /// Extracts a top-level string field from the payload, defaulting to empty.
@@ -467,34 +312,22 @@ fn non_empty(value: &str) -> Option<&str> {
     }
 }
 
-fn extract_str(data: &serde_json::Value, key: &str) -> String {
-    data.get(key)
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string()
+fn extract_str(data: &serde_json::Value, key: &str, max_chars: usize) -> String {
+    clamp(
+        data.get(key).and_then(|v| v.as_str()).unwrap_or(""),
+        max_chars,
+    )
 }
 
 /// Reads a string field from the `contexts.trace` object, if present.
 /// Returns `None` for a missing trace, missing key, or non-string value —
 /// so the column stays NULL rather than storing `""`.
-fn trace_str(trace: Option<&serde_json::Value>, key: &str) -> Option<String> {
-    trace
-        .and_then(|t| t.get(key))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-}
-
-fn extract_timestamp(data: &serde_json::Value, key: &str) -> Option<DateTime<Utc>> {
-    let raw = data.get(key)?;
-    if let Some(epoch) = raw.as_f64() {
-        let secs = epoch.floor() as i64;
-        let nanos = ((epoch - epoch.floor()) * 1_000_000_000.0) as u32;
-        return Utc.timestamp_opt(secs, nanos).single();
-    }
-    if let Some(s) = raw.as_str() {
-        return DateTime::parse_from_rfc3339(s)
-            .ok()
-            .map(|dt| dt.with_timezone(&Utc));
-    }
-    None
+fn trace_str(trace: Option<&serde_json::Value>, key: &str, max_chars: usize) -> Option<String> {
+    clamp_opt(
+        trace
+            .and_then(|t| t.get(key))
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        max_chars,
+    )
 }

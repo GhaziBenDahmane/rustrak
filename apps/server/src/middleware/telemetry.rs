@@ -1,7 +1,7 @@
 use actix_web::{
     body::MessageBody,
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error,
+    Error, HttpMessage,
 };
 use std::future::{ready, Future, Ready};
 use std::pin::Pin;
@@ -66,12 +66,28 @@ where
         let fut = self.service.call(req);
         Box::pin(async move {
             let res = fut.await?;
+            let started = res
+                .request()
+                .extensions()
+                .get::<BodyReceived>()
+                .map_or(started, |body| body.0);
             let pattern = res.request().match_pattern();
             let status = res.status().as_u16();
             record(counters, pattern.as_deref(), status, started);
             Ok(res)
         })
     }
+}
+
+/// When the request body had fully arrived.
+#[derive(Clone, Copy)]
+struct BodyReceived(Instant);
+
+/// Starts the latency clock at the server's own work. Ingest handlers call it
+/// first thing: until then actix is still reading the body, and a client
+/// uploading over a slow link would otherwise read as a slow server.
+pub fn mark_body_received(req: &actix_web::HttpRequest) {
+    req.extensions_mut().insert(BodyReceived(Instant::now()));
 }
 
 fn is_ingest(pattern: &str) -> bool {

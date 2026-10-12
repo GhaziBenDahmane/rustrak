@@ -35,6 +35,7 @@ pub struct Counters {
     http_5xx_by_route: Mutex<BTreeMap<String, u64>>,
     alerts_failed_by_provider: Mutex<BTreeMap<String, u64>>,
     panics: Mutex<BTreeMap<String, u64>>,
+    db_errors_by_code: Mutex<BTreeMap<String, u64>>,
     metrics: MetricsCounters,
 }
 
@@ -56,6 +57,7 @@ impl Counters {
             http_5xx_by_route: Mutex::new(BTreeMap::new()),
             alerts_failed_by_provider: Mutex::new(BTreeMap::new()),
             panics: Mutex::new(BTreeMap::new()),
+            db_errors_by_code: Mutex::new(BTreeMap::new()),
             metrics: MetricsCounters::new(),
         }
     }
@@ -118,6 +120,12 @@ impl Counters {
         bump(&self.panics, location);
     }
 
+    /// A database error that failed a request or a digest, by its code alone:
+    /// a SQLSTATE on Postgres (`22001`), an extended result code on SQLite.
+    pub fn db_error(&self, code: &str) {
+        bump(&self.db_errors_by_code, code);
+    }
+
     /// Reads everything and starts the next window from zero.
     pub fn snapshot_and_reset(&self) -> Health {
         self.read(|c| c.swap(0, Relaxed), std::mem::take)
@@ -161,6 +169,7 @@ impl Counters {
             http_5xx_by_route: take(&self.http_5xx_by_route),
             alerts_failed_by_provider: take(&self.alerts_failed_by_provider),
             panics: take(&self.panics),
+            db_errors_by_code: take(&self.db_errors_by_code),
         }
     }
 }
@@ -195,6 +204,7 @@ pub struct Health {
     pub http_5xx_by_route: BTreeMap<String, u64>,
     pub alerts_failed_by_provider: BTreeMap<String, u64>,
     pub panics: BTreeMap<String, u64>,
+    pub db_errors_by_code: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
