@@ -12,6 +12,7 @@
 
 **[Documentation](https://rustrak.github.io/rustrak/)** ·
 [Quickstart](#quickstart) ·
+[Roadmap](https://rustrak.github.io/rustrak/roadmap) ·
 [Changelog](https://rustrak.github.io/rustrak/changelog) ·
 [Report a bug](https://github.com/rustrak/rustrak/issues)
 
