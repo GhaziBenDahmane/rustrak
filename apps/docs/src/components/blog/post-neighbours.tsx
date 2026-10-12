@@ -1,42 +1,21 @@
 import Link from 'next/link';
 import { formatDate, type Post } from '@/lib/blog';
+import { cn } from '@/lib/utils';
+import { GRID } from '../editorial/grid';
+import { BlurIn, Rule } from '../editorial/motion';
 
-/**
- * What to read next, at the foot of a post.
- *
- * Labelled "older" and "newer" rather than "previous" and "next": on a page
- * that is itself an entry in a reverse-chronological list, "next" is genuinely
- * ambiguous, and the reader should not have to work out which direction the
- * arrow means.
- */
-function NeighbourCell({
-  post,
-  label,
-  align,
-}: {
-  post: Post;
-  label: string;
-  align: 'left' | 'right';
-}) {
+function Neighbour({ post, label }: { post: Post; label: string }) {
   return (
-    <Link
-      href={`/blog/${post.slug}`}
-      className={[
-        'group flex flex-col gap-2 px-5 py-8 transition-colors hover:bg-foreground/[0.015] sm:px-9',
-        align === 'right' ? 'sm:items-end sm:text-right' : '',
-      ].join(' ')}
-    >
-      <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-        {align === 'left' && <span aria-hidden>← </span>}
+    <Link href={`/blog/${post.slug}`} className="group block py-6">
+      <span className="font-mono text-[11px] tracking-[0.16em] text-muted-foreground uppercase transition-colors duration-500 group-hover:text-primary">
         {label}
-        {align === 'right' && <span aria-hidden> →</span>}
       </span>
-      <span className="text-[15px] font-medium leading-snug text-foreground transition-colors group-hover:text-primary">
+      <span className="mt-3 block max-w-[24ch] text-[24px] leading-[1.15] tracking-[-0.025em] text-foreground transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-1.5 sm:text-[30px]">
         {post.title}
       </span>
       <time
         dateTime={post.date}
-        className="font-mono text-[11px] text-muted-foreground"
+        className="mt-3 block font-mono text-[11px] tracking-[0.12em] text-muted-foreground uppercase"
       >
         {formatDate(post.date)}
       </time>
@@ -44,6 +23,7 @@ function NeighbourCell({
   );
 }
 
+/** The posts either side of this one, in the reading column. */
 export function PostNeighbours({
   older,
   newer,
@@ -54,25 +34,25 @@ export function PostNeighbours({
   if (!older && !newer) return null;
 
   return (
-    <nav
-      aria-label="More posts"
-      className="grid border-b border-rule sm:grid-cols-2"
-    >
-      {older && (
-        <div className={newer ? 'border-b border-rule sm:border-b-0' : ''}>
-          <NeighbourCell post={older} label="Older post" align="left" />
+    <nav aria-label="More posts">
+      <Rule />
+      <div className={cn(GRID, 'pt-10 pb-28 lg:pb-40')}>
+        <p className="font-mono text-[11px] tracking-[0.16em] text-muted-foreground uppercase">
+          Keep reading
+        </p>
+        <div className="mt-4 divide-y divide-rule lg:mt-0 lg:-translate-y-6">
+          {newer ? (
+            <BlurIn>
+              <Neighbour post={newer} label="Newer ↑" />
+            </BlurIn>
+          ) : null}
+          {older ? (
+            <BlurIn index={1}>
+              <Neighbour post={older} label="Older ↓" />
+            </BlurIn>
+          ) : null}
         </div>
-      )}
-      {newer && (
-        // The rule sits on the newer cell rather than on the older one so it
-        // is still drawn when this is the oldest post and the left cell is
-        // absent — a divider belongs to the pair, not to one side of it.
-        <div
-          className={older ? 'sm:border-l sm:border-rule' : 'sm:col-start-2'}
-        >
-          <NeighbourCell post={newer} label="Newer post" align="right" />
-        </div>
-      )}
+      </div>
     </nav>
   );
 }

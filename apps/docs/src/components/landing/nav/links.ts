@@ -7,6 +7,7 @@
  */
 export const LINKS = [
   { href: '/getting-started/overview', label: 'Docs' },
+  { href: '/roadmap', label: 'Roadmap' },
   { href: '/changelog', label: 'Changelog' },
   { href: '/blog', label: 'Blog' },
 ] as const;

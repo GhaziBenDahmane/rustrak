@@ -25,6 +25,12 @@ export default {
     type: 'page',
     href: '/getting-started/overview',
   },
+  // `app/roadmap`, a standalone route like the landing; listed so the docs
+  // navbar links to it.
+  roadmap: {
+    title: 'Roadmap',
+    type: 'page',
+  },
   changelog: {
     title: 'Changelog',
     type: 'page',

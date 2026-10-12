@@ -1,16 +1,11 @@
 'use client';
 
+import { cn } from '@/lib/utils';
+import { GRID } from '../editorial/grid';
+import { Rule } from '../editorial/motion';
 import type { ArchiveStatus } from './use-release-archive';
 
-/**
- * The end of the feed: either the way to the rest of the archive, or the note
- * that there is no rest.
- *
- * The `noscript` is not ceremony. Everything below the tenth release is fetched
- * (see `use-release-archive.ts`), so with scripting off this page genuinely is
- * ten releases and the reader deserves to be told where the other thirty-one
- * are rather than left to conclude the project started this year.
- */
+/** The end of what is loaded: either a way to fetch more, or the first release. */
 export function ArchiveFooter({
   loaded,
   total,
@@ -26,61 +21,62 @@ export function ArchiveFooter({
   hasMore: boolean;
   onLoadMore: () => void;
 }) {
-  if (!hasMore) {
-    return (
-      <div className="border-b border-rule px-5 py-10 text-center sm:px-9">
-        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-          The first release
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="border-b border-rule px-5 py-10 text-center sm:px-9">
-      <button
-        type="button"
-        onClick={onLoadMore}
-        disabled={status === 'loading'}
-        className="inline-flex items-center gap-2 rounded-full border border-rule px-5 py-2.5 font-mono text-[11.5px] uppercase tracking-[0.14em] text-foreground transition-colors hover:border-primary/50 hover:text-primary disabled:cursor-wait disabled:opacity-60"
-      >
-        {status === 'loading' ? (
-          <>
-            <span
-              aria-hidden
-              className="size-1.5 animate-pulse rounded-full bg-primary"
-            />
-            Loading
-          </>
-        ) : status === 'error' ? (
-          'Retry'
-        ) : (
-          `Show ${nextBatch} earlier release${nextBatch === 1 ? '' : 's'}`
-        )}
-      </button>
-
-      <p
-        className="mt-3.5 font-mono text-[11px] tabular-nums text-muted-foreground"
-        aria-live="polite"
-      >
-        {status === 'error'
-          ? 'Could not reach the archive.'
-          : `${loaded} of ${total} releases`}
-      </p>
-
-      <noscript>
-        <p className="mt-3.5 text-[13px] text-muted-foreground">
-          The remaining {total - loaded} releases load on demand and need
-          JavaScript. They are also on{' '}
-          <a
-            className="underline underline-offset-2 hover:text-primary"
-            href="https://github.com/AbianS/rustrak/releases"
-          >
-            GitHub Releases
-          </a>
-          .
+    <>
+      <Rule />
+      <div className={cn(GRID, 'pt-10 pb-32 lg:pb-44')}>
+        <p className="font-mono text-[11px] tracking-[0.16em] text-muted-foreground uppercase tabular-nums">
+          {status === 'error'
+            ? 'Could not reach the archive'
+            : `${loaded} of ${total} releases`}
         </p>
-      </noscript>
-    </div>
+        <div className="mt-6 lg:mt-0" aria-live="polite">
+          {hasMore ? (
+            <button
+              type="button"
+              onClick={onLoadMore}
+              disabled={status === 'loading'}
+              className="group flex cursor-pointer items-baseline gap-4 text-left disabled:cursor-wait"
+            >
+              <span
+                className={cn(
+                  'text-[26px] tracking-[-0.025em] text-foreground transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-1.5 sm:text-[32px]',
+                  status === 'loading' && 'animate-pulse',
+                )}
+              >
+                {status === 'loading'
+                  ? 'Loading…'
+                  : status === 'error'
+                    ? 'Try again'
+                    : `${nextBatch} earlier release${nextBatch === 1 ? '' : 's'}`}
+              </span>
+              <span
+                aria-hidden
+                className="font-mono text-[13px] text-muted-foreground transition-colors group-hover:text-primary"
+              >
+                ↓
+              </span>
+            </button>
+          ) : (
+            <p className="text-[26px] tracking-[-0.025em] text-foreground/55 sm:text-[32px]">
+              That was the first release.
+            </p>
+          )}
+          <noscript>
+            <p className="mt-4 text-[14px] text-muted-foreground">
+              The remaining {total - loaded} releases load on demand and need
+              JavaScript. They are also on{' '}
+              <a
+                className="underline underline-offset-4 hover:text-primary"
+                href="https://github.com/AbianS/rustrak/releases"
+              >
+                GitHub Releases
+              </a>
+              .
+            </p>
+          </noscript>
+        </div>
+      </div>
+    </>
   );
 }

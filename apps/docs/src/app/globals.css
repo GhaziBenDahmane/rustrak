@@ -814,30 +814,6 @@ body:has(.landing-root) {
   margin-top: 0.6rem;
 }
 
-/* Only the releases fetched after load. Short and small — the entry is already
-   where the reader is looking, so this is confirmation that something arrived,
-   not an entrance. */
-@keyframes changelog-enter {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.changelog-enter {
-  animation: changelog-enter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .changelog-enter {
-    animation: none;
-  }
-}
-
 /* ── Blog ──────────────────────────────────────────────────────────────────
    The body of a post. Unlike the changelog, this markup is Nextra's: the MDX
    goes through `importPage`, so every element arrives already carrying the
