@@ -150,12 +150,7 @@ impl ErrorProcessor {
                 "event timestamp is before 1970".to_string(),
             ));
         }
-        if let Some(crumbs) = event_data
-            .pointer_mut("/breadcrumbs/values")
-            .and_then(|v| v.as_array_mut())
-        {
-            crumbs.retain(|crumb| !is_stale(crumb, "timestamp"));
-        }
+        drop_stale_breadcrumbs(&mut event_data);
 
         // 2b. Rewrite stack frames using source maps (non-fatal)
         if let Err(e) = crate::services::sourcemap::rewrite_frames(
@@ -1079,9 +1074,39 @@ fn alert_type_for_lifecycle(created: bool, regressed: bool) -> Option<AlertType>
     }
 }
 
+/// Removes breadcrumbs from before 1970, in both the `{ "values": [...] }`
+/// form and the bare array form that `Values<T>` also accepts.
+fn drop_stale_breadcrumbs(event_data: &mut serde_json::Value) {
+    let Some(crumbs) = event_data.get_mut("breadcrumbs") else {
+        return;
+    };
+    let crumbs = if crumbs.get("values").is_some() {
+        &mut crumbs["values"]
+    } else {
+        crumbs
+    };
+    if let Some(crumbs) = crumbs.as_array_mut() {
+        crumbs.retain(|crumb| !is_stale(crumb, "timestamp"));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stale_breadcrumbs_are_dropped_in_both_forms() {
+        let crumbs = serde_json::json!([{ "timestamp": -5.0 }, { "timestamp": 1.0 }]);
+        let kept = serde_json::json!([{ "timestamp": 1.0 }]);
+
+        let mut wrapped = serde_json::json!({ "breadcrumbs": { "values": crumbs } });
+        drop_stale_breadcrumbs(&mut wrapped);
+        assert_eq!(wrapped["breadcrumbs"]["values"], kept);
+
+        let mut bare = serde_json::json!({ "breadcrumbs": crumbs });
+        drop_stale_breadcrumbs(&mut bare);
+        assert_eq!(bare["breadcrumbs"], kept);
+    }
 
     #[test]
     fn a_real_incoming_title_always_wins() {
