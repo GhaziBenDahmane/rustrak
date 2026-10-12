@@ -1,0 +1,34 @@
+---
+version: v0.16.3
+title: PostgreSQL Ingest Fixes
+description: Payloads PostgreSQL used to reject with a 500 are now ingested, and transactions with many spans store faster
+date: 2026-10-12
+tags: [server, ingest, postgres, performance]
+---
+
+## No more PostgreSQL 500s on real SDK payloads
+
+PostgreSQL enforces column lengths and rejects NUL characters, and SQLite does
+neither. So a payload that SQLite stored without complaint failed the whole
+envelope on PostgreSQL, and the SDK got a 500 back. Rustrak now cleans those
+payloads the way Relay does:
+
+- NUL characters are stripped at ingest, and from event files queued by an
+  earlier version
+- String fields longer than their column are truncated instead of rejected
+- Events, transactions, spans and breadcrumbs dated before 1970 are dropped,
+  and a timestamp outside the range PostgreSQL can store reads as missing
+- An unknown `level` falls back to the default instead of being stored as is
+
+## Faster span storage
+
+Spans from transactions, standalone span items and v2 span containers are
+written with multi-row INSERTs. A transaction with 1,000 spans goes from
+1,000 database round trips to 4.
+
+## Improvements
+
+- Ingest latency in telemetry is measured from when the request body has
+  arrived, so a slow client upload no longer counts
+- Telemetry counts database errors by code (`db_errors_by_code`): a SQLSTATE on
+  PostgreSQL, a result code on SQLite, never the message
