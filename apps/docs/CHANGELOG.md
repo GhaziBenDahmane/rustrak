@@ -1,5 +1,11 @@
 # docs
 
+## 0.16.0
+
+### Minor Changes
+
+- [`f4b809d`](https://github.com/rustrak/rustrak/commit/f4b809d8955f2eec13d56ecb7d65301f5ca17c9d) Thanks [@AbianS](https://github.com/AbianS)! - Add a public roadmap page and redesign the changelog and blog.
+
 ## 0.15.13
 
 ### Patch Changes
