@@ -45,6 +45,7 @@ pub async fn ingest_envelope(
     body: Bytes,
     processors: web::Data<Processors>,
 ) -> AppResult<HttpResponse> {
+    crate::middleware::telemetry::mark_body_received(&req);
     // 0. Check rate limits (fail fast before processing)
     if let Some(exceeded) =
         RateLimitService::check_quota(pool.get_ref(), &auth.project, &config.rate_limit).await?
@@ -341,6 +342,9 @@ pub async fn digest_stored_event(processors: &Processors, pool: &DbPool, metadat
             }
             Err(e) => {
                 processors.counters().digest_failed();
+                if let Some(code) = e.db_code() {
+                    processors.counters().db_error(&code);
+                }
                 log::error!(
                     "Failed to digest event {}; it remains queued: {:?}",
                     metadata.event_id,

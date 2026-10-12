@@ -1343,3 +1343,500 @@ async fn test_sdk_an_issue_from_before_the_upgrade_keeps_its_events() {
 
     server.shutdown();
 }
+
+// =============================================================================
+// PostgreSQL enforces what SQLite ignores
+// =============================================================================
+//
+// Every column below is VARCHAR(n) in both migrations, but only Postgres
+// enforces the length, and only Postgres rejects a NUL byte in TEXT or JSONB.
+// Telemetry showed `/envelope/` 500s on Postgres instances only, about one per
+// transaction on one install: real SDK payloads carry long transaction names
+// and span ops, and span descriptions can carry NUL. Relay truncates rather
+// than rejects (`max_chars` in relay-event-schema), so these must be stored.
+
+/// Posts one envelope carrying `items` (header, payload) and returns the status.
+async fn post_items(
+    server: &TestServer,
+    project: &rustrak::models::Project,
+    items: &[(serde_json::Value, serde_json::Value)],
+) -> reqwest::StatusCode {
+    let event_id = uuid::Uuid::new_v4().simple().to_string();
+    let mut envelope = format!("{}\n", serde_json::json!({ "event_id": event_id }));
+    for (header, payload) in items {
+        let body = payload.to_string();
+        let mut header = header.clone();
+        header["length"] = serde_json::json!(body.len());
+        envelope.push_str(&format!("{header}\n{body}\n"));
+    }
+    let url = format!(
+        "http://127.0.0.1:{}/api/{}/envelope/?sentry_key={}",
+        server.port, project.id, project.sentry_key
+    );
+    reqwest::Client::new()
+        .post(&url)
+        .header("Content-Type", "application/x-sentry-envelope")
+        .body(envelope)
+        .send()
+        .await
+        .expect("ingest request failed")
+        .status()
+}
+
+async fn count_rows(pool: &DbPool, table: &str, project_id: i32) -> i64 {
+    sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT COUNT(*) FROM {table} WHERE project_id = $1"
+    )))
+    .bind(project_id)
+    .fetch_one(pool)
+    .await
+    .expect("count rows")
+}
+
+fn now_epoch() -> f64 {
+    Utc::now().timestamp_micros() as f64 / 1_000_000.0
+}
+
+#[actix_web::test]
+async fn test_oversized_transaction_fields_are_stored_not_rejected() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Oversized Transaction").await;
+    let server = TestServer::new(&db).await;
+
+    let long = |n: usize| "x".repeat(n);
+    let now = now_epoch();
+    let transaction = serde_json::json!({
+        "type": "transaction",
+        "transaction": format!("/search?q={}", long(400)),
+        "start_timestamp": now - 1.0,
+        "timestamp": now,
+        "platform": long(100),
+        "release": long(300),
+        "environment": long(100),
+        "server_name": long(300),
+        "level": long(30),
+        "transaction_info": { "source": long(50) },
+        "sdk": { "name": long(300), "version": long(300) },
+        "contexts": { "trace": {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "op": long(100),
+            "status": long(50)
+        }},
+        "spans": [{
+            "span_id": "1123456789abcdef",
+            "parent_span_id": "0123456789abcdef",
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "op": long(200),
+            "status": long(50),
+            "description": long(5000),
+            "start_timestamp": now - 0.5,
+            "timestamp": now
+        }]
+    });
+
+    let status = post_items(
+        &server,
+        &project,
+        &[(serde_json::json!({ "type": "transaction" }), transaction)],
+    )
+    .await;
+
+    assert!(status.is_success(), "ingest returned {status}");
+    assert_eq!(count_rows(&db.pool, "transactions", project.id).await, 1);
+    assert_eq!(count_rows(&db.pool, "spans", project.id).await, 1);
+    let name: String =
+        sqlx::query_scalar("SELECT transaction_name FROM transactions WHERE project_id = $1")
+            .bind(project.id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        name.chars().count(),
+        200,
+        "Relay's max_chars for a transaction"
+    );
+
+    server.shutdown();
+}
+
+#[actix_web::test]
+async fn test_nul_bytes_in_a_transaction_and_its_spans_are_stored() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "NUL Transaction").await;
+    let server = TestServer::new(&db).await;
+
+    let now = now_epoch();
+    let transaction = serde_json::json!({
+        "type": "transaction",
+        "transaction": "GET /files/\u{0}name",
+        "start_timestamp": now - 1.0,
+        "timestamp": now,
+        "tags": { "path\u{0}": "a\u{0}b" },
+        "contexts": { "trace": {
+            "trace_id": "0123456789abcdef0123456789abcdef",
+            "span_id": "0123456789abcdef",
+            "op": "http.server"
+        }},
+        "spans": [{
+            "span_id": "1123456789abcdef",
+            "parent_span_id": "0123456789abcdef",
+            "op": "db.query",
+            "description": "SELECT * FROM t WHERE x = '\u{0}'",
+            "data": { "db.statement": "\u{0}" },
+            "start_timestamp": now - 0.5,
+            "timestamp": now
+        }]
+    });
+
+    let status = post_items(
+        &server,
+        &project,
+        &[(serde_json::json!({ "type": "transaction" }), transaction)],
+    )
+    .await;
+
+    assert!(status.is_success(), "ingest returned {status}");
+    assert_eq!(count_rows(&db.pool, "transactions", project.id).await, 1);
+    assert_eq!(count_rows(&db.pool, "spans", project.id).await, 1);
+
+    server.shutdown();
+}
+
+#[actix_web::test]
+async fn test_oversized_standalone_span_with_nul_is_stored() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Oversized Span").await;
+    let server = TestServer::new(&db).await;
+
+    let long = |n: usize| "y".repeat(n);
+    let now = now_epoch();
+    let span = serde_json::json!({
+        "span_id": "2123456789abcdef",
+        "trace_id": "1123456789abcdef0123456789abcdef",
+        "op": long(200),
+        "status": long(50),
+        "description": "cache \u{0} key",
+        "platform": long(100),
+        "release": long(300),
+        "environment": long(100),
+        "data": { "k": "\u{0}" },
+        "start_timestamp": now - 0.5,
+        "timestamp": now
+    });
+
+    let status = post_items(
+        &server,
+        &project,
+        &[(serde_json::json!({ "type": "span" }), span)],
+    )
+    .await;
+
+    assert!(status.is_success(), "ingest returned {status}");
+    assert_eq!(count_rows(&db.pool, "spans", project.id).await, 1);
+
+    server.shutdown();
+}
+
+#[actix_web::test]
+async fn test_span_v2_with_oversized_and_nul_attributes_is_stored() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Oversized Span V2").await;
+    let server = TestServer::new(&db).await;
+
+    let long = |n: usize| "z".repeat(n);
+    let now = now_epoch();
+    let string = |v: String| serde_json::json!({ "value": v, "type": "string" });
+    let container = serde_json::json!({
+        "version": 2,
+        "items": [{
+            "trace_id": "2123456789abcdef0123456789abcdef",
+            "span_id": "3123456789abcdef",
+            "name": "render \u{0}",
+            "status": long(50),
+            "is_segment": true,
+            "start_timestamp": now - 0.5,
+            "end_timestamp": now,
+            "attributes": {
+                "sentry.op": string(long(200)),
+                "sentry.release": string(long(300)),
+                "sentry.environment": string(long(100)),
+                "sentry.platform": string(long(100)),
+                "gen_ai.operation.name": string("chat".to_string()),
+                "gen_ai.request.model": string(long(300)),
+                "free": string("\u{0}".to_string())
+            }
+        }]
+    });
+
+    let status = post_items(
+        &server,
+        &project,
+        &[(
+            serde_json::json!({
+                "type": "span",
+                "content_type": "application/vnd.sentry.items.span.v2+json",
+                "item_count": 1
+            }),
+            container,
+        )],
+    )
+    .await;
+
+    assert!(status.is_success(), "ingest returned {status}");
+    assert_eq!(count_rows(&db.pool, "spans", project.id).await, 1);
+
+    server.shutdown();
+}
+
+#[actix_web::test]
+async fn test_log_with_unknown_long_level_and_nul_body_is_stored() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Odd Logs").await;
+    let server = TestServer::new(&db).await;
+
+    let container = serde_json::json!({ "items": [{
+        "timestamp": now_epoch(),
+        "trace_id": "3123456789abcdef0123456789abcdef",
+        "level": "x".repeat(40),
+        "body": "binary \u{0} payload",
+        "attributes": { "a\u{0}": { "value": "\u{0}", "type": "string" } }
+    }]});
+
+    let status = post_items(
+        &server,
+        &project,
+        &[(
+            serde_json::json!({
+                "type": "log",
+                "content_type": "application/vnd.sentry.items.log+json",
+                "item_count": 1
+            }),
+            container,
+        )],
+    )
+    .await;
+
+    assert!(status.is_success(), "ingest returned {status}");
+    assert_eq!(count_rows(&db.pool, "logs", project.id).await, 1);
+
+    server.shutdown();
+}
+
+#[actix_web::test]
+async fn test_error_event_with_nul_and_oversized_fields_is_digested() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Odd Error").await;
+    let server = TestServer::new(&db).await;
+
+    let long = |n: usize| "w".repeat(n);
+    post_envelope(
+        &server,
+        &project,
+        serde_json::json!({
+            "platform": long(100),
+            "level": "error",
+            "release": long(300),
+            "environment": long(100),
+            "server_name": long(300),
+            "transaction": long(300),
+            "logger": long(100),
+            "message": { "formatted": "bad \u{0} byte" },
+            "extra": { "blob\u{0}": "\u{0}" },
+            "exception": { "values": [{
+                "type": format!("Err{}", long(300)),
+                "value": "nul \u{0} inside",
+                "stacktrace": { "frames": [{
+                    "filename": long(400),
+                    "module": long(400),
+                    "function": long(400)
+                }]}
+            }]}
+        }),
+    )
+    .await;
+
+    assert_eq!(count_rows(&db.pool, "events", project.id).await, 1);
+
+    server.shutdown();
+}
+
+/// A device clock can report anything. chrono accepts years Postgres cannot
+/// store, so an absurd timestamp failed the whole envelope there. One before
+/// 1970 is dropped, as Relay does; one past year 9999 falls back to the
+/// time it was received.
+#[actix_web::test]
+async fn test_out_of_range_timestamps_do_not_fail_the_envelope() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Absurd Clock").await;
+    let server = TestServer::new(&db).await;
+
+    for epoch in [-3.0e11, 9.0e12] {
+        let tx = serde_json::json!({
+            "type": "transaction",
+            "transaction": "GET /x",
+            "start_timestamp": epoch,
+            "timestamp": epoch,
+            "contexts": { "trace": {
+                "trace_id": "0123456789abcdef0123456789abcdef",
+                "span_id": "0123456789abcdef"
+            }},
+            "spans": [{ "span_id": "1123456789abcdef", "start_timestamp": epoch, "timestamp": epoch }]
+        });
+        let status = post_items(
+            &server,
+            &project,
+            &[(serde_json::json!({ "type": "transaction" }), tx)],
+        )
+        .await;
+        assert!(
+            status.is_success(),
+            "epoch {epoch}: ingest returned {status}"
+        );
+    }
+    assert_eq!(count_rows(&db.pool, "transactions", project.id).await, 1);
+
+    server.shutdown();
+}
+
+// =============================================================================
+// Where Relay drops a value, Rustrak must not store it
+// =============================================================================
+
+/// Relay parses `level` into a closed enum (`debug`, `info`/`log`, `warning`,
+/// `error`, `fatal`/`critical`); anything else is removed and the default
+/// applies (relay-event-schema `Level::from_str`).
+#[actix_web::test]
+async fn test_levels_are_normalized_like_relay() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Levels").await;
+    let server = TestServer::new(&db).await;
+
+    for (sent, stored) in [("bogus", "error"), ("critical", "fatal"), ("log", "info")] {
+        post_envelope(
+            &server,
+            &project,
+            serde_json::json!({
+                "level": sent,
+                "exception": { "values": [{ "type": format!("Err{sent}"), "value": "x" }] }
+            }),
+        )
+        .await;
+        let level: String = sqlx::query_scalar(
+            "SELECT level FROM events WHERE project_id = $1 AND calculated_type = $2",
+        )
+        .bind(project.id)
+        .bind(format!("Err{sent}"))
+        .fetch_one(&db.pool)
+        .await
+        .expect("event stored");
+        assert_eq!(level, stored, "level {sent}");
+    }
+
+    let now = now_epoch();
+    let tx = serde_json::json!({
+        "type": "transaction", "transaction": "GET /x", "level": "bogus",
+        "start_timestamp": now - 1.0, "timestamp": now,
+        "contexts": { "trace": { "trace_id": "0123456789abcdef0123456789abcdef", "span_id": "0123456789abcdef" }}
+    });
+    post_items(
+        &server,
+        &project,
+        &[(serde_json::json!({ "type": "transaction" }), tx)],
+    )
+    .await;
+    let level: String = sqlx::query_scalar("SELECT level FROM transactions WHERE project_id = $1")
+        .bind(project.id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(level, "info");
+
+    server.shutdown();
+}
+
+/// Relay's `TimestampProcessor`: an event or transaction from before 1970 is
+/// invalid and dropped; a span from before 1970 is removed from its
+/// transaction, which is kept.
+#[actix_web::test]
+async fn test_pre_1970_timestamps_are_dropped_like_relay() {
+    let db = TestDb::new().await;
+    let project = create_test_project(&db.pool, "Stale").await;
+    let server = TestServer::new(&db).await;
+    let trace = serde_json::json!({ "trace": {
+        "trace_id": "0123456789abcdef0123456789abcdef", "span_id": "0123456789abcdef"
+    }});
+    let now = now_epoch();
+
+    let stale = serde_json::json!({
+        "type": "transaction", "transaction": "GET /old",
+        "start_timestamp": -100.0, "timestamp": -50.0, "contexts": trace
+    });
+    let status = post_items(
+        &server,
+        &project,
+        &[(serde_json::json!({ "type": "transaction" }), stale)],
+    )
+    .await;
+    assert!(
+        status.is_success(),
+        "a dropped item still answers 2xx: {status}"
+    );
+    assert_eq!(count_rows(&db.pool, "transactions", project.id).await, 0);
+
+    let mixed = serde_json::json!({
+        "type": "transaction", "transaction": "GET /new",
+        "start_timestamp": now - 1.0, "timestamp": now, "contexts": trace,
+        "spans": [
+            { "span_id": "1123456789abcdef", "start_timestamp": -5.0, "timestamp": now },
+            { "span_id": "2123456789abcdef", "start_timestamp": now - 0.5, "timestamp": now }
+        ]
+    });
+    post_items(
+        &server,
+        &project,
+        &[(serde_json::json!({ "type": "transaction" }), mixed)],
+    )
+    .await;
+    assert_eq!(count_rows(&db.pool, "transactions", project.id).await, 1);
+    let span_ids: Vec<String> =
+        sqlx::query_scalar("SELECT span_id FROM spans WHERE project_id = $1")
+            .bind(project.id)
+            .fetch_all(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(span_ids, vec!["2123456789abcdef".to_string()]);
+
+    post_envelope(
+        &server,
+        &project,
+        serde_json::json!({ "exception": { "values": [{ "type": "Old", "value": "x" }] } }),
+    )
+    .await;
+    let before = count_rows(&db.pool, "events", project.id).await;
+    let event_id = uuid::Uuid::new_v4().simple().to_string();
+    let body = serde_json::json!({
+        "event_id": event_id, "timestamp": -100.0,
+        "exception": { "values": [{ "type": "Ancient", "value": "x" }] }
+    })
+    .to_string();
+    let envelope = format!(
+        "{}\n{}\n{body}\n",
+        serde_json::json!({ "event_id": event_id }),
+        serde_json::json!({ "type": "event", "length": body.len() })
+    );
+    let url = format!(
+        "http://127.0.0.1:{}/api/{}/envelope/?sentry_key={}",
+        server.port, project.id, project.sentry_key
+    );
+    reqwest::Client::new()
+        .post(&url)
+        .body(envelope)
+        .send()
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(count_rows(&db.pool, "events", project.id).await, before);
+
+    server.shutdown();
+}

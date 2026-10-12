@@ -165,6 +165,21 @@ mod counters {
         assert!(second.panics.is_empty());
     }
 
+    /// The error code alone (a SQLSTATE such as `22001`) names the failure
+    /// class: a 5xx count by route says something broke, this says what.
+    #[test]
+    fn database_errors_are_counted_by_code_and_reset() {
+        let counters = Counters::new();
+        counters.db_error("22001");
+        counters.db_error("22001");
+        counters.db_error("40P01");
+
+        let first = counters.snapshot_and_reset();
+        assert_eq!(first.db_errors_by_code["22001"], 2);
+        assert_eq!(first.db_errors_by_code["40P01"], 1);
+        assert!(counters.snapshot_and_reset().db_errors_by_code.is_empty());
+    }
+
     #[test]
     fn repeated_keys_accumulate() {
         let counters = Counters::new();

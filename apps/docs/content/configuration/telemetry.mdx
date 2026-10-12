@@ -65,11 +65,12 @@ breaking.
 |---|---|
 | `ingest.accepted` | Ingest requests answered 2xx |
 | `ingest.rejected.{rate_limit,auth,too_large,malformed,other}` | Ingest requests turned away, by reason |
-| `ingest.latency_ms.{p50,p99}` | Ingest latency percentiles, on a fixed scale of buckets |
+| `ingest.latency_ms.{p50,p99}` | Ingest latency percentiles, on a fixed scale of buckets. Measured from when the request body has arrived, so a slow client upload does not count |
 | `digest.ok`, `digest.failed` | Events grouped into issues, and events that could not be |
 | `digest.rate_limited` | Accepted events the quota dropped instead of storing |
 | `http_5xx_by_route` | Server errors per **route pattern**, such as `/api/issues/{id}`. The real path never appears |
 | `alerts_failed_by_provider` | Alert deliveries that failed, per provider kind (`slack`, `webhook`, …) |
+| `db_errors_by_code` | Database errors behind a server error or a failed digest, per error code alone: a SQLSTATE on PostgreSQL (`22001`), a result code on SQLite. The message, which can name tables and values, is never included |
 | `panics` | Panics per source location inside Rustrak's own code (`src/digest/mod.rs:212`). The panic message is never included, because it could carry a path or a query |
 
 ### Configuration

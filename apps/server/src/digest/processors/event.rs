@@ -1,4 +1,4 @@
-use super::{InFlightDigests, Processor, ProcessorCtx};
+use super::{clamp, is_stale, relay_level, InFlightDigests, Processor, ProcessorCtx};
 use crate::config::RateLimitConfig;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
@@ -137,9 +137,25 @@ impl ErrorProcessor {
             read_event_with_location(&self.ingest_dir, metadata.project_id, &metadata.event_id)
                 .await?;
 
-        // 2. Parse event from filesystem
-        let mut event_data: serde_json::Value = serde_json::from_slice(&event_bytes)
-            .map_err(|e| AppError::Internal(format!("{INVALID_EVENT_JSON_PREFIX}: {e}")))?;
+        // 2. Parse event from filesystem. Ingest strips NUL escapes already;
+        // this covers files queued by a release that did not.
+        let mut event_data: serde_json::Value =
+            serde_json::from_slice(&crate::ingest::parser::strip_nul_escapes(&event_bytes))
+                .map_err(|e| AppError::Internal(format!("{INVALID_EVENT_JSON_PREFIX}: {e}")))?;
+
+        // Relay's `TimestampProcessor`: an event from before 1970 is invalid,
+        // and so is each breadcrumb from before 1970.
+        if is_stale(&event_data, "timestamp") || is_stale(&event_data, "start_timestamp") {
+            return Err(AppError::Validation(
+                "event timestamp is before 1970".to_string(),
+            ));
+        }
+        if let Some(crumbs) = event_data
+            .pointer_mut("/breadcrumbs/values")
+            .and_then(|v| v.as_array_mut())
+        {
+            crumbs.retain(|crumb| !is_stale(crumb, "timestamp"));
+        }
 
         // 2b. Rewrite stack frames using source maps (non-fatal)
         if let Err(e) = crate::services::sourcemap::rewrite_frames(
@@ -232,6 +248,18 @@ impl ErrorProcessor {
 
         // 6. Extract denormalized fields
         let denormalized = get_denormalized_fields(&event_data);
+        // Cut to the VARCHAR(20) and VARCHAR(64) columns, which Postgres enforces.
+        let str_field = |key: &str, max_chars: usize| {
+            event_data
+                .get(key)
+                .and_then(|v| v.as_str())
+                .map(|s| clamp(s, max_chars))
+        };
+        let level = event_data
+            .get("level")
+            .and_then(|v| v.as_str())
+            .and_then(relay_level);
+        let platform = str_field("platform", 64);
 
         // 7+8. Write the digest: grouping, issue, the event itself and the
         // project's stored-event counter, in one transaction, retried as a
@@ -250,8 +278,8 @@ impl ErrorProcessor {
                 legacy_grouping_key_hash: &legacy_grouping_key_hash,
                 timestamp: metadata.ingested_at,
                 denormalized: &denormalized,
-                level: event_data.get("level").and_then(|l| l.as_str()),
-                platform: event_data.get("platform").and_then(|p| p.as_str()),
+                level,
+                platform: platform.as_deref(),
                 event_data: &event_data,
                 remote_addr: metadata.remote_addr.as_deref(),
                 rate_limit_config: &self.rate_limit_config,

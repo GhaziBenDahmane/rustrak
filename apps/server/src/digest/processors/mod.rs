@@ -19,11 +19,75 @@ use crate::error::AppResult;
 use crate::ingest::envelope::EnvelopeItemKind;
 use crate::services::sourcemap::SourceMapProvider;
 use crate::workers::session_aggregator::SessionAggregatorHandle;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, TimeZone, Utc};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+/// Cuts `s` to the `max_chars` of the VARCHAR column it is bound to. Postgres
+/// rejects a longer value and fails the whole envelope, SQLite stores it, and
+/// Relay truncates to its own `max_chars` instead of rejecting.
+pub(crate) fn clamp(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
+/// [`clamp`] for a nullable column.
+pub(crate) fn clamp_opt(s: Option<String>, max_chars: usize) -> Option<String> {
+    s.map(|s| clamp(&s, max_chars))
+}
+
+/// The instant `epoch` seconds after 1970, if Postgres can store it as well.
+/// chrono reaches years Postgres rejects, and one such value failed the whole
+/// insert; an absurd device clock now reads as no timestamp at all.
+pub(crate) fn epoch_to_utc(epoch: f64) -> Option<DateTime<Utc>> {
+    if !epoch.is_finite() {
+        return None;
+    }
+    let secs = epoch.floor() as i64;
+    let nanos = ((epoch - epoch.floor()) * 1_000_000_000.0) as u32;
+    Utc.timestamp_opt(secs, nanos)
+        .single()
+        .filter(|dt| (1..=9999).contains(&dt.year()))
+}
+
+/// Whether `data[key]` is a timestamp from before 1970. Relay's
+/// `TimestampProcessor` drops an event or transaction carrying one, and removes
+/// such a span or breadcrumb from its event.
+pub(crate) fn is_stale(data: &serde_json::Value, key: &str) -> bool {
+    match data.get(key) {
+        Some(serde_json::Value::Number(n)) => n.as_f64().is_some_and(|epoch| epoch < 0.0),
+        Some(serde_json::Value::String(s)) => {
+            DateTime::parse_from_rfc3339(s).is_ok_and(|dt| dt.timestamp_millis() < 0)
+        }
+        _ => false,
+    }
+}
+
+/// `level` as Relay's `Level::from_str` reads it. Relay removes anything else,
+/// so the caller's default applies.
+pub(crate) fn relay_level(raw: &str) -> Option<&'static str> {
+    Some(match raw {
+        "debug" => "debug",
+        "info" | "log" => "info",
+        "warning" => "warning",
+        "error" => "error",
+        "fatal" | "critical" => "fatal",
+        _ => return None,
+    })
+}
+
+/// A payload timestamp, as epoch seconds or RFC 3339.
+pub(crate) fn extract_timestamp(data: &serde_json::Value, key: &str) -> Option<DateTime<Utc>> {
+    let raw = data.get(key)?;
+    if let Some(epoch) = raw.as_f64() {
+        return epoch_to_utc(epoch);
+    }
+    raw.as_str()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc))
+        .filter(|dt| (1..=9999).contains(&dt.year()))
+}
 
 /// The error digests this process currently owns: spawned by the ingest route
 /// and not finished yet, or committed and waiting for the durability

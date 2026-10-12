@@ -274,6 +274,15 @@ impl AppError {
         }
     }
 
+    /// The database's own code for this error: a SQLSTATE on Postgres, an
+    /// extended result code on SQLite. `None` for anything else.
+    pub fn db_code(&self) -> Option<String> {
+        match self.kind() {
+            AppError::Database(sqlx::Error::Database(db)) => db.code().map(|c| c.into_owned()),
+            _ => None,
+        }
+    }
+
     /// The `error.type` literal this error serialises as. An annotated error
     /// delegates, so it can never report a type its inner error would not.
     fn error_type(&self) -> &'static str {
@@ -323,6 +332,9 @@ impl ResponseError for AppError {
         let message = match &incident_id {
             Some(id) => {
                 log::error!("{}", incident_log_line(id, self));
+                if let Some(code) = self.db_code() {
+                    crate::telemetry::Counters::global().db_error(&code);
+                }
                 INTERNAL_ERROR_MESSAGE.to_string()
             }
             None => self.to_string(),

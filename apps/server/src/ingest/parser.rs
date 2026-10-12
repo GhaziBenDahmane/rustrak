@@ -54,6 +54,34 @@ pub(crate) fn detach_payload_if_needed(payload: Bytes, envelope_len: usize) -> B
     }
 }
 
+/// Removes every `\u0000` escape from a JSON document. PostgreSQL rejects a
+/// NUL in TEXT and JSONB, so one in any string fails the whole insert there,
+/// while SQLite stores it. A raw 0x00 cannot occur in valid JSON, so the
+/// escape is the only form to remove.
+pub(crate) fn strip_nul_escapes(json: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    const NUL: &[u8] = br"\u0000";
+    if !json.windows(NUL.len()).any(|w| w == NUL) {
+        return std::borrow::Cow::Borrowed(json);
+    }
+    let mut out = Vec::with_capacity(json.len());
+    let mut i = 0;
+    while i < json.len() {
+        if json[i] != b'\\' {
+            out.push(json[i]);
+            i += 1;
+        } else if json[i..].starts_with(NUL) {
+            i += NUL.len();
+        } else {
+            // Copy any other escape whole, so the `u0000` after an escaped
+            // backslash (`\\u0000`, literal text) is never read as one.
+            let end = (i + 2).min(json.len());
+            out.extend_from_slice(&json[i..end]);
+            i = end;
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 impl EnvelopeParser {
     pub fn new(data: Bytes) -> Self {
         Self { data, position: 0 }
@@ -133,6 +161,11 @@ impl EnvelopeParser {
             // Read until newline
             self.read_line(max_size)?
         };
+        // Every item type is JSON except attachments, which are ignored.
+        let payload = match strip_nul_escapes(&payload) {
+            std::borrow::Cow::Borrowed(_) => payload,
+            std::borrow::Cow::Owned(clean) => Bytes::from(clean),
+        };
 
         Ok(Some(EnvelopeItemKind::from((headers, payload))))
     }
@@ -184,6 +217,28 @@ impl EnvelopeParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nul_escapes_are_removed_and_everything_else_is_kept() {
+        let strip =
+            |s: &str| String::from_utf8(strip_nul_escapes(s.as_bytes()).into_owned()).unwrap();
+        assert_eq!(strip(r#"{"a\u0000":"x\u0000y"}"#), r#"{"a":"xy"}"#);
+        // An escaped backslash followed by `u0000` is literal text, not a NUL.
+        assert_eq!(strip(r#"{"a":"\\u0000\u0000"}"#), r#"{"a":"\\u0000"}"#);
+        assert_eq!(strip(r#"{"a":"\n\u00e9\""}"#), r#"{"a":"\n\u00e9\""}"#);
+        assert!(matches!(
+            strip_nul_escapes(br#"{"a":"b"}"#),
+            std::borrow::Cow::Borrowed(_)
+        ));
+    }
+
+    #[test]
+    fn a_stripped_payload_parses_to_the_same_value_minus_nul() {
+        let raw = serde_json::json!({ "k\u{0}": ["\u{0}", "a\u{0}b", "\\u0000"] }).to_string();
+        let clean: serde_json::Value =
+            serde_json::from_slice(&strip_nul_escapes(raw.as_bytes())).unwrap();
+        assert_eq!(clean, serde_json::json!({ "k": ["", "ab", "\\u0000"] }));
+    }
 
     /// Builds a minimal envelope with one item of the given type and payload size.
     fn envelope_with_item(item_type: &str, payload_len: usize) -> Vec<u8> {

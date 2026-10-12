@@ -55,17 +55,21 @@ pub fn extract_gen_ai_columns(span_data: &mut Value, op: Option<&str>) -> GenAiC
 
     normalize_gen_ai_attributes(span_data, op);
 
-    let get_str =
-        |data: &Value, key: &str| data.get(key).and_then(|v| v.as_str()).map(String::from);
+    // Cut to the VARCHAR column each value lands in: Postgres rejects longer.
+    let get_str = |data: &Value, key: &str, max_chars: usize| {
+        data.get(key)
+            .and_then(|v| v.as_str())
+            .map(|s| s.chars().take(max_chars).collect::<String>())
+    };
     let get_f64 = |data: &Value, key: &str| data.get(key).and_then(|v| v.as_f64());
 
     GenAiColumns {
-        operation_type: get_str(span_data, "gen_ai.operation.type"),
-        agent_name: get_str(span_data, "gen_ai.agent.name"),
-        request_model: get_str(span_data, "gen_ai.request.model"),
-        response_model: get_str(span_data, "gen_ai.response.model"),
-        tool_name: get_str(span_data, "gen_ai.tool.name"),
-        conversation_id: get_str(span_data, "gen_ai.conversation.id"),
+        operation_type: get_str(span_data, "gen_ai.operation.type", 32),
+        agent_name: get_str(span_data, "gen_ai.agent.name", 255),
+        request_model: get_str(span_data, "gen_ai.request.model", 255),
+        response_model: get_str(span_data, "gen_ai.response.model", 255),
+        tool_name: get_str(span_data, "gen_ai.tool.name", 255),
+        conversation_id: get_str(span_data, "gen_ai.conversation.id", 255),
         usage_input_tokens: get_f64(span_data, "gen_ai.usage.input_tokens"),
         usage_output_tokens: get_f64(span_data, "gen_ai.usage.output_tokens"),
         usage_total_tokens: get_f64(span_data, "gen_ai.usage.total_tokens"),
