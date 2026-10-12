@@ -76,6 +76,8 @@ export function ReleaseArticle({ release }: { release: Release }) {
             if (section.title) number += 1;
             return (
               <BlurIn
+                // Sections of a fixed release never reorder; an untitled one has only its position.
+                // react-doctor-disable-next-line react-doctor/no-array-index-as-key
                 key={section.title || index}
                 index={index + 1}
                 className="mt-12 first:mt-10"

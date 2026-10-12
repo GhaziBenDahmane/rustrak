@@ -5,8 +5,8 @@ import * as m from 'motion/react-m';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { GRID } from '../editorial/grid';
-import { BlurIn, MaskIn, Rule, VIEW } from '../editorial/motion';
-import { EASE } from '../landing/motion';
+import { BlurIn, MaskIn, Rule } from '../editorial/motion';
+import { EASE, VIEW } from '../landing/motion';
 import { type Item, STAGES, type Stage, slug } from './data';
 
 export function Stages() {
@@ -140,9 +140,14 @@ function Row({
 
       <AnimatePresence initial={false}>
         {open ? (
+          /* Opening to `height: auto` has no transform equivalent, and the
+             reflow is the point: the rows below have to make room. */
           <m.div
+            // react-doctor-disable-next-line react-doctor/no-layout-property-animation
             initial={{ height: 0, opacity: 0 }}
+            // react-doctor-disable-next-line react-doctor/no-layout-property-animation
             animate={{ height: 'auto', opacity: 1 }}
+            // react-doctor-disable-next-line react-doctor/no-layout-property-animation
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.6, ease: EASE }}
             className="overflow-hidden"

@@ -3,7 +3,7 @@
 import * as m from 'motion/react-m';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import { EASE } from '../landing/motion';
+import { EASE, VIEW } from '../landing/motion';
 import { GRID } from './grid';
 
 /**
@@ -11,8 +11,6 @@ import { GRID } from './grid';
  * Four moves and no more: type rises out of a mask, rules draw across, blocks
  * fade up, list rows sharpen out of a blur. One curve for all of them.
  */
-
-export const VIEW = { once: true, margin: '-12% 0px' } as const;
 
 /**
  * Rises out of a mask. A single word goes letter by letter; a sentence goes

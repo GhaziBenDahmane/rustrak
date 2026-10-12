@@ -5,6 +5,7 @@ import * as m from 'motion/react-m';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { EASE } from '../landing/motion';
+import { useSmoothScrolling } from '../landing/smooth-scroll';
 import { type Item, STAGES, slug } from './data';
 
 const TONE: Record<string, string> = {
@@ -20,6 +21,7 @@ const TONE: Record<string, string> = {
  */
 export function Overview() {
   const lenis = useLenis();
+  const smooth = useSmoothScrolling();
   const [hover, setHover] = useState<{ item: Item; stage: string } | null>(
     null,
   );
@@ -29,7 +31,8 @@ export function Overview() {
 
   const go = (item: Item) => {
     const target = `#${slug(item.title)}`;
-    if (lenis) lenis.scrollTo(target, { offset: -140, duration: 1.6 });
+    if (lenis && smooth)
+      lenis.scrollTo(target, { offset: -140, duration: 1.6 });
     else document.querySelector(target)?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -65,6 +68,7 @@ export function Overview() {
                       setHover({ item, stage: stage.label })
                     }
                     onFocus={() => setHover({ item, stage: stage.label })}
+                    onBlur={() => setHover(null)}
                     onClick={() => go(item)}
                     className="group flex h-6 flex-1 cursor-pointer items-end"
                   >

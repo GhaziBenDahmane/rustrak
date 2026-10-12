@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { formatReleaseDate, type ReleasePulse } from '@/lib/release';
 import { cn } from '@/lib/utils';
 import { EASE } from '../landing/motion';
+import { useSmoothScrolling } from '../landing/smooth-scroll';
 
 const TONE: Record<ReleasePulse['channel'], string> = {
   minor: 'bg-primary',
@@ -28,14 +29,18 @@ export function ReleaseStrip({
   onSelect: (anchor: string) => boolean;
 }) {
   const lenis = useLenis();
+  const smooth = useSmoothScrolling();
   const [hover, setHover] = useState<ReleasePulse | null>(null);
   const history = [...pulse].reverse();
-  const peak = Math.max(...history.map((release) => release.total));
+  const peak = Math.max(1, ...history.map((release) => release.total));
   const changes = history.reduce((sum, release) => sum + release.total, 0);
 
   const go = (anchor: string) => {
     if (onSelect(anchor)) return;
-    if (lenis) lenis.scrollTo(`#${anchor}`, { offset: -96, duration: 1.6 });
+    // A button has no href, so the hash a link would have set is written here.
+    window.history.pushState(null, '', `#${anchor}`);
+    if (lenis && smooth)
+      lenis.scrollTo(`#${anchor}`, { offset: -96, duration: 1.6 });
     else
       document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -54,6 +59,7 @@ export function ReleaseStrip({
               aria-label={`${release.version}: ${release.title}`}
               onPointerEnter={() => setHover(release)}
               onFocus={() => setHover(release)}
+              onBlur={() => setHover(null)}
               onClick={() => go(release.anchor)}
               className="flex h-full min-w-0 flex-1 cursor-pointer items-end"
             >

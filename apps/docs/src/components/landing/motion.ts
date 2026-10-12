@@ -13,3 +13,6 @@ export const DUR = {
 } as const;
 
 export const STAGGER = 0.09;
+
+/** Scroll-in trigger for the editorial pages: once, a little past the fold. */
+export const VIEW = { once: true, margin: '-12% 0px' } as const;
