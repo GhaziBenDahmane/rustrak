@@ -1,13 +1,14 @@
-//! What GitHub tells Rustrak: installations coming and going, and linked
-//! issues closed, reopened, assigned or commented on.
+//! What GitHub tells Rustrak: installations coming and going, linked issues
+//! closed, reopened, assigned or commented on, and commits pushed.
 
+use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 
-use super::GitHubService;
+use super::{fixes_references, GitHubService};
 use crate::db::DbPool;
 use crate::error::AppResult;
-use crate::models::github::GitHubApp;
-use crate::services::{IssueService, IssueSocialService};
+use crate::models::github::{GitHubApp, RepoCommit};
+use crate::services::{IssueService, IssueSocialService, ProjectService};
 
 fn text<'a>(value: &'a Value, pointer: &str) -> &'a str {
     value
@@ -26,6 +27,7 @@ pub async fn handle(pool: &DbPool, app: &GitHubApp, event: &str, payload: &Value
         "installation" => installation(pool, payload).await,
         "issues" => issues(pool, payload).await,
         "issue_comment" => issue_comment(pool, payload).await,
+        "push" => push(pool, payload).await,
         _ => Ok(()),
     }
 }
@@ -135,6 +137,99 @@ async fn issue_comment(pool: &DbPool, payload: &Value) -> AppResult<()> {
         GitHubService::links_to_remote(pool, text(payload, "/repository/full_name"), number).await?
     {
         IssueSocialService::add_activity(pool, link.issue_id, None, "note", &data).await?;
+    }
+    Ok(())
+}
+
+/// Keeps the commits pushed to a project's default branch, and resolves the
+/// issues their messages say they fix.
+async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
+    let repo = text(payload, "/repository/full_name");
+    let branch = text(payload, "/ref").trim_start_matches("refs/heads/");
+    let projects: Vec<_> = GitHubService::projects_for_repo(pool, repo)
+        .await?
+        .into_iter()
+        .filter(|p| p.default_branch == branch)
+        .collect();
+    if projects.is_empty() {
+        return Ok(());
+    }
+    let commits = payload
+        .get("commits")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for commit in &commits {
+        let files: Vec<&str> = ["added", "modified", "removed"]
+            .iter()
+            .flat_map(|key| {
+                commit
+                    .get(*key)
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+            })
+            .filter_map(Value::as_str)
+            .collect();
+        let saved = RepoCommit {
+            repo_full_name: repo.to_string(),
+            sha: text(commit, "/id").to_string(),
+            message: text(commit, "/message").to_string(),
+            author_name: text(commit, "/author/name").to_string(),
+            author_login: commit
+                .pointer("/author/username")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            url: text(commit, "/url").to_string(),
+            files: json!(files).to_string(),
+            committed_at: DateTime::parse_from_rfc3339(text(commit, "/timestamp"))
+                .map(|d| d.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now()),
+        };
+        GitHubService::save_commit(pool, &saved).await?;
+        resolve_fixed(pool, &projects, &saved).await?;
+    }
+    Ok(())
+}
+
+async fn resolve_fixed(
+    pool: &DbPool,
+    projects: &[crate::models::github::ProjectRepositoryRow],
+    commit: &RepoCommit,
+) -> AppResult<()> {
+    for (slug, number) in fixes_references(&commit.message) {
+        for repo in projects {
+            let project = ProjectService::get_by_id(pool, repo.project_id).await?;
+            if project.slug.to_ascii_uppercase() != slug {
+                continue;
+            }
+            let issue: Option<(uuid::Uuid, String)> = sqlx::query_as(
+                "SELECT id, status FROM issues WHERE project_id = $1 AND digest_order = $2",
+            )
+            .bind(project.id)
+            .bind(number)
+            .fetch_optional(pool)
+            .await?;
+            let Some((issue_id, status)) = issue else {
+                continue;
+            };
+            if status == crate::models::STATUS_RESOLVED {
+                continue;
+            }
+            IssueService::resolve(pool, issue_id).await?;
+            let data = json!({
+                "status": crate::models::STATUS_RESOLVED,
+                "source": "github",
+                "commit": {
+                    "sha": commit.sha,
+                    "url": commit.url,
+                    "message": commit.message.lines().next().unwrap_or_default(),
+                    "author": commit.author_login.as_deref().unwrap_or(&commit.author_name),
+                },
+            })
+            .to_string();
+            IssueSocialService::add_activity(pool, issue_id, None, "set_status", &data).await?;
+        }
     }
     Ok(())
 }

@@ -92,7 +92,17 @@ export class GitHubResource extends BaseResource {
     );
   }
 
-  /** The GitHub issues linked to one issue. */
+  /** Copies the repository's CODEOWNERS into Rustrak. */
+  async syncCodeowners(
+    projectId: number,
+  ): Promise<Result<ProjectRepository, RustrakError>> {
+    return this.request(
+      () => this.http.post(`api/projects/${projectId}/github/codeowners`),
+      projectRepositorySchema,
+    );
+  }
+
+  /** Links, suspect commits and owners for one issue. */
   async issue(
     projectId: number,
     issueId: string,

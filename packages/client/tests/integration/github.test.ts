@@ -15,6 +15,8 @@ const repository = {
   default_branch: 'main',
   html_url: 'https://github.com/acme/web',
   code_mappings: [{ stack_root: '/app/', source_root: 'src/' }],
+  codeowners_rules: null,
+  codeowners_synced_at: null,
 };
 
 const link = {
@@ -117,12 +119,24 @@ describe('GitHubResource', () => {
     expect(error.kind).toBe('validation');
   });
 
-  it("reads an issue's GitHub links and links issues", async () => {
+  it("reads an issue's code block and links issues", async () => {
     const base = `${BASE_URL}/api/projects/1/issues/${link.issue_id}/github`;
     server.use(
       http.get(base, () =>
         HttpResponse.json({
           links: [link],
+          suspect_commits: [
+            {
+              repo_full_name: 'acme/web',
+              sha: 'abc123',
+              message: 'Refactor pool',
+              author_name: 'Ana',
+              author_login: 'ana',
+              url: 'https://github.com/acme/web/commit/abc123',
+              committed_at: NOW,
+            },
+          ],
+          owners: ['@acme/db'],
         }),
       ),
       http.post(`${base}/issues`, () =>
@@ -137,7 +151,8 @@ describe('GitHubResource', () => {
       ),
     );
     const code = expectOk(await client.github.issue(1, link.issue_id));
-    expect(code.links[0]?.number).toBe(12);
+    expect(code.suspect_commits[0]?.author_login).toBe('ana');
+    expect(code.owners).toEqual(['@acme/db']);
     expect(
       expectOk(await client.github.createIssue(1, link.issue_id)).number,
     ).toBe(12);

@@ -1,5 +1,6 @@
-import type { ActivityEntry, Issue } from '@rustrak/client';
+import type { ActivityEntry, Issue, IssueGitHub } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
+import { IssueCodeBlock } from '@/features/github/ui/components/issue-code-block';
 import { IssueActivity } from '@/features/issue/ui/components/issue-activity';
 
 interface EventRailProps {
@@ -7,6 +8,8 @@ interface EventRailProps {
   issueId: string;
   issue: Issue;
   activity: ActivityEntry[];
+  /** What GitHub says about the issue; `null` when the project has no repository. */
+  code: IssueGitHub | null;
 }
 
 /**
@@ -22,6 +25,7 @@ export function EventRail({
   issueId,
   issue,
   activity,
+  code,
 }: EventRailProps) {
   const t = useTranslations('projectPages');
   const format = useFormatter();
@@ -50,6 +54,8 @@ export function EventRail({
           </p>
         )}
       </div>
+
+      <IssueCodeBlock projectId={projectId} code={code} />
 
       <div className="p-4">
         <IssueActivity

@@ -1755,6 +1755,15 @@
       "sourceRoot": "仓库中的路径",
       "addMapping": "添加映射",
       "removeMapping": "移除映射",
+      "issues": "Issue",
+      "fixes": "通过提交解决",
+      "fixesDescription": "默认分支上包含此内容的提交会解决该 Issue。",
+      "codeowners": "代码负责人",
+      "codeownersDescription": "从仓库的 CODEOWNERS 文件读取，并显示在每个 Issue 上。",
+      "codeownersSync": "同步",
+      "codeownersStatus": "{count} 条规则 · {when}",
+      "codeownersNever": "尚未同步",
+      "codeownersFailed": "无法同步 CODEOWNERS",
       "danger": "危险区域",
       "disconnect": "断开仓库",
       "disconnectDescription": "停止将此项目的 Issue 关联到 GitHub。现有链接将保留。",
@@ -1773,6 +1782,12 @@
       "linkTitle": "关联 GitHub Issue",
       "linkDescription": "粘贴 Issue 或 Pull Request 的 URL，或输入 #123 表示此项目仓库中的 Issue。",
       "linkSubmit": "关联"
+    },
+    "code": {
+      "connect": "将此项目连接到 GitHub",
+      "title": "代码",
+      "suspect": "可疑提交",
+      "owners": "负责人"
     },
     "account": {
       "title": "GitHub 用户名",

@@ -3612,6 +3612,74 @@
         ]
       }
     },
+    "/api/projects/{project_id}/github/codeowners": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST /api/projects/{project_id}/github/codeowners: copies the repository's\nCODEOWNERS so ownership can be answered without asking GitHub each time.",
+        "operationId": "sync_codeowners",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CODEOWNERS synced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRepository"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/projects/{project_id}/issues": {
       "get": {
         "tags": [
@@ -4753,7 +4821,7 @@
         "tags": [
           "GitHub"
         ],
-        "summary": "GET /api/projects/{project_id}/issues/{issue_id}/github: the issue's links.",
+        "summary": "GET /api/projects/{project_id}/issues/{issue_id}/github: the issue's links,\nthe commits that may have caused it, and who owns its culprit file.",
         "operationId": "issue_github",
         "parameters": [
           {
@@ -4779,7 +4847,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The issue's GitHub links",
+            "description": "Links, suspect commits and owners",
             "content": {
               "application/json": {
                 "schema": {
@@ -10694,9 +10762,11 @@
       },
       "IssueGitHub": {
         "type": "object",
-        "description": "`GET .../issues/{id}/github`: what the issue has on GitHub.",
+        "description": "`GET .../issues/{id}/github`: the issue's \"Code\" block in one answer.",
         "required": [
-          "links"
+          "links",
+          "suspect_commits",
+          "owners"
         ],
         "properties": {
           "links": {
@@ -10704,6 +10774,20 @@
             "items": {
               "$ref": "#/components/schemas/IssueLink"
             }
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Owners of the culprit file according to CODEOWNERS."
+          },
+          "suspect_commits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepoCommit"
+            },
+            "description": "Commits that touched the issue's culprit file shortly before it first\nappeared, newest first."
           }
         }
       },
@@ -11210,6 +11294,21 @@
               "$ref": "#/components/schemas/CodeMapping"
             }
           },
+          "codeowners_rules": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "How many ownership rules the last CODEOWNERS sync found; `None` before\nthe first sync.",
+            "minimum": 0
+          },
+          "codeowners_synced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
           "default_branch": {
             "type": "string"
           },
@@ -11519,6 +11618,44 @@
             ]
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "RepoCommit": {
+        "type": "object",
+        "required": [
+          "repo_full_name",
+          "sha",
+          "message",
+          "author_name",
+          "url",
+          "committed_at"
+        ],
+        "properties": {
+          "author_login": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "author_name": {
+            "type": "string"
+          },
+          "committed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string"
+          },
+          "repo_full_name": {
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "url": {
             "type": "string"
           }
         }

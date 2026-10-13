@@ -35,6 +35,13 @@ export async function removeProjectRepository(
   return client.github.removeProjectRepository(projectId);
 }
 
+export async function syncCodeowners(
+  projectId: number,
+): Promise<Result<ProjectRepository, RustrakError>> {
+  const client = await createClient();
+  return client.github.syncCodeowners(projectId);
+}
+
 export async function createGitHubIssue(
   projectId: number,
   issueId: string,

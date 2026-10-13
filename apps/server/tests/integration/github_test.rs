@@ -477,6 +477,23 @@ async fn project_repository_round_trip() {
     assert_eq!(test::call_service(&app, req).await.status(), 204);
 }
 
+#[actix_web::test]
+async fn codeowners_sync_counts_the_rules() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let app = app!(db);
+
+    let req = test::TestRequest::post()
+        .uri(&format!("/api/projects/{}/github/codeowners", project.id))
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    assert_eq!(body["codeowners_rules"], 2);
+}
+
 // =============================================================================
 // Issues
 // =============================================================================
@@ -649,6 +666,49 @@ async fn resolving_commenting_and_assigning_mirror_onto_linked_issues() {
 }
 
 #[actix_web::test]
+async fn issue_code_block_names_suspect_commits_and_owners() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    GitHubService::save_codeowners(&db.pool, project.id, Some("* @acme/all\n/lib/ @acme/db\n"))
+        .await
+        .unwrap();
+    for (sha, file, hours_before) in [("aaa", "lib/db.ts", 2), ("bbb", "README.md", 1)] {
+        GitHubService::save_commit(
+            &db.pool,
+            &rustrak::models::github::RepoCommit {
+                repo_full_name: "acme/web".into(),
+                sha: sha.into(),
+                message: "Refactor pool".into(),
+                author_name: "Ana".into(),
+                author_login: Some("ana".into()),
+                url: format!("https://github.com/acme/web/commit/{sha}"),
+                files: json!([file]).to_string(),
+                committed_at: issue.first_seen - chrono::Duration::hours(hours_before),
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let app = app!(db);
+
+    let req = test::TestRequest::get()
+        .uri(&format!(
+            "/api/projects/{}/issues/{}/github",
+            project.id, issue.id
+        ))
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    assert_eq!(body["suspect_commits"].as_array().unwrap().len(), 1);
+    assert_eq!(body["suspect_commits"][0]["sha"], "aaa");
+    assert_eq!(body["owners"], json!(["@acme/db"]));
+}
+
+#[actix_web::test]
 async fn bulk_resolving_closes_linked_issues_of_this_project_only() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;
@@ -788,6 +848,55 @@ async fn github_comments_and_assignees_come_back_into_rustrak() {
     test::call_service(&app, webhook("issues", &assigned, "whs").to_request()).await;
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.assigned_to, Some(user.id));
+}
+
+#[actix_web::test]
+async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    let app = app!(db);
+
+    let push = |branch: &str, sha: &str| {
+        json!({
+            "ref": format!("refs/heads/{branch}"),
+            "repository": { "full_name": "acme/web" },
+            "commits": [{
+                "id": sha, "message": "Guard the pool\n\nFixes WEB-1",
+                "timestamp": (Utc::now() - chrono::Duration::minutes(5)).to_rfc3339(),
+                "url": format!("https://github.com/acme/web/commit/{sha}"),
+                "author": { "name": "Ana", "username": "ana" },
+                "added": [], "removed": [], "modified": ["lib/db.ts"],
+            }],
+        })
+    };
+
+    // Other branches are not the code that ships.
+    test::call_service(
+        &app,
+        webhook("push", &push("feature", "f00"), "whs").to_request(),
+    )
+    .await;
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "unresolved");
+
+    let req = webhook("push", &push("trunk", "abc123"), "whs").to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 204);
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "resolved");
+    let activity = rustrak::services::IssueSocialService::list_activity(&db.pool, issue.id)
+        .await
+        .unwrap();
+    let data: Value = serde_json::from_str(&activity[0].data).unwrap();
+    assert_eq!(data["commit"]["sha"], "abc123");
+
+    let commits: Vec<(String,)> = sqlx::query_as("SELECT sha FROM repo_commits")
+        .fetch_all(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(commits, vec![("abc123".to_string(),)]);
 }
 
 #[actix_web::test]

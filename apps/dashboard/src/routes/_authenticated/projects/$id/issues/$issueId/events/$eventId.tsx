@@ -237,6 +237,7 @@ function EventView({
       issueId={issueId}
       issue={issue}
       activity={activity}
+      code={repository ? code : null}
     />
   );
   const sourceUrl = repository

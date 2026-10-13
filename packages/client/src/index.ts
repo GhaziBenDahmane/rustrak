@@ -123,6 +123,7 @@ export type {
   RegisterRequest,
   ReleaseHealthRow,
   ReleaseHealthStatsOptions,
+  RepoCommit,
   RoutingOverride,
   ServerVersion,
   SessionSummary,

@@ -5,13 +5,14 @@ import type {
   Result,
   RustrakError,
 } from '@rustrak/client';
-import { ArrowUpRight, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Plus, RefreshCw, X } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { useTranslations } from 'use-intl';
+import { useFormatter, useTranslations } from 'use-intl';
 import {
   removeProjectRepository,
   setProjectRepository,
+  syncCodeowners,
 } from '@/features/github/api/mutations';
 import { Link } from '@/shared/ui/components/link';
 import { SettingRow, SettingSection } from '@/shared/ui/components/setting-row';
@@ -28,6 +29,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface RepositorySettingsProps {
   projectId: number;
+  projectSlug: string;
   repository: ProjectRepository | null;
   repositories: Result<GitHubRepository[], RustrakError>;
 }
@@ -38,10 +40,12 @@ interface RepositorySettingsProps {
  */
 export function RepositorySettings({
   projectId,
+  projectSlug,
   repository,
   repositories,
 }: RepositorySettingsProps) {
   const t = useTranslations('github');
+  const format = useFormatter();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -155,6 +159,47 @@ export function RepositorySettings({
                 disabled={isPending}
                 onSave={(code_mappings) => save({ code_mappings })}
               />
+            </SettingRow>
+          </SettingSection>
+
+          <SettingSection title={t('repository.issues')}>
+            <SettingRow
+              title={t('repository.fixes')}
+              description={t('repository.fixesDescription')}
+            >
+              <code className="rounded bg-muted px-2 py-1 font-mono text-xs">
+                Fixes {projectSlug.toUpperCase()}-123
+              </code>
+            </SettingRow>
+            <SettingRow
+              title={t('repository.codeowners')}
+              description={t('repository.codeownersDescription')}
+            >
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() =>
+                    run(t('repository.codeownersFailed'), () =>
+                      syncCodeowners(projectId),
+                    )
+                  }
+                >
+                  <RefreshCw />
+                  {t('repository.codeownersSync')}
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {repository.codeowners_synced_at
+                    ? t('repository.codeownersStatus', {
+                        count: repository.codeowners_rules ?? 0,
+                        when: format.relativeTime(
+                          new Date(repository.codeowners_synced_at),
+                        ),
+                      })
+                    : t('repository.codeownersNever')}
+                </span>
+              </div>
             </SettingRow>
           </SettingSection>
 

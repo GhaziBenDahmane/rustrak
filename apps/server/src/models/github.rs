@@ -90,6 +90,8 @@ pub struct ProjectRepositoryRow {
     pub repo_full_name: String,
     pub default_branch: String,
     pub code_mappings: String,
+    pub codeowners: Option<String>,
+    pub codeowners_synced_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -101,6 +103,10 @@ pub struct ProjectRepository {
     pub default_branch: String,
     pub html_url: String,
     pub code_mappings: Vec<CodeMapping>,
+    /// How many ownership rules the last CODEOWNERS sync found; `None` before
+    /// the first sync.
+    pub codeowners_rules: Option<usize>,
+    pub codeowners_synced_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,11 +143,30 @@ pub struct IssueLink {
     pub created_at: DateTime<Utc>,
 }
 
-/// `GET .../issues/{id}/github`: what the issue has on GitHub.
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RepoCommit {
+    pub repo_full_name: String,
+    pub sha: String,
+    pub message: String,
+    pub author_name: String,
+    pub author_login: Option<String>,
+    pub url: String,
+    #[serde(skip)]
+    pub files: String,
+    pub committed_at: DateTime<Utc>,
+}
+
+/// `GET .../issues/{id}/github`: the issue's "Code" block in one answer.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct IssueGitHub {
     pub links: Vec<IssueLink>,
+    /// Commits that touched the issue's culprit file shortly before it first
+    /// appeared, newest first.
+    pub suspect_commits: Vec<RepoCommit>,
+    /// Owners of the culprit file according to CODEOWNERS.
+    pub owners: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]

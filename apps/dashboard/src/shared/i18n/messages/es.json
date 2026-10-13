@@ -1755,6 +1755,15 @@
       "sourceRoot": "Ruta en el repositorio",
       "addMapping": "Añadir ruta",
       "removeMapping": "Quitar ruta",
+      "issues": "Issues",
+      "fixes": "Resolver desde commits",
+      "fixesDescription": "Un commit en la rama principal que diga esto resuelve el issue.",
+      "codeowners": "Responsables del código",
+      "codeownersDescription": "Se leen del fichero CODEOWNERS del repositorio y se muestran en cada issue.",
+      "codeownersSync": "Sincronizar",
+      "codeownersStatus": "{count, plural, one {# regla} other {# reglas}} · {when}",
+      "codeownersNever": "Aún no sincronizado",
+      "codeownersFailed": "No se pudo sincronizar CODEOWNERS",
       "danger": "Zona de peligro",
       "disconnect": "Desconectar repositorio",
       "disconnectDescription": "Deja de enlazar los issues de este proyecto con GitHub. Los enlaces existentes se mantienen.",
@@ -1773,6 +1782,12 @@
       "linkTitle": "Enlazar un issue de GitHub",
       "linkDescription": "Pega la URL de un issue o pull request, o escribe #123 para el repositorio de este proyecto.",
       "linkSubmit": "Enlazar"
+    },
+    "code": {
+      "connect": "Conecta este proyecto con GitHub",
+      "title": "Código",
+      "suspect": "Commits sospechosos",
+      "owners": "Responsables"
     },
     "account": {
       "title": "Usuario de GitHub",

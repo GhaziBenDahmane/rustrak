@@ -1755,6 +1755,15 @@
       "sourceRoot": "Calea din depozit",
       "addMapping": "Adaugă",
       "removeMapping": "Elimină",
+      "issues": "Issues",
+      "fixes": "Rezolvă din commituri",
+      "fixesDescription": "Un commit pe ramura implicită care conține asta rezolvă issue-ul.",
+      "codeowners": "Responsabili de cod",
+      "codeownersDescription": "Citiți din fișierul CODEOWNERS al depozitului și afișați la fiecare issue.",
+      "codeownersSync": "Sincronizează",
+      "codeownersStatus": "{count, plural, one {# regulă} few {# reguli} other {# de reguli}} · {when}",
+      "codeownersNever": "Nesincronizat încă",
+      "codeownersFailed": "CODEOWNERS nu a putut fi sincronizat",
       "danger": "Zonă periculoasă",
       "disconnect": "Deconectează depozitul",
       "disconnectDescription": "Oprește legarea issue-urilor acestui proiect de GitHub. Legăturile existente rămân.",
@@ -1773,6 +1782,12 @@
       "linkTitle": "Leagă un issue GitHub",
       "linkDescription": "Lipește URL-ul unui issue sau pull request, sau scrie #123 pentru depozitul acestui proiect.",
       "linkSubmit": "Leagă"
+    },
+    "code": {
+      "connect": "Conectează acest proiect la GitHub",
+      "title": "Cod",
+      "suspect": "Commituri suspecte",
+      "owners": "Responsabili"
     },
     "account": {
       "title": "Utilizator GitHub",

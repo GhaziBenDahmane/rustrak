@@ -50,6 +50,8 @@ export const projectRepositorySchema = z.object({
   default_branch: z.string(),
   html_url: z.string(),
   code_mappings: z.array(codeMappingSchema),
+  codeowners_rules: z.number().int().nullable(),
+  codeowners_synced_at: dateTimeSchema.nullable(),
 });
 
 export const updateProjectRepositorySchema = z.object({
@@ -69,8 +71,20 @@ export const issueLinkSchema = z.object({
   created_at: dateTimeSchema,
 });
 
+export const repoCommitSchema = z.object({
+  repo_full_name: z.string(),
+  sha: z.string(),
+  message: z.string(),
+  author_name: z.string(),
+  author_login: z.string().nullable(),
+  url: z.string(),
+  committed_at: dateTimeSchema,
+});
+
 export const issueGitHubSchema = z.object({
   links: z.array(issueLinkSchema),
+  suspect_commits: z.array(repoCommitSchema),
+  owners: z.array(z.string()),
 });
 
 export const gitHubLoginSchema = z.object({

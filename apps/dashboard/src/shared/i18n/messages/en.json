@@ -1755,6 +1755,15 @@
       "sourceRoot": "Path in the repository",
       "addMapping": "Add mapping",
       "removeMapping": "Remove mapping",
+      "issues": "Issues",
+      "fixes": "Resolve from commits",
+      "fixesDescription": "A commit on the default branch that says this resolves the issue.",
+      "codeowners": "Code owners",
+      "codeownersDescription": "Read from the repository's CODEOWNERS file and shown on each issue.",
+      "codeownersSync": "Sync",
+      "codeownersStatus": "{count, plural, one {# rule} other {# rules}} · {when}",
+      "codeownersNever": "Not synced yet",
+      "codeownersFailed": "Could not sync CODEOWNERS",
       "danger": "Danger zone",
       "disconnect": "Disconnect repository",
       "disconnectDescription": "Stops linking this project's issues to GitHub. Existing links stay.",
@@ -1773,6 +1782,12 @@
       "linkTitle": "Link a GitHub issue",
       "linkDescription": "Paste an issue or pull request URL, or type #123 for this project's repository.",
       "linkSubmit": "Link"
+    },
+    "code": {
+      "connect": "Connect this project to GitHub",
+      "title": "Code",
+      "suspect": "Suspect commits",
+      "owners": "Owners"
     },
     "account": {
       "title": "GitHub username",

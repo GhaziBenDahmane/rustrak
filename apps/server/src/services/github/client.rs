@@ -353,6 +353,29 @@ impl<'a> GitHubClient<'a> {
         .await?;
         Ok(())
     }
+
+    /// A file's text on the default branch, or `None` when it does not exist.
+    pub async fn file(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        path: &str,
+    ) -> AppResult<Option<String>> {
+        let token = self.installation_token(installation_id).await?;
+        let (status, text) = send(
+            Method::GET,
+            &self.url(&format!("/repos/{repo}/contents/{path}")),
+            &format!("token {token}"),
+            None,
+            "application/vnd.github.raw+json",
+        )
+        .await?;
+        match status {
+            200 => Ok(Some(text)),
+            404 => Ok(None),
+            _ => parse(status, &text).map(|_| None),
+        }
+    }
 }
 
 fn repository_from_json(installation_id: i64, repo: &Value) -> GitHubRepository {

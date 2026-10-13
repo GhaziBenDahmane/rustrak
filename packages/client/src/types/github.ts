@@ -8,6 +8,7 @@ import type {
   issueGitHubSchema,
   issueLinkSchema,
   projectRepositorySchema,
+  repoCommitSchema,
   updateProjectRepositorySchema,
 } from '../schemas/github.js';
 
@@ -21,4 +22,5 @@ export type UpdateProjectRepository = z.infer<
   typeof updateProjectRepositorySchema
 >;
 export type IssueLink = z.infer<typeof issueLinkSchema>;
+export type RepoCommit = z.infer<typeof repoCommitSchema>;
 export type IssueGitHub = z.infer<typeof issueGitHubSchema>;

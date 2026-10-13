@@ -52,6 +52,7 @@ function GitHubSettingsPage() {
         // A new repository starts from its own saved mappings.
         key={repository?.repo_full_name ?? 'none'}
         projectId={project.id}
+        projectSlug={project.slug}
         repository={repository}
         repositories={repositories}
       />
