@@ -254,7 +254,7 @@ impl GitHubService {
         let existing: Option<IssueLink> = sqlx::query_as(
             "SELECT id, issue_id, repo_full_name, number, title, url, state, created_at
              FROM issue_external_links
-             WHERE issue_id = $1 AND repo_full_name = $2 AND number = $3",
+             WHERE issue_id = $1 AND LOWER(repo_full_name) = LOWER($2) AND number = $3",
         )
         .bind(issue_id)
         .bind(repo_full_name)
@@ -351,23 +351,45 @@ pub fn verify_signature(secret: &str, body: &[u8], header: &str) -> bool {
     mac.verify_slice(&expected).is_ok()
 }
 
+/// Whether `name` is a GitHub `owner/repo`. It goes into API paths, so
+/// anything else would point the installation token at another endpoint.
+pub fn is_repo_full_name(name: &str) -> bool {
+    let part = |p: &str| {
+        !p.is_empty()
+            && p != "."
+            && p != ".."
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    name.split_once('/')
+        .is_some_and(|(owner, repo)| part(owner) && part(repo))
+}
+
 /// A GitHub issue reference: a full issue or pull request URL, `owner/repo#12`,
 /// or `#12` in `default_repo`.
 pub fn parse_issue_reference(reference: &str, default_repo: Option<&str>) -> Option<(String, i64)> {
+    let number = |n: &str| n.parse::<i64>().ok().filter(|n| *n > 0);
     let reference = reference.trim();
-    if let Some(number) = reference.strip_prefix('#') {
-        return Some((default_repo?.to_string(), number.parse().ok()?));
+    if let Some(n) = reference.strip_prefix('#') {
+        return Some((default_repo?.to_string(), number(n)?));
     }
-    if let Some((repo, number)) = reference.split_once('#') {
-        if repo.split('/').count() == 2 {
-            return Some((repo.to_string(), number.parse().ok()?));
+    if let Some((repo, n)) = reference.split_once('#') {
+        if is_repo_full_name(repo) {
+            return Some((repo.to_string(), number(n)?));
         }
     }
     let url = url::Url::parse(reference).ok()?;
+    if !matches!(url.scheme(), "https" | "http")
+        || !matches!(url.host_str(), Some("github.com" | "www.github.com"))
+    {
+        return None;
+    }
     let segments: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
     match segments.as_slice() {
-        [owner, repo, "issues" | "pull", number, ..] => {
-            Some((format!("{owner}/{repo}"), number.parse().ok()?))
+        [owner, repo, "issues" | "pull", n, ..] => {
+            let repo = format!("{owner}/{repo}");
+            is_repo_full_name(&repo).then_some(())?;
+            Some((repo, number(n)?))
         }
         _ => None,
     }
@@ -397,6 +419,27 @@ mod tests {
         );
         assert_eq!(parse_issue_reference("#4", None), None);
         assert_eq!(parse_issue_reference("nonsense", Some("a/b")), None);
+    }
+
+    #[test]
+    fn issue_references_refuse_what_github_would_not_name() {
+        for bad in [
+            "https://gitlab.com/o/r/issues/12",
+            "ftp://github.com/o/r/issues/12",
+            "../..#1",
+            "/x#1",
+            "a/#1",
+            "o/r#-5",
+            "o/r#0",
+            "#0",
+            "https://github.com/o/r/issues/-3",
+        ] {
+            assert_eq!(parse_issue_reference(bad, Some("a/b")), None, "{bad}");
+        }
+        assert_eq!(
+            parse_issue_reference("https://www.github.com/o/r/issues/12", None),
+            Some(("o/r".into(), 12))
+        );
     }
 
     #[test]

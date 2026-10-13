@@ -382,19 +382,8 @@ pub async fn put_project_repository(
 ) -> AppResult<HttpResponse> {
     let project_id = path.into_inner();
     require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
-    // The name goes into a GitHub API path; anything but `owner/repo` would
-    // point the installation token at another endpoint.
-    let valid = |part: &str| {
-        !part.is_empty()
-            && part != "."
-            && part != ".."
-            && part
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-    };
-    match body.repo_full_name.split_once('/') {
-        Some((owner, name)) if valid(owner) && valid(name) => {}
-        _ => return Err(AppError::Validation("Invalid repository name".into())),
+    if !crate::services::github::is_repo_full_name(&body.repo_full_name) {
+        return Err(AppError::Validation("Invalid repository name".into()));
     }
     let app = GitHubService::require_app(pool.get_ref()).await?;
     // Asking GitHub proves the installation reaches the repository.
@@ -684,6 +673,22 @@ pub async fn put_my_login(
         .filter(|l| !l.is_empty());
     if login.is_some_and(|l| !l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(AppError::Validation("Invalid GitHub username".into()));
+    }
+    // Inbound assignments find people by login; two owners would be a guess.
+    // The unique index catches a race this check loses.
+    if let Some(login) = login {
+        let taken: Option<(i32,)> = sqlx::query_as(
+            "SELECT id FROM users WHERE LOWER(github_login) = LOWER($1) AND id <> $2",
+        )
+        .bind(login)
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?;
+        if taken.is_some() {
+            return Err(AppError::Conflict(format!(
+                "GitHub user {login} is already someone else's"
+            )));
+        }
     }
     sqlx::query("UPDATE users SET github_login = $2 WHERE id = $1")
         .bind(user_id)

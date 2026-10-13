@@ -488,7 +488,14 @@ pub async fn bulk_update_issues(
 
     if body.status.is_some() {
         for &issue_id in &body.ids {
-            mirror_status(pool.get_ref(), issue_id);
+            let pool = pool.get_ref().clone();
+            // The UPDATE skipped other projects' issues; so does the sync.
+            github::sync::spawn("status sync", async move {
+                if IssueService::get_by_id(&pool, issue_id).await?.project_id == project_id {
+                    github::sync::mirror_status(pool, issue_id).await?;
+                }
+                Ok(())
+            });
         }
     }
 
@@ -686,13 +693,14 @@ pub async fn create_issue_comment(
     let entry =
         IssueSocialService::add_comment(pool.get_ref(), issue_id, actor.user_id(), &body.text)
             .await?;
-    let author = actor
-        .user
-        .as_ref()
-        .map_or_else(|| "A Rustrak user".to_string(), |u| u.email.clone());
     github::sync::spawn(
         "comment sync",
-        github::sync::mirror_comment(pool.get_ref().clone(), issue_id, author, body.text.clone()),
+        github::sync::mirror_comment(
+            pool.get_ref().clone(),
+            issue_id,
+            actor.user_id(),
+            body.text.clone(),
+        ),
     );
     Ok(HttpResponse::Created().json(entry))
 }

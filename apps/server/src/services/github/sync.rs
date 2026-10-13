@@ -201,31 +201,72 @@ pub async fn mirror_status(pool: DbPool, issue_id: Uuid) -> AppResult<()> {
     };
     let client = GitHubClient::new(&app);
     for link in links.iter().filter(|l| l.state != state) {
-        client
-            .set_issue_state(installation_id, &link.repo_full_name, link.number, state)
-            .await?;
-        GitHubService::update_remote(&pool, &link.repo_full_name, link.number, &link.title, state)
-            .await?;
+        let result = async {
+            client
+                .set_issue_state(installation_id, &link.repo_full_name, link.number, state)
+                .await?;
+            GitHubService::update_remote(
+                &pool,
+                &link.repo_full_name,
+                link.number,
+                &link.title,
+                state,
+            )
+            .await
+        }
+        .await;
+        skip_failed(link, result);
     }
     Ok(())
 }
 
-/// Copies a Rustrak comment onto the linked GitHub issues.
+/// One link GitHub refuses (a repository the installation lost, say) must not
+/// keep the others from syncing.
+fn skip_failed(link: &IssueLink, result: AppResult<()>) {
+    if let Err(e) = result {
+        log::warn!(
+            "GitHub sync skipped {}#{}: {e}",
+            link.repo_full_name,
+            link.number
+        );
+    }
+}
+
+/// The user's GitHub login, if they set one.
+async fn github_login(pool: &DbPool, user_id: i32) -> AppResult<Option<String>> {
+    let login: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT github_login FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(login.and_then(|(l,)| l).filter(|l| !l.is_empty()))
+}
+
+/// Copies a Rustrak comment onto the linked GitHub issues. The author shows
+/// as their GitHub login, never their email: linked repositories can be public.
 pub async fn mirror_comment(
     pool: DbPool,
     issue_id: Uuid,
-    author: String,
+    user_id: Option<i32>,
     text: String,
 ) -> AppResult<()> {
     let Some((app, installation_id, links)) = mirror_targets(&pool, issue_id).await? else {
         return Ok(());
     };
+    let author = match user_id {
+        Some(id) => github_login(&pool, id).await?.map(|l| format!("@{l}")),
+        None => None,
+    }
+    .unwrap_or_else(|| "A Rustrak user".to_string());
     let client = GitHubClient::new(&app);
     let body = format!("**{author}** commented in Rustrak:\n\n{text}");
     for link in &links {
-        client
-            .add_comment(installation_id, &link.repo_full_name, link.number, &body)
-            .await?;
+        skip_failed(
+            link,
+            client
+                .add_comment(installation_id, &link.repo_full_name, link.number, &body)
+                .await,
+        );
     }
     Ok(())
 }
@@ -235,17 +276,10 @@ pub async fn mirror_comment(
 /// login set leaves GitHub alone.
 pub async fn mirror_assignee(pool: DbPool, issue_id: Uuid, user_id: Option<i32>) -> AppResult<()> {
     let logins = match user_id {
-        Some(user_id) => {
-            let login: Option<(Option<String>,)> =
-                sqlx::query_as("SELECT github_login FROM users WHERE id = $1")
-                    .bind(user_id)
-                    .fetch_optional(&pool)
-                    .await?;
-            match login.and_then(|(l,)| l).filter(|l| !l.is_empty()) {
-                Some(login) => vec![login],
-                None => return Ok(()),
-            }
-        }
+        Some(user_id) => match github_login(&pool, user_id).await? {
+            Some(login) => vec![login],
+            None => return Ok(()),
+        },
         None => Vec::new(),
     };
     let Some((app, installation_id, links)) = mirror_targets(&pool, issue_id).await? else {
@@ -253,9 +287,12 @@ pub async fn mirror_assignee(pool: DbPool, issue_id: Uuid, user_id: Option<i32>)
     };
     let client = GitHubClient::new(&app);
     for link in &links {
-        client
-            .set_assignees(installation_id, &link.repo_full_name, link.number, &logins)
-            .await?;
+        skip_failed(
+            link,
+            client
+                .set_assignees(installation_id, &link.repo_full_name, link.number, &logins)
+                .await,
+        );
     }
     Ok(())
 }
