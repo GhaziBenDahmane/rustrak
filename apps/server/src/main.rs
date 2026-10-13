@@ -358,6 +358,8 @@ async fn main() -> std::io::Result<()> {
             // API routes (auth required)
             // More specific routes first: events > issues > alert-rules > projects
             .configure(routes::events::configure)
+            // GitHub before issues and projects: its nested scopes would be shadowed.
+            .configure(routes::github::configure)
             .configure(routes::issues::configure)
             .configure(routes::alerts::configure_rules)
             .configure(routes::alerts::configure_history)

@@ -4,6 +4,7 @@ import type {
   Issue,
   IssueAggregates,
   IssueStats,
+  ProjectRepository,
 } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslations } from 'use-intl';
@@ -20,6 +21,8 @@ import {
   readEventPayload,
   splitIssueTitle,
 } from '@/features/event/lib/event-payload';
+import { getProjectRepository } from '@/features/github/api/queries';
+import { frameSourceUrl } from '@/features/github/lib/source-url';
 import {
   getIssue,
   getIssueActivity,
@@ -44,18 +47,36 @@ export const Route = createFileRoute(
     const projectId = Number.parseInt(params.id, 10);
     const { issueId, eventId } = params;
 
-    const [project, issue, event, navigation, aggregates, stats, activity] =
-      await Promise.all([
-        getProject(projectId),
-        getIssue(projectId, issueId),
-        getEventDetail(projectId, issueId, eventId),
-        getEventNavigation(projectId, issueId, eventId),
-        getIssueAggregates(projectId, issueId),
-        getIssueStats(projectId, issueId, '30d'),
-        getIssueActivity(projectId, issueId),
-      ]);
+    const [
+      project,
+      issue,
+      event,
+      navigation,
+      aggregates,
+      stats,
+      activity,
+      repository,
+    ] = await Promise.all([
+      getProject(projectId),
+      getIssue(projectId, issueId),
+      getEventDetail(projectId, issueId, eventId),
+      getEventNavigation(projectId, issueId, eventId),
+      getIssueAggregates(projectId, issueId),
+      getIssueStats(projectId, issueId, '30d'),
+      getIssueActivity(projectId, issueId),
+      getProjectRepository(projectId),
+    ]);
 
-    return { project, issue, event, navigation, aggregates, stats, activity };
+    return {
+      project,
+      issue,
+      event,
+      navigation,
+      aggregates,
+      stats,
+      activity,
+      repository,
+    };
   },
   head: ({ loaderData }) => {
     const t = translator('projectPages');
@@ -100,6 +121,7 @@ function EventPage() {
     aggregates: aggregatesResult,
     stats: statsResult,
     activity: activityResult,
+    repository: repositoryResult,
   } = Route.useLoaderData();
   const projectId = Number.parseInt(id, 10);
 
@@ -143,6 +165,7 @@ function EventPage() {
       aggregates={aggregatesResult.success ? aggregatesResult.data : null}
       stats30d={statsResult.success ? statsResult.data : null}
       activity={activityResult.success ? activityResult.data : []}
+      repository={repositoryResult.success ? repositoryResult.data : null}
     />
   );
 }
@@ -156,6 +179,7 @@ function EventView({
   aggregates,
   stats30d,
   activity,
+  repository,
 }: {
   projectId: number;
   issueId: string;
@@ -165,6 +189,8 @@ function EventView({
   aggregates: IssueAggregates | null;
   stats30d: IssueStats | null;
   activity: ActivityEntry[];
+  /** The project's GitHub repository; `null` without one or on failure. */
+  repository: ProjectRepository | null;
 }) {
   const t = useTranslations('projectPages');
   const eventData = event.data as Record<string, unknown>;
@@ -202,6 +228,10 @@ function EventView({
       activity={activity}
     />
   );
+  const sourceUrl = repository
+    ? (frame: { filename?: string; lineno?: number | null }) =>
+        frameSourceUrl(repository, frame.filename, frame.lineno)
+    : undefined;
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-background">
@@ -232,6 +262,7 @@ function EventView({
               event={event}
               payload={payload}
               eventData={eventData}
+              sourceUrl={sourceUrl}
             />
 
             {/* Right rail (mobile) */}

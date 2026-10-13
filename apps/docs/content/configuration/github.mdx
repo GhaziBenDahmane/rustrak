@@ -1,0 +1,58 @@
+# GitHub
+
+Connect Rustrak to GitHub and the code behind every error is one click away.
+For each project you choose a repository, and from then on:
+
+- **Every stack frame of your app links to its line on GitHub.**
+
+## How it connects
+
+Rustrak creates its own **private GitHub App** for your server. No shared app
+and no token sit between your Rustrak and GitHub: the app belongs to you, and
+it only sees the repositories you pick.
+
+1. In Rustrak, open **Settings → Integrations**, find GitHub under **Development**, press **Configure** and then **Connect GitHub**.
+   Type an organization name first to create the app there instead of under
+   your own account.
+2. GitHub shows its **Create GitHub App** page, already filled in. Confirm it.
+   You can rename the app there if the name is taken.
+3. Back in Rustrak, press **Choose repositories** and install the app on the
+   account or organization whose repositories you want.
+4. In each project, open **Settings → GitHub** and pick its repository.
+
+Only an instance admin can connect GitHub. Anyone who can edit a project can
+choose its repository.
+
+## What GitHub must be able to reach
+
+Rustrak calls GitHub to read your repositories, so that works wherever
+Rustrak runs.
+
+The other direction, GitHub telling Rustrak about installations and, as the
+integration grows, about issues and commits, uses **webhooks**, and GitHub has
+to be able to reach your server for them. Set `PUBLIC_URL` to the address people and GitHub use
+before connecting:
+
+```bash
+PUBLIC_URL=https://rustrak.example.com
+```
+
+The app is created with its webhook pointing at
+`$PUBLIC_URL/api/github/webhook`. **Settings → Integrations** shows when the
+last webhook arrived, so you can tell at a glance whether GitHub reaches you.
+Behind a firewall, everything but the GitHub-to-Rustrak sync keeps working.
+
+## Stack traces and path mapping
+
+The path in a stack frame is rarely the path in the repository: an app built
+into a container reports `/app/lib/db.ts` for the file the repository keeps at
+`src/lib/db.ts`. A **path mapping** in **Settings → GitHub** says how one
+becomes the other:
+
+| Path in the stack trace | Path in the repository |
+|---|---|
+| `/app/` | `src/` |
+
+The first mapping whose prefix matches a frame wins. Without any, Rustrak
+drops bundler prefixes such as `webpack:///` or `app:///` and a leading `/`,
+which is right for many projects. Links point at the default branch.

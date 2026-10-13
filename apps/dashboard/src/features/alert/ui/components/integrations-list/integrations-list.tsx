@@ -1,5 +1,5 @@
 import type { AlertIntegration, ProviderType } from '@rustrak/client';
-import { Bell, ChevronDown } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
@@ -12,14 +12,10 @@ import { ConfirmDeleteDialog } from '@/features/alert/ui/components/confirm-dele
 import { IntegrationConfigDialog } from '@/features/alert/ui/components/integration-config-dialog/integration-config-dialog';
 import { ProviderIcon } from '@/features/alert/ui/components/provider-icon';
 import type { Translate } from '@/shared/lib/error-copy';
-import { cn } from '@/shared/lib/utils';
-import { Badge } from '@/shared/ui/components/shadcn/badge';
-import { Button } from '@/shared/ui/components/shadcn/button';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/shared/ui/components/shadcn/collapsible';
+  IntegrationSection,
+  IntegrationTile,
+} from '@/shared/ui/components/integration-section';
 import { useRouter } from '@/shared/ui/hooks/use-router';
 import { ManageDialog } from './manage-dialog';
 
@@ -143,50 +139,26 @@ export function IntegrationsList({
 
   return (
     <div className="space-y-3">
-      <Collapsible defaultOpen className="group/section">
-        <CollapsibleTrigger className="w-full">
-          <div className="flex items-center justify-between rounded-lg border bg-card px-4 py-3.5 transition-colors hover:bg-accent/50 group-data-open/section:rounded-b-none group-data-open/section:border-b-0">
-            <div className="flex items-center gap-3">
-              <div className="flex size-8 items-center justify-center rounded-md bg-orange-500/10 text-orange-500">
-                <Bell className="size-4" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-semibold leading-none">
-                  {t('integrations.title')}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t('integrations.description')}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2.5">
-              {alertConfiguredCount > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] font-bold uppercase tracking-wider"
-                >
-                  {t('integrations.configuredCount', {
-                    count: alertConfiguredCount,
-                  })}
-                </Badge>
-              )}
-              <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-data-open/section:rotate-180" />
-            </div>
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="rounded-b-lg border border-t-0 bg-card/50 p-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {alertProviders.map((providerDef) => (
-              <ProviderCard
-                key={providerDef.type}
-                providerDef={providerDef}
-                instances={getIntegrationsByType(providerDef.type)}
-                onOpen={handleCardClick}
-              />
-            ))}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      <IntegrationSection
+        icon={<Bell className="size-4" />}
+        iconClassName="bg-orange-500/10 text-orange-500"
+        title={t('integrations.title')}
+        description={t('integrations.description')}
+        badge={
+          alertConfiguredCount > 0
+            ? t('integrations.configuredCount', { count: alertConfiguredCount })
+            : undefined
+        }
+      >
+        {alertProviders.map((providerDef) => (
+          <ProviderCard
+            key={providerDef.type}
+            providerDef={providerDef}
+            instances={getIntegrationsByType(providerDef.type)}
+            onOpen={handleCardClick}
+          />
+        ))}
+      </IntegrationSection>
 
       {/* Manage dialog — shown when 1+ instances exist */}
       {alertProviders.map((providerDef) => {
@@ -276,74 +248,26 @@ interface ProviderCardProps {
 function ProviderCard({ providerDef, instances, onOpen }: ProviderCardProps) {
   const t = useTranslations('alerts');
   const status = providerStatus(instances);
-  const open = () => onOpen(providerDef.type);
 
   return (
-    /* Not a <button>: the card holds its own Manage button, and a button
-       inside a button is invalid HTML. So it takes the role and the keyboard
-       handling a button would have given it for free — without this the card
-       was mouse-only and unreachable by Tab. */
-    // biome-ignore lint/a11y/useSemanticElements: see above
-    <div
-      className={cn(
-        'group relative bg-card border rounded-lg p-5 flex flex-col justify-between h-48',
-        'hover:border-primary/50 transition-all cursor-pointer',
-        status.count === 0 && 'opacity-70 hover:opacity-100',
-      )}
-      role="button"
-      tabIndex={0}
-      aria-label={t('integrations.configureAria', { name: providerDef.name })}
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-        open();
-      }}
-    >
-      <div className="flex justify-between items-start">
-        <div
-          className={cn(
-            'size-10 rounded flex items-center justify-center text-white',
-            providerDef.color,
-          )}
-        >
-          <ProviderIcon type={providerDef.type} className="size-5" />
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <Badge
-            variant={status.isConnected ? 'default' : 'secondary'}
-            className={cn(
-              'text-[10px] font-bold uppercase tracking-wider',
-              status.isConnected &&
-                'bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20',
-              status.isDisabled && 'opacity-60',
-            )}
-          >
-            {statusLabel(status, t)}
-          </Badge>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="font-bold text-base">{providerDef.name}</h3>
-        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-          {status.single ? status.single.name : t(providerDef.descriptionKey)}
-        </p>
-      </div>
-
-      <Button
-        variant="outline"
-        className="w-full text-xs font-bold uppercase tracking-wide"
-        onClick={(e) => {
-          e.stopPropagation();
-          open();
-        }}
-      >
-        {status.count === 0
+    <IntegrationTile
+      icon={<ProviderIcon type={providerDef.type} className="size-5" />}
+      color={providerDef.color}
+      name={providerDef.name}
+      description={
+        status.single ? status.single.name : t(providerDef.descriptionKey)
+      }
+      status={statusLabel(status, t)}
+      connected={status.isConnected}
+      disabled={status.isDisabled}
+      empty={status.count === 0}
+      action={
+        status.count === 0
           ? t('integrations.configure')
-          : t('integrations.manage')}
-      </Button>
-    </div>
+          : t('integrations.manage')
+      }
+      ariaLabel={t('integrations.configureAria', { name: providerDef.name })}
+      onOpen={() => onOpen(providerDef.type)}
+    />
   );
 }

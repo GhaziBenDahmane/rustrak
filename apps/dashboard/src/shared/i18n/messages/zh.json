@@ -940,7 +940,8 @@
       "crashed": "已崩溃",
       "current": "当前",
       "main": "主线程"
-    }
+    },
+    "openInGitHub": "在 GitHub 中打开"
   },
   "releases": {
     "all": "全部",
@@ -1549,7 +1550,8 @@
       "openProjectSettingsMenu": "打开项目设置菜单",
       "projectSettingsTitle": "项目设置",
       "openSettingsMenu": "打开设置菜单",
-      "settingsTitle": "设置"
+      "settingsTitle": "设置",
+      "github": "GitHub"
     },
     "loadProjectFailed": "无法加载项目",
     "loadProjectsFailed": "无法加载项目",
@@ -1610,7 +1612,8 @@
       "subtitle": "将 Rustrak 与您的工具和服务集成，以自动化工作流并及时掌握错误动态。",
       "backToAlerts": "返回告警设置",
       "backToProjects": "返回项目列表",
-      "loadFailed": "无法加载集成"
+      "loadFailed": "无法加载集成",
+      "githubLoadFailed": "无法加载 GitHub 连接"
     },
     "storage": {
       "meta": {
@@ -1697,6 +1700,59 @@
       "githubRepository": "GitHub 仓库",
       "reportAnIssue": "报告问题",
       "sentryDocs": "Sentry SDK 文档"
+    }
+  },
+  "github": {
+    "section": {
+      "title": "开发",
+      "description": "代码仓库、提交和问题跟踪工具，与你的错误关联。"
+    },
+    "save": "保存",
+    "cancel": "取消",
+    "connection": {
+      "description": "来自代码仓库的 Issue、提交和代码负责人",
+      "intro": "Rustrak 会为此服务器创建一个私有 GitHub App。GitHub 会请你确认，然后由你选择它能访问的仓库。",
+      "organizationLabel": "你的仓库在哪里？个人账户请留空，组织请填写组织名称。GitHub 只允许将应用安装在那里。",
+      "organizationPlaceholder": "组织（可选）",
+      "connect": "连接 GitHub",
+      "connectFailed": "无法开始 GitHub 设置",
+      "app": "应用",
+      "accounts": "已安装于",
+      "suspended": "已暂停",
+      "install": "选择仓库",
+      "webhooks": "Webhooks",
+      "lastWebhook": "最近接收于 {when}",
+      "noWebhook": "尚未收到",
+      "unreachable": "GitHub 无法访问 {url}，因此关闭、评论和提交不会同步过来。请将 PUBLIC_URL 设置为 GitHub 可以访问的地址。",
+      "disconnect": "断开 GitHub",
+      "disconnectTitle": "断开 GitHub？",
+      "disconnectDescription": "Rustrak 将忘记该应用及每个项目的仓库。已关联的 Issue 保留其链接。如不再需要，也请在 GitHub 上删除该应用。",
+      "disconnectFailed": "无法断开 GitHub",
+      "notInstalled": "未安装"
+    },
+    "repository": {
+      "metaTitle": "GitHub",
+      "loadFailed": "无法加载 GitHub 设置",
+      "subtitle": "将此项目关联到仓库，即可从堆栈跟踪打开代码、找到导致问题的提交并同步 Issue。",
+      "unavailable": "此项目无法使用 GitHub",
+      "goToIntegrations": "打开集成",
+      "section": "仓库",
+      "repository": "仓库",
+      "repositoryDescription": "此项目代码所在的位置。",
+      "noRepositories": "没有与该应用共享的仓库",
+      "choose": "选择仓库",
+      "openOnGitHub": "在 GitHub 上打开 · {branch}",
+      "stackTraces": "堆栈跟踪",
+      "mappings": "路径映射",
+      "mappingsDescription": "将堆栈跟踪中的路径转换为仓库中的文件，例如 /app/ → src/。未设置时，Rustrak 会根据路径推断。",
+      "stackRoot": "堆栈跟踪中的路径",
+      "sourceRoot": "仓库中的路径",
+      "addMapping": "添加映射",
+      "removeMapping": "移除映射",
+      "danger": "危险区域",
+      "disconnect": "断开仓库",
+      "disconnectDescription": "停止将此项目的 Issue 关联到 GitHub。现有链接将保留。",
+      "saveFailed": "无法保存仓库"
     }
   }
 }

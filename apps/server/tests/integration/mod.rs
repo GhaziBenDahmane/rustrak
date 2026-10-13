@@ -13,6 +13,7 @@ mod envelope_v2_test;
 mod event_lookup_test;
 mod events_api_test;
 mod field_errors_test;
+mod github_test;
 mod health_test;
 mod ingest_test;
 mod issues_api_test;

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -61,18 +61,26 @@ function frameLocationLabel(frame: StackFrame): string {
   return frame.filename || frame.module || frame.package || '<unknown>';
 }
 
+/** Where a frame's line lives in the project's repository, if it has one. */
+export type FrameSourceUrl = (frame: StackFrame) => string | null;
+
 export function StackFrameItem({
   frame,
   index,
+  sourceUrl,
 }: {
   frame: StackFrame;
   index: number;
+  sourceUrl?: FrameSourceUrl;
 }) {
+  const t = useTranslations('events');
   const [isExpanded, setIsExpanded] = useState(frame.in_app ?? false);
   const contextLines = buildFrameContextLines(frame);
   const vars = frameVariables(frame);
   const hasContext = contextLines.length > 0 || vars !== null;
   const Chevron = isExpanded ? ChevronDown : ChevronRight;
+  // Library frames are not in the repository; only the app's own link out.
+  const href = frame.in_app ? sourceUrl?.(frame) : null;
 
   return (
     <div
@@ -83,18 +91,34 @@ export function StackFrameItem({
           : 'border-border bg-card/50 opacity-60',
       )}
     >
-      <button
-        type="button"
-        onClick={() => setIsExpanded((expanded) => !expanded)}
-        className="w-full px-4 py-3 flex items-center gap-4 text-left hover:bg-muted/30 transition-colors"
-      >
-        <FrameSignature frame={frame} index={index} />
-        {hasContext && (
-          <span className="text-muted-foreground">
-            <Chevron className="size-4" />
-          </span>
+      {/* The link sits beside the toggle, not in it: an anchor inside a
+          button is invalid and would toggle the frame on every click. */}
+      <div className="flex items-center hover:bg-muted/30 transition-colors">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((expanded) => !expanded)}
+          className="flex-1 min-w-0 px-4 py-3 flex items-center gap-4 text-left"
+        >
+          <FrameSignature frame={frame} index={index} />
+          {hasContext && (
+            <span className="text-muted-foreground">
+              <Chevron className="size-4" />
+            </span>
+          )}
+        </button>
+        {href && (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            title={t('openInGitHub')}
+            aria-label={t('openInGitHub')}
+            className="px-3 py-3 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowUpRight className="size-4" />
+          </a>
         )}
-      </button>
+      </div>
 
       {isExpanded && contextLines.length > 0 && (
         <FrameSource

@@ -17,12 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/ui/components/shadcn/select';
-import { StackFrameItem } from './stack-frame-item';
+import { type FrameSourceUrl, StackFrameItem } from './stack-frame-item';
 
 interface ThreadsSectionProps {
   threads: Thread[];
   exception?: ExceptionChain;
   platform?: string;
+  sourceUrl?: FrameSourceUrl;
 }
 
 function threadLabel(
@@ -40,6 +41,7 @@ export function ThreadsSection({
   threads,
   exception,
   platform,
+  sourceUrl,
 }: ThreadsSectionProps) {
   const t = useTranslations('events');
   const bestThread = useMemo(() => findBestThread(threads), [threads]);
@@ -150,6 +152,7 @@ export function ThreadsSection({
                 key={originalIdx}
                 frame={frame}
                 index={originalIdx + 1}
+                sourceUrl={sourceUrl}
               />
             );
           })}

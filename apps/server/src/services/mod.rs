@@ -5,6 +5,7 @@ pub mod event;
 pub mod event_trim;
 pub mod gen_ai;
 pub mod generic_trim;
+pub mod github;
 pub mod grouping;
 pub mod grouping_v1;
 pub mod invitation;

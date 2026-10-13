@@ -1,0 +1,332 @@
+//! Calls to the GitHub REST API on behalf of the instance's GitHub App.
+//!
+//! Two kinds of credential: a short JWT signed with the app's private key,
+//! which only reaches the `/app/...` endpoints, and an installation token
+//! traded for it, which acts on the repositories of one installation.
+
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use chrono::{DateTime, Duration, Utc};
+use reqwest::Method;
+use rsa::pkcs1::DecodeRsaPrivateKey;
+use rsa::signature::{SignatureEncoding, Signer};
+use serde_json::{json, Value};
+
+use crate::error::{AppError, AppResult};
+use crate::models::github::{GitHubApp, GitHubRepository};
+use crate::services::notification::shared_http_client;
+
+const API_VERSION: &str = "2022-11-28";
+
+/// Signs the JWT GitHub accepts as the app itself. Valid for nine minutes and
+/// backdated one, which is what GitHub recommends against clock drift.
+pub fn app_jwt(app_id: i64, private_key_pem: &str, now: DateTime<Utc>) -> AppResult<String> {
+    let key = rsa::RsaPrivateKey::from_pkcs1_pem(private_key_pem)
+        .map_err(|e| AppError::Internal(format!("GitHub App private key is unreadable: {e}")))?;
+    let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"RS256","typ":"JWT"}"#);
+    let claims = URL_SAFE_NO_PAD.encode(
+        json!({
+            "iat": (now - Duration::seconds(60)).timestamp(),
+            "exp": (now + Duration::seconds(540)).timestamp(),
+            "iss": app_id.to_string(),
+        })
+        .to_string(),
+    );
+    let signing_input = format!("{header}.{claims}");
+    let signer = rsa::pkcs1v15::SigningKey::<rsa::sha2::Sha256>::new(key);
+    let signature = signer.sign(signing_input.as_bytes()).to_bytes();
+    Ok(format!(
+        "{signing_input}.{}",
+        URL_SAFE_NO_PAD.encode(signature)
+    ))
+}
+
+/// Installation tokens live an hour; one is reused until five minutes before
+/// it expires. Keyed by API address too, so two apps never share one.
+type TokenCache = Mutex<HashMap<(String, i64), (String, DateTime<Utc>)>>;
+
+fn token_cache() -> &'static TokenCache {
+    static CACHE: OnceLock<TokenCache> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+/// Forgets every cached installation token, for when the app is disconnected.
+pub fn clear_token_cache() {
+    if let Ok(mut cache) = token_cache().lock() {
+        cache.clear();
+    }
+}
+
+async fn send(
+    method: Method,
+    url: &str,
+    authorization: &str,
+    body: Option<&Value>,
+    accept: &str,
+) -> AppResult<(u16, String)> {
+    let mut request = shared_http_client()
+        .request(method, url)
+        .header("Accept", accept)
+        .header("User-Agent", "rustrak")
+        .header("X-GitHub-Api-Version", API_VERSION);
+    if !authorization.is_empty() {
+        request = request.header("Authorization", authorization);
+    }
+    if let Some(body) = body {
+        request = request.json(body);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| AppError::Internal(format!("GitHub request to {url} failed: {e}")))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    Ok((status, text))
+}
+
+/// Turns a GitHub answer into JSON, or into an error a person can act on. A
+/// 4xx is the caller's to fix (wrong repository, missing permission) and keeps
+/// GitHub's own message; anything else is ours.
+fn parse(status: u16, text: &str) -> AppResult<Value> {
+    if (200..300).contains(&status) {
+        return Ok(if text.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_str(text)
+                .map_err(|e| AppError::Internal(format!("GitHub sent invalid JSON: {e}")))?
+        });
+    }
+    let message = serde_json::from_str::<Value>(text)
+        .ok()
+        .and_then(|v| v.get("message").and_then(Value::as_str).map(str::to_string))
+        .unwrap_or_else(|| text.chars().take(200).collect());
+    match status {
+        404 => Err(AppError::NotFound(format!("GitHub: {message}"))),
+        400..=499 => Err(AppError::Validation(format!("GitHub: {message}"))),
+        _ => Err(AppError::Internal(format!(
+            "GitHub answered {status}: {message}"
+        ))),
+    }
+}
+
+/// Trades the temporary code from the manifest flow for the new app's
+/// credentials. The one call that needs no credential at all.
+pub async fn convert_manifest(api_url: &str, code: &str) -> AppResult<Value> {
+    let url = format!("{api_url}/app-manifests/{code}/conversions");
+    let (status, text) = send(Method::POST, &url, "", None, "application/vnd.github+json").await?;
+    parse(status, &text)
+}
+
+/// A client acting as one GitHub App.
+pub struct GitHubClient<'a> {
+    app: &'a GitHubApp,
+}
+
+impl<'a> GitHubClient<'a> {
+    pub fn new(app: &'a GitHubApp) -> Self {
+        Self { app }
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{}", self.app.api_url.trim_end_matches('/'), path)
+    }
+
+    async fn as_app(&self, method: Method, path: &str) -> AppResult<Value> {
+        let jwt = app_jwt(self.app.app_id, &self.app.private_key, Utc::now())?;
+        let (status, text) = send(
+            method,
+            &self.url(path),
+            &format!("Bearer {jwt}"),
+            None,
+            "application/vnd.github+json",
+        )
+        .await?;
+        parse(status, &text)
+    }
+
+    async fn installation_token(&self, installation_id: i64) -> AppResult<String> {
+        let key = (self.app.api_url.clone(), installation_id);
+        if let Ok(cache) = token_cache().lock() {
+            if let Some((token, expires_at)) = cache.get(&key) {
+                if *expires_at - Duration::minutes(5) > Utc::now() {
+                    return Ok(token.clone());
+                }
+            }
+        }
+        let answer = self
+            .as_app(
+                Method::POST,
+                &format!("/app/installations/{installation_id}/access_tokens"),
+            )
+            .await?;
+        let token = answer
+            .get("token")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AppError::Internal("GitHub sent no installation token".into()))?
+            .to_string();
+        let expires_at = answer
+            .get("expires_at")
+            .and_then(Value::as_str)
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|d| d.with_timezone(&Utc))
+            .unwrap_or_else(|| Utc::now() + Duration::minutes(30));
+        if let Ok(mut cache) = token_cache().lock() {
+            cache.insert(key, (token.clone(), expires_at));
+        }
+        Ok(token)
+    }
+
+    async fn as_installation(
+        &self,
+        installation_id: i64,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> AppResult<Value> {
+        let token = self.installation_token(installation_id).await?;
+        let (status, text) = send(
+            method,
+            &self.url(path),
+            &format!("token {token}"),
+            body,
+            "application/vnd.github+json",
+        )
+        .await?;
+        parse(status, &text)
+    }
+
+    /// The account an installation belongs to: `(login, "User" | "Organization")`.
+    pub async fn installation_account(&self, installation_id: i64) -> AppResult<(String, String)> {
+        let answer = self
+            .as_app(
+                Method::GET,
+                &format!("/app/installations/{installation_id}"),
+            )
+            .await?;
+        let account = answer.get("account").cloned().unwrap_or(Value::Null);
+        Ok((
+            account
+                .get("login")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            account
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or("User")
+                .to_string(),
+        ))
+    }
+
+    /// Every repository the installation was granted, up to 1000.
+    pub async fn repositories(&self, installation_id: i64) -> AppResult<Vec<GitHubRepository>> {
+        let mut repositories = Vec::new();
+        for page in 1..=10 {
+            let answer = self
+                .as_installation(
+                    installation_id,
+                    Method::GET,
+                    &format!("/installation/repositories?per_page=100&page={page}"),
+                    None,
+                )
+                .await?;
+            let batch = answer
+                .get("repositories")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let full_page = batch.len() == 100;
+            repositories.extend(
+                batch
+                    .iter()
+                    .map(|repo| repository_from_json(installation_id, repo)),
+            );
+            if !full_page {
+                break;
+            }
+        }
+        Ok(repositories)
+    }
+
+    pub async fn repository(
+        &self,
+        installation_id: i64,
+        full_name: &str,
+    ) -> AppResult<GitHubRepository> {
+        let answer = self
+            .as_installation(
+                installation_id,
+                Method::GET,
+                &format!("/repos/{full_name}"),
+                None,
+            )
+            .await?;
+        Ok(repository_from_json(installation_id, &answer))
+    }
+}
+
+fn repository_from_json(installation_id: i64, repo: &Value) -> GitHubRepository {
+    let text = |key: &str| {
+        repo.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
+    GitHubRepository {
+        installation_id,
+        full_name: text("full_name"),
+        default_branch: repo
+            .get("default_branch")
+            .and_then(Value::as_str)
+            .unwrap_or("main")
+            .to_string(),
+        private: repo
+            .get("private")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        html_url: text("html_url"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_jwt_is_rs256_signed_and_names_the_app() {
+        use rsa::signature::Verifier;
+        let pem = include_str!("../../../tests/fixtures/github_app_test_key.txt");
+        let now = Utc::now();
+        let jwt = app_jwt(42, pem, now).unwrap();
+        let parts: Vec<&str> = jwt.split('.').collect();
+        let claims: Value =
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(parts[1]).unwrap()).unwrap();
+        assert_eq!(claims["iss"], "42");
+        assert_eq!(claims["exp"], (now + Duration::seconds(540)).timestamp());
+
+        let key = rsa::RsaPrivateKey::from_pkcs1_pem(pem).unwrap();
+        let verifier = rsa::pkcs1v15::VerifyingKey::<rsa::sha2::Sha256>::new(key.to_public_key());
+        let signature = rsa::pkcs1v15::Signature::try_from(
+            URL_SAFE_NO_PAD.decode(parts[2]).unwrap().as_slice(),
+        )
+        .unwrap();
+        let signed = format!("{}.{}", parts[0], parts[1]);
+        assert!(verifier.verify(signed.as_bytes(), &signature).is_ok());
+        assert!(app_jwt(42, "not a key", now).is_err());
+    }
+
+    #[test]
+    fn github_errors_keep_their_message_and_status_class() {
+        let not_found = parse(404, r#"{"message":"Not Found"}"#).unwrap_err();
+        assert!(matches!(not_found, AppError::NotFound(m) if m == "GitHub: Not Found"));
+        let refused = parse(422, r#"{"message":"Validation Failed"}"#).unwrap_err();
+        assert!(matches!(refused, AppError::Validation(_)));
+        assert!(matches!(
+            parse(502, "bad gateway"),
+            Err(AppError::Internal(_))
+        ));
+        assert_eq!(parse(204, "").unwrap(), Value::Null);
+    }
+}

@@ -456,6 +456,414 @@
         ]
       }
     },
+    "/api/github": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "GitHub App and installations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "DELETE /api/github",
+        "operationId": "disconnect",
+        "responses": {
+          "204": {
+            "description": "GitHub App removed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/callback": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/callback: GitHub sends the browser here after creating the\napp; the code trades for its credentials.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Manifest code from GitHub",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "State issued by the manifest step",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Browser redirect to the integrations page"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/installed": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/installed: GitHub sends the browser here after the app is\ninstalled on an account.",
+        "operationId": "installed",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "query",
+            "description": "GitHub installation ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Browser redirect to the integrations page"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/manifest": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST /api/github/manifest: what the dashboard posts to GitHub so GitHub\ncreates an app already configured for this server.",
+        "operationId": "manifest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Form to post to GitHub",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/repositories": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/repositories?project_id=: the repositories a project can\npoint at, for whoever may change that project's settings.",
+        "operationId": "repositories",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Repositories the installations reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GitHubRepository"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/webhook": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST /api/github/webhook: public, and trusted only through the signature\nGitHub computes with the app's webhook secret.",
+        "operationId": "webhook",
+        "requestBody": {
+          "description": "GitHub event payload, signed in X-Hub-Signature-256",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Event processed"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No GitHub App connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/integrations": {
       "get": {
         "tags": [
@@ -2885,6 +3293,226 @@
           },
           "403": {
             "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/github": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/projects/{project_id}/github",
+        "operationId": "get_project_repository",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project's repository, if any",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ProjectRepository"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "PUT /api/projects/{project_id}/github",
+        "operationId": "put_project_repository",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRepository"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Repository saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRepository"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "DELETE /api/projects/{project_id}/github",
+        "operationId": "delete_project_repository",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Repository removed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -8895,6 +9523,24 @@
           }
         }
       },
+      "CodeMapping": {
+        "type": "object",
+        "description": "Maps a path as it appears in a stack trace to the path in the repository.",
+        "required": [
+          "stack_root",
+          "source_root"
+        ],
+        "properties": {
+          "source_root": {
+            "type": "string",
+            "description": "Prefix put in its place, e.g. `src/`. Empty for the repository root."
+          },
+          "stack_root": {
+            "type": "string",
+            "description": "Prefix stripped from the frame's path, e.g. `/app/` or `webpack:///./`."
+          }
+        }
+      },
       "CommentRequest": {
         "type": "object",
         "description": "Body for creating an issue comment (note).",
@@ -9313,6 +9959,135 @@
           "value": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "GitHubAppInfo": {
+        "type": "object",
+        "required": [
+          "app_id",
+          "slug",
+          "html_url",
+          "owner_login",
+          "install_url",
+          "created_at"
+        ],
+        "properties": {
+          "app_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "install_url": {
+            "type": "string",
+            "description": "Where people install the app on an account or organization."
+          },
+          "last_webhook_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "owner_login": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "GitHubInstallation": {
+        "type": "object",
+        "required": [
+          "id",
+          "account_login",
+          "account_type",
+          "suspended",
+          "created_at"
+        ],
+        "properties": {
+          "account_login": {
+            "type": "string"
+          },
+          "account_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "suspended": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GitHubRepository": {
+        "type": "object",
+        "description": "A repository an installation can reach.",
+        "required": [
+          "installation_id",
+          "full_name",
+          "default_branch",
+          "private",
+          "html_url"
+        ],
+        "properties": {
+          "default_branch": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "private": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GitHubStatus": {
+        "type": "object",
+        "description": "`GET /api/github`: everything the integrations page needs in one answer.",
+        "required": [
+          "installations",
+          "webhook_url"
+        ],
+        "properties": {
+          "app": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GitHubAppInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GitHubInstallation"
+            }
+          },
+          "webhook_url": {
+            "type": "string",
+            "description": "The address GitHub delivers webhooks to."
           }
         }
       },
@@ -9744,6 +10519,36 @@
           }
         }
       },
+      "ManifestRequest": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Create the app under this organization instead of the user's account."
+          }
+        }
+      },
+      "ManifestResponse": {
+        "type": "object",
+        "description": "What the dashboard posts to GitHub to create the app.",
+        "required": [
+          "action_url",
+          "manifest"
+        ],
+        "properties": {
+          "action_url": {
+            "type": "string",
+            "description": "The form's `action`."
+          },
+          "manifest": {
+            "type": "string",
+            "description": "The form's one field, `manifest`."
+          }
+        }
+      },
       "MetricDelta": {
         "type": "object",
         "description": "A counter measured over the requested window alongside the same counter\nover the window immediately before it.\n\n`previous` is `None` when the request asked for all time: there is no\nearlier window to compare against, and reporting `0` there would render as\na misleading \"+100%\" in the UI.",
@@ -9838,6 +10643,42 @@
           "user_id": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "ProjectRepository": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "installation_id",
+          "repo_full_name",
+          "default_branch",
+          "html_url",
+          "code_mappings"
+        ],
+        "properties": {
+          "code_mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeMapping"
+            }
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "repo_full_name": {
+            "type": "string"
           }
         }
       },
@@ -11032,6 +11873,31 @@
               "null"
             ],
             "description": "New slug, slugified before storing.\n\nA slug already taken by another project returns a 409. It is not\nsilently de-duplicated the way a slug derived at creation time is,\nsince storing something other than what was requested would be wrong.\n\nSending `null` leaves the current value untouched."
+          }
+        }
+      },
+      "UpdateProjectRepository": {
+        "type": "object",
+        "required": [
+          "installation_id",
+          "repo_full_name"
+        ],
+        "properties": {
+          "code_mappings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CodeMapping"
+            }
+          },
+          "installation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "repo_full_name": {
+            "type": "string"
           }
         }
       },

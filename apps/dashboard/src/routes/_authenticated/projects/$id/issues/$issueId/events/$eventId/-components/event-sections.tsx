@@ -8,6 +8,7 @@ import { EventDetails } from '@/features/event/ui/components/event-details';
 import { EventHighlights } from '@/features/event/ui/components/event-highlights';
 import { EventTags } from '@/features/event/ui/components/event-tags';
 import { RawJson } from '@/features/event/ui/components/raw-json';
+import type { FrameSourceUrl } from '@/features/event/ui/components/stack-frame-item';
 import { StackTrace } from '@/features/event/ui/components/stack-trace';
 import { ThreadsSection } from '@/features/event/ui/components/threads-section';
 import { Section } from '@/shared/ui/components/collapsible-section';
@@ -27,10 +28,12 @@ export function EventSections({
   event,
   payload,
   eventData,
+  sourceUrl,
 }: {
   event: EventDetail;
   payload: EventPayload;
   eventData: Record<string, unknown>;
+  sourceUrl?: FrameSourceUrl;
 }) {
   const t = useTranslations('projectPages');
   const {
@@ -84,9 +87,14 @@ export function EventSections({
               threads={threads}
               exception={exception}
               platform={event.platform}
+              sourceUrl={sourceUrl}
             />
           ) : (
-            <StackTrace exception={exception} platform={event.platform} />
+            <StackTrace
+              exception={exception}
+              platform={event.platform}
+              sourceUrl={sourceUrl}
+            />
           )}
         </Section>
       )}
