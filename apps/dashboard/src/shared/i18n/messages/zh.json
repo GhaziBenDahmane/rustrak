@@ -280,7 +280,13 @@
       "statusChanged": "将状态改为 {status}",
       "priorityChanged": "将优先级设为 {priority}",
       "regression": "检测到回归",
-      "firstSeen": "首次发现此问题"
+      "firstSeen": "首次发现此问题",
+      "resolvedByCommit": "在提交 {sha} 中解决了此 Issue",
+      "closedOnGitHub": "在 GitHub 上关闭了关联的 Issue",
+      "reopenedOnGitHub": "在 GitHub 上重新打开了关联的 Issue",
+      "githubCreated": "在 GitHub 上创建了 {ref}",
+      "githubLinked": "关联了 {ref}",
+      "githubUnlinked": "取消关联了 {ref}"
     },
     "issueStatus": {
       "new": "新出现",
@@ -1753,6 +1759,26 @@
       "disconnect": "断开仓库",
       "disconnectDescription": "停止将此项目的 Issue 关联到 GitHub。现有链接将保留。",
       "saveFailed": "无法保存仓库"
+    },
+    "issue": {
+      "menu": "GitHub 操作",
+      "open": "打开",
+      "closed": "已关闭",
+      "create": "创建 GitHub Issue",
+      "link": "关联现有 Issue…",
+      "unlink": "取消关联 #{number}",
+      "createFailed": "无法创建 GitHub Issue",
+      "linkFailed": "无法关联 GitHub Issue",
+      "unlinkFailed": "无法取消关联 GitHub Issue",
+      "linkTitle": "关联 GitHub Issue",
+      "linkDescription": "粘贴 Issue 或 Pull Request 的 URL，或输入 #123 表示此项目仓库中的 Issue。",
+      "linkSubmit": "关联"
+    },
+    "account": {
+      "title": "GitHub 用户名",
+      "description": "在 Rustrak 中分配给你的 Issue，其关联的 GitHub Issue 也会分配给你，反之亦然。",
+      "saved": "已保存 GitHub 用户名",
+      "saveFailed": "无法保存你的 GitHub 用户名"
     }
   }
 }

@@ -57,3 +57,22 @@ export const updateProjectRepositorySchema = z.object({
   repo_full_name: z.string().min(1),
   code_mappings: z.array(codeMappingSchema).optional(),
 });
+
+export const issueLinkSchema = z.object({
+  id: z.number().int(),
+  issue_id: z.string(),
+  repo_full_name: z.string(),
+  number: z.number().int(),
+  title: z.string(),
+  url: z.string(),
+  state: z.string(),
+  created_at: dateTimeSchema,
+});
+
+export const issueGitHubSchema = z.object({
+  links: z.array(issueLinkSchema),
+});
+
+export const gitHubLoginSchema = z.object({
+  login: z.string().nullable(),
+});

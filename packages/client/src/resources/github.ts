@@ -1,9 +1,12 @@
 import type { RustrakError } from '../errors.js';
 import type { Result } from '../result.js';
 import {
+  gitHubLoginSchema,
   gitHubManifestSchema,
   gitHubRepositorySchema,
   gitHubStatusSchema,
+  issueGitHubSchema,
+  issueLinkSchema,
   projectRepositorySchema,
   updateProjectRepositorySchema,
 } from '../schemas/index.js';
@@ -11,6 +14,8 @@ import type {
   GitHubManifest,
   GitHubRepository,
   GitHubStatus,
+  IssueGitHub,
+  IssueLink,
   ProjectRepository,
   UpdateProjectRepository,
 } from '../types/index.js';
@@ -84,6 +89,77 @@ export class GitHubResource extends BaseResource {
   ): Promise<Result<void, RustrakError>> {
     return this.requestVoid(() =>
       this.http.delete(`api/projects/${projectId}/github`),
+    );
+  }
+
+  /** The GitHub issues linked to one issue. */
+  async issue(
+    projectId: number,
+    issueId: string,
+  ): Promise<Result<IssueGitHub, RustrakError>> {
+    return this.request(
+      () => this.http.get(`api/projects/${projectId}/issues/${issueId}/github`),
+      issueGitHubSchema,
+    );
+  }
+
+  async createIssue(
+    projectId: number,
+    issueId: string,
+    input: { title?: string; body?: string } = {},
+  ): Promise<Result<IssueLink, RustrakError>> {
+    return this.request(
+      () =>
+        this.http.post(
+          `api/projects/${projectId}/issues/${issueId}/github/issues`,
+          { json: input },
+        ),
+      issueLinkSchema,
+    );
+  }
+
+  /** `reference` is a GitHub URL, `owner/repo#12` or `#12`. */
+  async linkIssue(
+    projectId: number,
+    issueId: string,
+    reference: string,
+  ): Promise<Result<IssueLink, RustrakError>> {
+    return this.request(
+      () =>
+        this.http.post(
+          `api/projects/${projectId}/issues/${issueId}/github/links`,
+          { json: { reference } },
+        ),
+      issueLinkSchema,
+    );
+  }
+
+  async unlinkIssue(
+    projectId: number,
+    issueId: string,
+    linkId: number,
+  ): Promise<Result<void, RustrakError>> {
+    return this.requestVoid(() =>
+      this.http.delete(
+        `api/projects/${projectId}/issues/${issueId}/github/links/${linkId}`,
+      ),
+    );
+  }
+
+  /** The signed-in person's GitHub username, used to sync assignees. */
+  async myLogin(): Promise<Result<{ login: string | null }, RustrakError>> {
+    return this.request(
+      () => this.http.get('api/github/me'),
+      gitHubLoginSchema,
+    );
+  }
+
+  async setMyLogin(
+    login: string | null,
+  ): Promise<Result<{ login: string | null }, RustrakError>> {
+    return this.request(
+      () => this.http.put('api/github/me', { json: { login } }),
+      gitHubLoginSchema,
     );
   }
 }

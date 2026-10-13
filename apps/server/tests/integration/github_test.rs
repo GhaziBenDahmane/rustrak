@@ -11,7 +11,8 @@ use rustrak::models::github::{CodeMapping, GitHubApp};
 use rustrak::models::CreateProject;
 use rustrak::routes;
 use rustrak::services::github::GitHubService;
-use rustrak::services::{AuthTokenService, ProjectService};
+use rustrak::services::grouping::DenormalizedFields;
+use rustrak::services::{AuthTokenService, IssueService, ProjectService};
 use serde_json::{json, Value};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
@@ -252,6 +253,29 @@ async fn connect(db: &TestDb, github: &FakeGitHub, project_id: i32) {
     .unwrap();
 }
 
+async fn issue(db: &TestDb, project_id: i32, culprit_file: &str) -> rustrak::models::Issue {
+    IssueService::create(
+        &db.pool,
+        project_id,
+        Utc::now(),
+        &DenormalizedFields {
+            calculated_type: "TypeError".into(),
+            calculated_value: "x is undefined".into(),
+            transaction: "/login".into(),
+            last_frame_filename: culprit_file.into(),
+            last_frame_module: String::new(),
+            last_frame_function: "query".into(),
+            culprit: "query".into(),
+            logger: String::new(),
+            release: String::new(),
+        },
+        Some("error"),
+        Some("javascript"),
+    )
+    .await
+    .unwrap()
+}
+
 // =============================================================================
 // Connecting the app
 // =============================================================================
@@ -441,10 +465,7 @@ async fn project_repository_round_trip() {
         }))
         .to_request();
     let body: Value = test::call_and_read_body_json(&app, req).await;
-    // The default branch comes from GitHub, not from the request: saving asks
-    // GitHub, which is also what proves the installation reaches the repo.
-    let asked = github.wait_for("GET", "/repos/acme/web").await;
-    assert!(asked.body.is_null());
+    // The default branch comes from GitHub, not from the request.
     assert_eq!(body["default_branch"], "trunk");
     assert_eq!(body["html_url"], "https://github.com/acme/web");
     assert_eq!(body["code_mappings"][0]["source_root"], "src/");
@@ -454,6 +475,198 @@ async fn project_repository_round_trip() {
         .insert_header(bearer(&token))
         .to_request();
     assert_eq!(test::call_service(&app, req).await.status(), 204);
+}
+
+// =============================================================================
+// Issues
+// =============================================================================
+
+async fn link_12(db: &TestDb, issue_id: uuid::Uuid) -> rustrak::models::github::IssueLink {
+    GitHubService::add_link(
+        &db.pool,
+        issue_id,
+        "acme/web",
+        &rustrak::services::github::client::RemoteIssue {
+            number: 12,
+            title: "Login is broken".into(),
+            url: "https://github.com/acme/web/issues/12".into(),
+            state: "open".into(),
+        },
+    )
+    .await
+    .unwrap()
+}
+
+#[actix_web::test]
+async fn creating_a_github_issue_links_it() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    let app = app!(db);
+    let base = format!("/api/projects/{}/issues/{}/github", project.id, issue.id);
+
+    let req = test::TestRequest::post()
+        .uri(&format!("{base}/issues"))
+        .insert_header(bearer(&token))
+        .set_json(json!({}))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 201);
+    let link: Value = test::read_body_json(resp).await;
+    assert_eq!(link["number"], 7);
+
+    let sent = github.wait_for("POST", "/repos/acme/web/issues").await;
+    assert_eq!(sent.body["title"], "TypeError: x is undefined");
+    let body = sent.body["body"].as_str().unwrap();
+    assert!(body.contains("WEB-1"), "{body}");
+    assert!(body.contains(&format!(
+        "https://rustrak.example.com/projects/{}/issues/{}",
+        project.id, issue.id
+    )));
+
+    let req = test::TestRequest::get()
+        .uri(&base)
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    assert_eq!(
+        body["links"][0]["url"],
+        "https://github.com/acme/web/issues/7"
+    );
+}
+
+#[actix_web::test]
+async fn linking_an_existing_issue_comments_back_and_refuses_duplicates() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    let app = app!(db);
+    let uri = format!(
+        "/api/projects/{}/issues/{}/github/links",
+        project.id, issue.id
+    );
+
+    let req = test::TestRequest::post()
+        .uri(&uri)
+        .insert_header(bearer(&token))
+        .set_json(json!({ "reference": "#12" }))
+        .to_request();
+    let link: Value = test::call_and_read_body_json(&app, req).await;
+    assert_eq!(link["title"], "Login is broken");
+    github
+        .wait_for("POST", "/repos/acme/web/issues/12/comments")
+        .await;
+
+    let req = test::TestRequest::post()
+        .uri(&uri)
+        .insert_header(bearer(&token))
+        .set_json(json!({ "reference": "https://github.com/acme/web/issues/12" }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 409);
+
+    let req = test::TestRequest::delete()
+        .uri(&format!("{uri}/{}", link["id"]))
+        .insert_header(bearer(&token))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 204);
+    assert!(GitHubService::links(&db.pool, issue.id)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[actix_web::test]
+async fn resolving_commenting_and_assigning_mirror_onto_linked_issues() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    let app = app!(db);
+    let uri = format!("/api/projects/{}/issues/{}", project.id, issue.id);
+
+    let req = test::TestRequest::patch()
+        .uri(&uri)
+        .insert_header(bearer(&token))
+        .set_json(json!({ "status": "resolved" }))
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/12").await;
+    assert_eq!(call.body["state"], "closed");
+
+    let req = test::TestRequest::post()
+        .uri(&format!("{uri}/comments"))
+        .insert_header(bearer(&token))
+        .set_json(json!({ "text": "Deployed the fix" }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 201);
+    let call = github
+        .wait_for("POST", "/repos/acme/web/issues/12/comments")
+        .await;
+    assert!(call.body["body"]
+        .as_str()
+        .unwrap()
+        .contains("Deployed the fix"));
+
+    let user = rustrak::services::UsersService::create_user_with_password_hash(
+        &db.pool,
+        "octo@acme.dev",
+        "unused",
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET github_login = 'octocat' WHERE id = $1")
+        .bind(user.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let req = test::TestRequest::patch()
+        .uri(&uri)
+        .insert_header(bearer(&token))
+        .set_json(json!({ "assigned_to": user.id, "assignee_type": "user" }))
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
+    for _ in 0..50 {
+        if github
+            .calls()
+            .iter()
+            .any(|c| c.method == "PATCH" && c.body["assignees"] == json!(["octocat"]))
+        {
+            return;
+        }
+        actix_web::rt::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("assignee never mirrored: {:?}", github.calls());
+}
+
+#[actix_web::test]
+async fn bulk_resolving_closes_linked_issues_of_this_project_only() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    let app = app!(db);
+
+    let req = test::TestRequest::put()
+        .uri(&format!("/api/projects/{}/issues", project.id))
+        .insert_header(bearer(&token))
+        .set_json(json!({ "ids": [issue.id], "status": "resolved" }))
+        .to_request();
+    assert!(test::call_service(&app, req).await.status().is_success());
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/12").await;
+    assert_eq!(call.body["state"], "closed");
 }
 
 // =============================================================================
@@ -474,6 +687,16 @@ fn webhook(event: &str, payload: &Value, secret: &str) -> test::TestRequest {
         .set_payload(body)
 }
 
+fn github_issue_event(action: &str, sender: &str) -> Value {
+    json!({
+        "action": action,
+        "issue": { "number": 12, "title": "Login is broken", "state": if action == "closed" { "closed" } else { "open" },
+                   "html_url": "https://github.com/acme/web/issues/12" },
+        "repository": { "full_name": "acme/web" },
+        "sender": { "login": sender },
+    })
+}
+
 #[actix_web::test]
 async fn webhooks_with_a_wrong_signature_are_refused() {
     let db = TestDb::new().await;
@@ -482,9 +705,89 @@ async fn webhooks_with_a_wrong_signature_are_refused() {
     connect(&db, &github, project.id).await;
     let app = app!(db);
 
-    let payload = json!({ "action": "created", "installation": { "id": 7 } });
-    let req = webhook("installation", &payload, "wrong").to_request();
+    let req = webhook("issues", &github_issue_event("closed", "ana"), "wrong").to_request();
     assert_eq!(test::call_service(&app, req).await.status(), 401);
+}
+
+#[actix_web::test]
+async fn closing_and_reopening_on_github_follows_through() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    let app = app!(db);
+
+    let req = webhook("issues", &github_issue_event("closed", "ana"), "whs").to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 204);
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "resolved");
+    assert_eq!(
+        GitHubService::links(&db.pool, issue.id).await.unwrap()[0].state,
+        "closed"
+    );
+    assert!(GitHubService::app(&db.pool)
+        .await
+        .unwrap()
+        .unwrap()
+        .last_webhook_at
+        .is_some());
+
+    let req = webhook("issues", &github_issue_event("reopened", "ana"), "whs").to_request();
+    test::call_service(&app, req).await;
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "unresolved");
+}
+
+#[actix_web::test]
+async fn github_comments_and_assignees_come_back_into_rustrak() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    let user = rustrak::services::UsersService::create_user_with_password_hash(
+        &db.pool,
+        "octo@acme.dev",
+        "unused",
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET github_login = 'octocat' WHERE id = $1")
+        .bind(user.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let app = app!(db);
+
+    let mut comment = github_issue_event("created", "ana");
+    comment["comment"] = json!({ "body": "Looking into it", "user": { "login": "ana" },
+                                 "html_url": "https://github.com/acme/web/issues/12#c1" });
+    test::call_service(&app, webhook("issue_comment", &comment, "whs").to_request()).await;
+    // Rustrak's own comments come back as the app's bot and are not copied twice.
+    comment["sender"]["login"] = json!("rustrak-test[bot]");
+    test::call_service(&app, webhook("issue_comment", &comment, "whs").to_request()).await;
+
+    let notes: Vec<_> = rustrak::services::IssueSocialService::list_activity(&db.pool, issue.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|a| a.activity_type == "note")
+        .collect();
+    assert_eq!(notes.len(), 1);
+    let data: Value = serde_json::from_str(&notes[0].data).unwrap();
+    assert_eq!(data["text"], "Looking into it");
+    assert_eq!(data["author"], "ana");
+    assert_eq!(data["source"], "github");
+
+    let mut assigned = github_issue_event("assigned", "ana");
+    assigned["assignee"] = json!({ "login": "octocat" });
+    test::call_service(&app, webhook("issues", &assigned, "whs").to_request()).await;
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.assigned_to, Some(user.id));
 }
 
 #[actix_web::test]
@@ -501,4 +804,62 @@ async fn uninstalling_the_app_on_github_removes_the_installation() {
         .await
         .unwrap()
         .is_empty());
+}
+
+// =============================================================================
+// A person's GitHub login
+// =============================================================================
+
+#[actix_web::test]
+async fn people_set_their_own_github_login() {
+    let db = TestDb::new().await;
+    let user = rustrak::services::UsersService::create_user_with_password_hash(
+        &db.pool,
+        "octo@acme.dev",
+        "unused",
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+    let token = AuthTokenService::create_for_user(
+        &db.pool,
+        rustrak::models::CreateAuthToken { description: None },
+        Some(user.id),
+    )
+    .await
+    .unwrap()
+    .token;
+    let app = app!(db);
+
+    let get = || {
+        test::TestRequest::get()
+            .uri("/api/github/me")
+            .insert_header(bearer(&token))
+            .to_request()
+    };
+    let body: Value = test::call_and_read_body_json(&app, get()).await;
+    assert_eq!(body["login"], Value::Null);
+
+    let req = test::TestRequest::put()
+        .uri("/api/github/me")
+        .insert_header(bearer(&token))
+        .set_json(json!({ "login": "@octocat" }))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    assert_eq!(body["login"], "octocat");
+
+    let req = test::TestRequest::put()
+        .uri("/api/github/me")
+        .insert_header(bearer(&token))
+        .set_json(json!({ "login": "not a login!" }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 400);
+
+    let req = test::TestRequest::put()
+        .uri("/api/github/me")
+        .insert_header(bearer(&token))
+        .set_json(json!({ "login": null }))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    assert_eq!(body["login"], Value::Null);
 }

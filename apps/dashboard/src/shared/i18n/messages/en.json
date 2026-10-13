@@ -280,7 +280,13 @@
       "statusChanged": "changed status to {status}",
       "priorityChanged": "set priority to {priority}",
       "regression": "detected a regression",
-      "firstSeen": "first saw this issue"
+      "firstSeen": "first saw this issue",
+      "resolvedByCommit": "resolved this issue in commit {sha}",
+      "closedOnGitHub": "closed the linked issue on GitHub",
+      "reopenedOnGitHub": "reopened the linked issue on GitHub",
+      "githubCreated": "created {ref} on GitHub",
+      "githubLinked": "linked {ref}",
+      "githubUnlinked": "unlinked {ref}"
     },
     "issueStatus": {
       "new": "New",
@@ -1753,6 +1759,26 @@
       "disconnect": "Disconnect repository",
       "disconnectDescription": "Stops linking this project's issues to GitHub. Existing links stay.",
       "saveFailed": "Could not save the repository"
+    },
+    "issue": {
+      "menu": "GitHub actions",
+      "open": "Open",
+      "closed": "Closed",
+      "create": "Create GitHub issue",
+      "link": "Link existing issue…",
+      "unlink": "Unlink #{number}",
+      "createFailed": "Could not create the GitHub issue",
+      "linkFailed": "Could not link the GitHub issue",
+      "unlinkFailed": "Could not unlink the GitHub issue",
+      "linkTitle": "Link a GitHub issue",
+      "linkDescription": "Paste an issue or pull request URL, or type #123 for this project's repository.",
+      "linkSubmit": "Link"
+    },
+    "account": {
+      "title": "GitHub username",
+      "description": "Assigning you an issue in Rustrak assigns you its linked GitHub issues, and the other way round.",
+      "saved": "GitHub username saved",
+      "saveFailed": "Could not save your GitHub username"
     }
   }
 }

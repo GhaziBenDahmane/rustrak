@@ -4,6 +4,9 @@ Connect Rustrak to GitHub and the code behind every error is one click away.
 For each project you choose a repository, and from then on:
 
 - **Every stack frame of your app links to its line on GitHub.**
+- **Issues link to GitHub issues.** Open one from Rustrak, or link one that
+  already exists. Resolving, reopening, commenting and assigning stay in sync
+  both ways.
 
 ## How it connects
 
@@ -25,12 +28,12 @@ choose its repository.
 
 ## What GitHub must be able to reach
 
-Rustrak calls GitHub to read your repositories, so that works wherever
-Rustrak runs.
+Rustrak calls GitHub to open issues and comment, so those
+work wherever Rustrak runs.
 
-The other direction, GitHub telling Rustrak about installations and, as the
-integration grows, about issues and commits, uses **webhooks**, and GitHub has
-to be able to reach your server for them. Set `PUBLIC_URL` to the address people and GitHub use
+The other direction, GitHub telling Rustrak that an issue was closed or
+commented on, uses **webhooks**, and GitHub has to be able to reach
+your server for them. Set `PUBLIC_URL` to the address people and GitHub use
 before connecting:
 
 ```bash
@@ -56,3 +59,9 @@ becomes the other:
 The first mapping whose prefix matches a frame wins. Without any, Rustrak
 drops bundler prefixes such as `webpack:///` or `app:///` and a leading `/`,
 which is right for many projects. Links point at the default branch.
+
+## Assignees
+
+Each person sets their GitHub username under **Settings → Account**. Assign
+them an issue in Rustrak and its linked GitHub issues are assigned to them;
+assign them on GitHub and the Rustrak issue follows.

@@ -280,7 +280,13 @@
       "statusChanged": "cambió el estado a {status}",
       "priorityChanged": "estableció la prioridad en {priority}",
       "regression": "detectó una regresión",
-      "firstSeen": "vio este problema por primera vez"
+      "firstSeen": "vio este problema por primera vez",
+      "resolvedByCommit": "resolvió este issue en el commit {sha}",
+      "closedOnGitHub": "cerró el issue enlazado en GitHub",
+      "reopenedOnGitHub": "reabrió el issue enlazado en GitHub",
+      "githubCreated": "creó {ref} en GitHub",
+      "githubLinked": "enlazó {ref}",
+      "githubUnlinked": "desenlazó {ref}"
     },
     "issueStatus": {
       "new": "Nuevo",
@@ -1753,6 +1759,26 @@
       "disconnect": "Desconectar repositorio",
       "disconnectDescription": "Deja de enlazar los issues de este proyecto con GitHub. Los enlaces existentes se mantienen.",
       "saveFailed": "No se pudo guardar el repositorio"
+    },
+    "issue": {
+      "menu": "Acciones de GitHub",
+      "open": "Abierto",
+      "closed": "Cerrado",
+      "create": "Crear issue en GitHub",
+      "link": "Enlazar issue existente…",
+      "unlink": "Desenlazar #{number}",
+      "createFailed": "No se pudo crear el issue en GitHub",
+      "linkFailed": "No se pudo enlazar el issue de GitHub",
+      "unlinkFailed": "No se pudo desenlazar el issue de GitHub",
+      "linkTitle": "Enlazar un issue de GitHub",
+      "linkDescription": "Pega la URL de un issue o pull request, o escribe #123 para el repositorio de este proyecto.",
+      "linkSubmit": "Enlazar"
+    },
+    "account": {
+      "title": "Usuario de GitHub",
+      "description": "Asignarte un issue en Rustrak te asigna sus issues enlazados de GitHub, y al revés.",
+      "saved": "Usuario de GitHub guardado",
+      "saveFailed": "No se pudo guardar tu usuario de GitHub"
     }
   }
 }

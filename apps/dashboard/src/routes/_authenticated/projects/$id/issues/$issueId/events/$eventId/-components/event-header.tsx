@@ -1,6 +1,7 @@
-import type { Issue } from '@rustrak/client';
+import type { Issue, IssueLink } from '@rustrak/client';
 import { CircleAlert } from 'lucide-react';
 import { useFormatter, useTranslations } from 'use-intl';
+import { IssueGitHubButton } from '@/features/github/ui/components/issue-github-button';
 import { IssueActions } from '@/features/issue/ui/components/issue-actions';
 import { StatusIndicator } from '@/features/issue/ui/components/issue-indicators';
 import { cn } from '@/shared/lib/utils';
@@ -21,6 +22,7 @@ export function EventHeader({
   message,
   levelText,
   userCount,
+  githubLinks,
 }: {
   issue: Issue;
   projectId: number;
@@ -28,6 +30,8 @@ export function EventHeader({
   message: string;
   levelText: string;
   userCount: number;
+  /** The linked GitHub issues; `null` when the project has no repository. */
+  githubLinks: IssueLink[] | null;
 }) {
   const t = useTranslations('projectPages');
   const format = useFormatter();
@@ -88,7 +92,19 @@ export function EventHeader({
       {/* Workflow toolbar — same elevated band as the header */}
       <div className="border-t">
         <div className="w-full px-4 md:px-8 py-2">
-          <IssueActions issue={issue} projectId={projectId} />
+          <IssueActions
+            issue={issue}
+            projectId={projectId}
+            extra={
+              githubLinks && (
+                <IssueGitHubButton
+                  projectId={projectId}
+                  issueId={issue.id}
+                  links={githubLinks}
+                />
+              )
+            }
+          />
         </div>
       </div>
     </header>

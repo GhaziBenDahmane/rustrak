@@ -2,16 +2,18 @@
 //! linked issues.
 
 pub mod client;
+pub mod sync;
 pub mod webhook;
 
 use chrono::Utc;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
+use uuid::Uuid;
 
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::models::github::{
-    CodeMapping, GitHubApp, GitHubInstallation, ProjectRepository, ProjectRepositoryRow,
+    CodeMapping, GitHubApp, GitHubInstallation, IssueLink, ProjectRepository, ProjectRepositoryRow,
 };
 
 pub use client::GitHubClient;
@@ -233,6 +235,103 @@ impl GitHubService {
 
     // ---------------------------------------------------------------- links
 
+    pub async fn links(pool: &DbPool, issue_id: Uuid) -> AppResult<Vec<IssueLink>> {
+        Ok(sqlx::query_as::<_, IssueLink>(
+            "SELECT id, issue_id, repo_full_name, number, title, url, state, created_at
+             FROM issue_external_links WHERE issue_id = $1 ORDER BY created_at",
+        )
+        .bind(issue_id)
+        .fetch_all(pool)
+        .await?)
+    }
+
+    pub async fn add_link(
+        pool: &DbPool,
+        issue_id: Uuid,
+        repo_full_name: &str,
+        remote: &client::RemoteIssue,
+    ) -> AppResult<IssueLink> {
+        let existing: Option<IssueLink> = sqlx::query_as(
+            "SELECT id, issue_id, repo_full_name, number, title, url, state, created_at
+             FROM issue_external_links
+             WHERE issue_id = $1 AND repo_full_name = $2 AND number = $3",
+        )
+        .bind(issue_id)
+        .bind(repo_full_name)
+        .bind(remote.number)
+        .fetch_optional(pool)
+        .await?;
+        if existing.is_some() {
+            return Err(AppError::Conflict(format!(
+                "{repo_full_name}#{} is already linked to this issue",
+                remote.number
+            )));
+        }
+        Ok(sqlx::query_as::<_, IssueLink>(
+            r#"INSERT INTO issue_external_links (issue_id, repo_full_name, number, title, url, state, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING id, issue_id, repo_full_name, number, title, url, state, created_at"#,
+        )
+        .bind(issue_id)
+        .bind(repo_full_name)
+        .bind(remote.number)
+        .bind(&remote.title)
+        .bind(&remote.url)
+        .bind(&remote.state)
+        .bind(Utc::now())
+        .fetch_one(pool)
+        .await?)
+    }
+
+    pub async fn delete_link(pool: &DbPool, issue_id: Uuid, link_id: i32) -> AppResult<()> {
+        let result =
+            sqlx::query("DELETE FROM issue_external_links WHERE id = $1 AND issue_id = $2")
+                .bind(link_id)
+                .bind(issue_id)
+                .execute(pool)
+                .await?;
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("Link {link_id} not found")));
+        }
+        Ok(())
+    }
+
+    /// The Rustrak issues linked to one GitHub issue.
+    pub async fn links_to_remote(
+        pool: &DbPool,
+        repo_full_name: &str,
+        number: i64,
+    ) -> AppResult<Vec<IssueLink>> {
+        Ok(sqlx::query_as::<_, IssueLink>(
+            "SELECT id, issue_id, repo_full_name, number, title, url, state, created_at
+             FROM issue_external_links WHERE LOWER(repo_full_name) = LOWER($1) AND number = $2",
+        )
+        .bind(repo_full_name)
+        .bind(number)
+        .fetch_all(pool)
+        .await?)
+    }
+
+    pub async fn update_remote(
+        pool: &DbPool,
+        repo_full_name: &str,
+        number: i64,
+        title: &str,
+        state: &str,
+    ) -> AppResult<()> {
+        sqlx::query(
+            "UPDATE issue_external_links SET title = $3, state = $4
+             WHERE LOWER(repo_full_name) = LOWER($1) AND number = $2",
+        )
+        .bind(repo_full_name)
+        .bind(number)
+        .bind(title)
+        .bind(state)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
     // -------------------------------------------------------------- commits
 }
 
@@ -252,9 +351,53 @@ pub fn verify_signature(secret: &str, body: &[u8], header: &str) -> bool {
     mac.verify_slice(&expected).is_ok()
 }
 
+/// A GitHub issue reference: a full issue or pull request URL, `owner/repo#12`,
+/// or `#12` in `default_repo`.
+pub fn parse_issue_reference(reference: &str, default_repo: Option<&str>) -> Option<(String, i64)> {
+    let reference = reference.trim();
+    if let Some(number) = reference.strip_prefix('#') {
+        return Some((default_repo?.to_string(), number.parse().ok()?));
+    }
+    if let Some((repo, number)) = reference.split_once('#') {
+        if repo.split('/').count() == 2 {
+            return Some((repo.to_string(), number.parse().ok()?));
+        }
+    }
+    let url = url::Url::parse(reference).ok()?;
+    let segments: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
+    match segments.as_slice() {
+        [owner, repo, "issues" | "pull", number, ..] => {
+            Some((format!("{owner}/{repo}"), number.parse().ok()?))
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue_references_take_urls_and_shorthand() {
+        assert_eq!(
+            parse_issue_reference("https://github.com/o/r/issues/12", None),
+            Some(("o/r".into(), 12))
+        );
+        assert_eq!(
+            parse_issue_reference("https://github.com/o/r/pull/7/files", None),
+            Some(("o/r".into(), 7))
+        );
+        assert_eq!(
+            parse_issue_reference("o/r#3", None),
+            Some(("o/r".into(), 3))
+        );
+        assert_eq!(
+            parse_issue_reference("#4", Some("a/b")),
+            Some(("a/b".into(), 4))
+        );
+        assert_eq!(parse_issue_reference("#4", None), None);
+        assert_eq!(parse_issue_reference("nonsense", Some("a/b")), None);
+    }
 
     #[test]
     fn webhook_signature_is_checked() {

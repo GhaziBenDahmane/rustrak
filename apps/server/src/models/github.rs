@@ -4,6 +4,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use uuid::Uuid;
 
 /// The instance's one GitHub App, as GitHub returned it from the manifest flow.
 /// Secrets never leave the server: [`GitHubAppInfo`] is what the API answers.
@@ -120,6 +121,46 @@ pub struct GitHubRepository {
     pub default_branch: String,
     pub private: bool,
     pub html_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct IssueLink {
+    pub id: i32,
+    pub issue_id: Uuid,
+    pub repo_full_name: String,
+    pub number: i64,
+    pub title: String,
+    pub url: String,
+    /// `open` or `closed`, as of the last webhook or sync.
+    pub state: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// `GET .../issues/{id}/github`: what the issue has on GitHub.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct IssueGitHub {
+    pub links: Vec<IssueLink>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct CreateGitHubIssue {
+    /// Defaults to the Rustrak issue's title.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Defaults to a summary with the culprit and a link back.
+    #[serde(default)]
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct LinkGitHubIssue {
+    /// A GitHub issue or pull request URL, or `#123` for the project's
+    /// repository.
+    pub reference: String,
 }
 
 #[derive(Debug, Deserialize)]

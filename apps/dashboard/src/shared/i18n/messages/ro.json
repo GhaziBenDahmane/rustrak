@@ -280,7 +280,13 @@
       "statusChanged": "a schimbat starea în {status}",
       "priorityChanged": "a setat prioritatea la {priority}",
       "regression": "a detectat o regresie",
-      "firstSeen": "a văzut prima dată această problemă"
+      "firstSeen": "a văzut prima dată această problemă",
+      "resolvedByCommit": "a rezolvat acest issue în commitul {sha}",
+      "closedOnGitHub": "a închis issue-ul legat pe GitHub",
+      "reopenedOnGitHub": "a redeschis issue-ul legat pe GitHub",
+      "githubCreated": "a creat {ref} pe GitHub",
+      "githubLinked": "a legat {ref}",
+      "githubUnlinked": "a dezlegat {ref}"
     },
     "issueStatus": {
       "new": "Nouă",
@@ -1753,6 +1759,26 @@
       "disconnect": "Deconectează depozitul",
       "disconnectDescription": "Oprește legarea issue-urilor acestui proiect de GitHub. Legăturile existente rămân.",
       "saveFailed": "Depozitul nu a putut fi salvat"
+    },
+    "issue": {
+      "menu": "Acțiuni GitHub",
+      "open": "Deschis",
+      "closed": "Închis",
+      "create": "Creează issue pe GitHub",
+      "link": "Leagă un issue existent…",
+      "unlink": "Dezleagă #{number}",
+      "createFailed": "Issue-ul GitHub nu a putut fi creat",
+      "linkFailed": "Issue-ul GitHub nu a putut fi legat",
+      "unlinkFailed": "Issue-ul GitHub nu a putut fi dezlegat",
+      "linkTitle": "Leagă un issue GitHub",
+      "linkDescription": "Lipește URL-ul unui issue sau pull request, sau scrie #123 pentru depozitul acestui proiect.",
+      "linkSubmit": "Leagă"
+    },
+    "account": {
+      "title": "Utilizator GitHub",
+      "description": "Când ți se atribuie un issue în Rustrak, ți se atribuie și issue-urile GitHub legate, și invers.",
+      "saved": "Utilizatorul GitHub a fost salvat",
+      "saveFailed": "Utilizatorul GitHub nu a putut fi salvat"
     }
   }
 }

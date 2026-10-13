@@ -265,6 +265,94 @@ impl<'a> GitHubClient<'a> {
             .await?;
         Ok(repository_from_json(installation_id, &answer))
     }
+
+    /// Opens an issue and answers `(number, title, html_url, state)`.
+    pub async fn create_issue(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        title: &str,
+        body: &str,
+    ) -> AppResult<RemoteIssue> {
+        let answer = self
+            .as_installation(
+                installation_id,
+                Method::POST,
+                &format!("/repos/{repo}/issues"),
+                Some(&json!({ "title": title, "body": body })),
+            )
+            .await?;
+        Ok(RemoteIssue::from_json(&answer))
+    }
+
+    pub async fn issue(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        number: i64,
+    ) -> AppResult<RemoteIssue> {
+        let answer = self
+            .as_installation(
+                installation_id,
+                Method::GET,
+                &format!("/repos/{repo}/issues/{number}"),
+                None,
+            )
+            .await?;
+        Ok(RemoteIssue::from_json(&answer))
+    }
+
+    /// `state` is `open` or `closed`.
+    pub async fn set_issue_state(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        number: i64,
+        state: &str,
+    ) -> AppResult<()> {
+        self.as_installation(
+            installation_id,
+            Method::PATCH,
+            &format!("/repos/{repo}/issues/{number}"),
+            Some(&json!({ "state": state })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_assignees(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        number: i64,
+        logins: &[String],
+    ) -> AppResult<()> {
+        self.as_installation(
+            installation_id,
+            Method::PATCH,
+            &format!("/repos/{repo}/issues/{number}"),
+            Some(&json!({ "assignees": logins })),
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn add_comment(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        number: i64,
+        body: &str,
+    ) -> AppResult<()> {
+        self.as_installation(
+            installation_id,
+            Method::POST,
+            &format!("/repos/{repo}/issues/{number}/comments"),
+            Some(&json!({ "body": body })),
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 fn repository_from_json(installation_id: i64, repo: &Value) -> GitHubRepository {
@@ -287,6 +375,37 @@ fn repository_from_json(installation_id: i64, repo: &Value) -> GitHubRepository 
             .and_then(Value::as_bool)
             .unwrap_or(false),
         html_url: text("html_url"),
+    }
+}
+
+/// The parts of a GitHub issue Rustrak keeps.
+#[derive(Debug, Clone)]
+pub struct RemoteIssue {
+    pub number: i64,
+    pub title: String,
+    pub url: String,
+    pub state: String,
+}
+
+impl RemoteIssue {
+    pub fn from_json(issue: &Value) -> Self {
+        let text = |key: &str| {
+            issue
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        Self {
+            number: issue.get("number").and_then(Value::as_i64).unwrap_or(0),
+            title: text("title"),
+            url: text("html_url"),
+            state: issue
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or("open")
+                .to_string(),
+        }
     }
 }
 

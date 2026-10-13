@@ -280,7 +280,13 @@
       "statusChanged": "a changé le statut en {status}",
       "priorityChanged": "a défini la priorité à {priority}",
       "regression": "a détecté une régression",
-      "firstSeen": "a vu ce problème pour la première fois"
+      "firstSeen": "a vu ce problème pour la première fois",
+      "resolvedByCommit": "a résolu ce ticket dans le commit {sha}",
+      "closedOnGitHub": "a fermé le ticket lié sur GitHub",
+      "reopenedOnGitHub": "a rouvert le ticket lié sur GitHub",
+      "githubCreated": "a créé {ref} sur GitHub",
+      "githubLinked": "a lié {ref}",
+      "githubUnlinked": "a délié {ref}"
     },
     "issueStatus": {
       "new": "Nouveau",
@@ -1753,6 +1759,26 @@
       "disconnect": "Déconnecter le dépôt",
       "disconnectDescription": "Arrête de lier les tickets de ce projet à GitHub. Les liens existants restent.",
       "saveFailed": "Impossible d'enregistrer le dépôt"
+    },
+    "issue": {
+      "menu": "Actions GitHub",
+      "open": "Ouvert",
+      "closed": "Fermé",
+      "create": "Créer un ticket GitHub",
+      "link": "Lier un ticket existant…",
+      "unlink": "Délier #{number}",
+      "createFailed": "Impossible de créer le ticket GitHub",
+      "linkFailed": "Impossible de lier le ticket GitHub",
+      "unlinkFailed": "Impossible de délier le ticket GitHub",
+      "linkTitle": "Lier un ticket GitHub",
+      "linkDescription": "Collez l'URL d'un ticket ou d'une pull request, ou tapez #123 pour le dépôt de ce projet.",
+      "linkSubmit": "Lier"
+    },
+    "account": {
+      "title": "Nom d'utilisateur GitHub",
+      "description": "Vous assigner un ticket dans Rustrak vous assigne ses tickets GitHub liés, et inversement.",
+      "saved": "Nom d'utilisateur GitHub enregistré",
+      "saveFailed": "Impossible d'enregistrer votre nom d'utilisateur GitHub"
     }
   }
 }
