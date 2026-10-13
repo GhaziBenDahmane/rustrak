@@ -254,8 +254,10 @@ function EventView({
         levelText={levelText}
         userCount={userCount}
         // Links outlive a disconnected repository and can still be unlinked.
+        // Unloaded links are not "no links": offering Create then could
+        // open a second GitHub issue for one already linked.
         githubLinks={
-          repository || code?.links.length ? (code?.links ?? []) : null
+          code && (repository || code.links.length > 0) ? code.links : null
         }
         githubConnected={repository != null}
       />
