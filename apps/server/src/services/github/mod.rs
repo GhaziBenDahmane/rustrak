@@ -401,11 +401,13 @@ mod tests {
 
     #[test]
     fn webhook_signature_is_checked() {
-        let mut mac = Hmac::<Sha256>::new_from_slice(b"secret").unwrap();
+        let secret = crate::auth::token::generate_token();
+        let other = crate::auth::token::generate_token();
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
         mac.update(b"{}");
         let header = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
-        assert!(verify_signature("secret", b"{}", &header));
-        assert!(!verify_signature("other", b"{}", &header));
-        assert!(!verify_signature("secret", b"{}", "sha1=abc"));
+        assert!(verify_signature(&secret, b"{}", &header));
+        assert!(!verify_signature(&other, b"{}", &header));
+        assert!(!verify_signature(&secret, b"{}", "sha1=abc"));
     }
 }

@@ -220,10 +220,11 @@ impl<'a> GitHubClient<'a> {
         ))
     }
 
-    /// Every repository the installation was granted, up to 1000.
+    /// Every repository the installation was granted, up to 20,000 (Sentry's
+    /// cap: 200 pages of 100).
     pub async fn repositories(&self, installation_id: i64) -> AppResult<Vec<GitHubRepository>> {
         let mut repositories = Vec::new();
-        for page in 1..=10 {
+        for page in 1..=200 {
             let answer = self
                 .as_installation(
                     installation_id,

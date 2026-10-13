@@ -98,6 +98,10 @@ async fn answer(
             "webhook_secret": "whs", "pem": KEY, "html_url": "https://github.com/apps/rustrak-test",
             "owner": { "login": "acme" },
         })),
+        // An installation removed on GitHub whose `deleted` webhook never came.
+        ("POST", "/app/installations/13/access_tokens") => {
+            HttpResponse::NotFound().json(json!({ "message": "Not Found" }))
+        }
         ("POST", p) if p.ends_with("/access_tokens") => HttpResponse::Created().json(json!({
             "token": "ghs_test", "expires_at": (Utc::now() + chrono::Duration::hours(1)).to_rfc3339(),
         })),
@@ -371,6 +375,54 @@ async fn manifest_flow_creates_the_app() {
 }
 
 #[actix_web::test]
+async fn manifest_sends_the_browser_to_the_dashboard_host() {
+    let db = TestDb::new().await;
+    let token = token(&db).await;
+    let base = test_config();
+    let config = rustrak::config::Config {
+        dashboard: DashboardConfig {
+            url: Some("https://errors.example.com".to_string()),
+            ..base.dashboard.clone()
+        },
+        ..base
+    };
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(db.pool.clone()))
+            .app_data(web::Data::new(config))
+            .wrap(
+                SessionMiddleware::builder(CookieSessionStore::default(), Key::generate())
+                    .cookie_secure(false)
+                    .build(),
+            )
+            .configure(routes::github::configure),
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/api/github/manifest")
+        .insert_header(bearer(&token))
+        .set_json(json!({}))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    let manifest: Value = serde_json::from_str(body["manifest"].as_str().unwrap()).unwrap();
+    // The session cookie lives on the dashboard's host, so GitHub must send
+    // the browser back there; only the webhook goes to PUBLIC_URL.
+    assert_eq!(
+        manifest["redirect_url"],
+        "https://errors.example.com/api/github/callback"
+    );
+    assert_eq!(
+        manifest["setup_url"],
+        "https://errors.example.com/api/github/installed"
+    );
+    assert_eq!(
+        manifest["hook_attributes"]["url"],
+        "https://rustrak.example.com/api/github/webhook"
+    );
+}
+
+#[actix_web::test]
 async fn installing_the_app_records_the_installation() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;
@@ -433,6 +485,57 @@ async fn repositories_lists_what_the_installations_reach() {
     let body: Value = test::call_and_read_body_json(&app, req).await;
     assert_eq!(body[0]["full_name"], "acme/web");
     assert_eq!(body[0]["installation_id"], 99);
+}
+
+#[actix_web::test]
+async fn repositories_skip_an_installation_github_no_longer_has() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    GitHubService::upsert_installation(&db.pool, 13, "gone", "User")
+        .await
+        .unwrap();
+    let app = app!(db);
+
+    let req = test::TestRequest::get()
+        .uri(&format!(
+            "/api/github/repositories?project_id={}",
+            project.id
+        ))
+        .insert_header(bearer(&token))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body[0]["full_name"], "acme/web");
+}
+
+#[actix_web::test]
+async fn project_repository_refuses_a_name_that_is_not_owner_slash_repo() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let app = app!(db);
+
+    for name in [
+        "../user",
+        "acme/web/issues",
+        "acme/..",
+        "acme/web?x=1",
+        "acme",
+    ] {
+        let req = test::TestRequest::put()
+            .uri(&format!("/api/projects/{}/github", project.id))
+            .insert_header(bearer(&token))
+            .set_json(json!({ "installation_id": 99, "repo_full_name": name }))
+            .to_request();
+        assert_eq!(test::call_service(&app, req).await.status(), 400, "{name}");
+    }
+    assert!(!github.calls().iter().any(|c| c.method == "GET"));
 }
 
 #[actix_web::test]
@@ -788,6 +891,29 @@ async fn github_comments_and_assignees_come_back_into_rustrak() {
     test::call_service(&app, webhook("issues", &assigned, "whs").to_request()).await;
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.assigned_to, Some(user.id));
+}
+
+#[actix_web::test]
+async fn webhooks_larger_than_the_default_body_limit_are_read() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let app = app!(db);
+
+    // `installation.created` carries every repository; a large account
+    // passes actix's 256 KiB default.
+    let repositories: Vec<Value> = (0..10_000)
+        .map(|i| json!({ "id": i, "full_name": format!("big/repository-{i}") }))
+        .collect();
+    let payload = json!({
+        "action": "created",
+        "installation": { "id": 42, "account": { "login": "big", "type": "Organization" } },
+        "repositories": repositories,
+    });
+    assert!(payload.to_string().len() > 256 * 1024);
+    let req = webhook("installation", &payload, "whs").to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 204);
 }
 
 #[actix_web::test]
