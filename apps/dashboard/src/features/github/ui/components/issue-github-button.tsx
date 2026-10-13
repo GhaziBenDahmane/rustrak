@@ -33,6 +33,8 @@ interface IssueGitHubButtonProps {
   projectId: number;
   issueId: string;
   links: IssueLink[];
+  /** False once the project's repository is gone: links stay, new ones can't. */
+  canLink?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export function IssueGitHubButton({
   projectId,
   issueId,
   links,
+  canLink = true,
 }: IssueGitHubButtonProps) {
   const t = useTranslations('github');
   const router = useRouter();
@@ -109,21 +112,25 @@ export function IssueGitHubButton({
           <ChevronDown className="size-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-56">
-          <DropdownMenuItem
-            onClick={() =>
-              run(t('issue.createFailed'), () =>
-                createGitHubIssue(projectId, issueId),
-              )
-            }
-          >
-            <Plus className="mr-2 size-4" />
-            {t('issue.create')}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setLinking(true)}>
-            <Link2 className="mr-2 size-4" />
-            {t('issue.link')}
-          </DropdownMenuItem>
-          {links.length > 0 && <DropdownMenuSeparator />}
+          {canLink && (
+            <>
+              <DropdownMenuItem
+                onClick={() =>
+                  run(t('issue.createFailed'), () =>
+                    createGitHubIssue(projectId, issueId),
+                  )
+                }
+              >
+                <Plus className="mr-2 size-4" />
+                {t('issue.create')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setLinking(true)}>
+                <Link2 className="mr-2 size-4" />
+                {t('issue.link')}
+              </DropdownMenuItem>
+            </>
+          )}
+          {canLink && links.length > 0 && <DropdownMenuSeparator />}
           {links.map((link) => (
             <DropdownMenuItem
               key={link.id}

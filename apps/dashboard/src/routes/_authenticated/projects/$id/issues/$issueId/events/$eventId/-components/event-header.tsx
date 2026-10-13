@@ -23,6 +23,7 @@ export function EventHeader({
   levelText,
   userCount,
   githubLinks,
+  githubConnected,
 }: {
   issue: Issue;
   projectId: number;
@@ -30,8 +31,10 @@ export function EventHeader({
   message: string;
   levelText: string;
   userCount: number;
-  /** The linked GitHub issues; `null` when the project has no repository. */
+  /** The linked GitHub issues; `null` when there are none and no repository. */
   githubLinks: IssueLink[] | null;
+  /** Whether the project has a repository to create or link issues in. */
+  githubConnected: boolean;
 }) {
   const t = useTranslations('projectPages');
   const format = useFormatter();
@@ -101,6 +104,7 @@ export function EventHeader({
                   projectId={projectId}
                   issueId={issue.id}
                   links={githubLinks}
+                  canLink={githubConnected}
                 />
               )
             }

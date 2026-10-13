@@ -93,25 +93,28 @@ async fn issues(pool: &DbPool, payload: &Value) -> AppResult<()> {
     Ok(())
 }
 
-/// Assigns the Rustrak user whose GitHub login was assigned; one GitHub
+/// Follows the GitHub issue's assignees as they are now, not the one that
+/// changed, as Sentry does: GitHub issues can have several, so the first one
+/// becomes the Rustrak assignee and only an empty list clears it. A first
 /// assignee nobody in Rustrak claims leaves the Rustrak issue as it is.
 async fn assignee(
     pool: &DbPool,
     payload: &Value,
     links: &[crate::models::github::IssueLink],
 ) -> AppResult<()> {
-    let user_id = if text(payload, "/action") == "assigned" {
+    let first = text(payload, "/issue/assignees/0/login");
+    let user_id = if first.is_empty() {
+        None
+    } else {
         let found: Option<(i32,)> =
             sqlx::query_as("SELECT id FROM users WHERE LOWER(github_login) = LOWER($1)")
-                .bind(text(payload, "/assignee/login"))
+                .bind(first)
                 .fetch_optional(pool)
                 .await?;
         match found {
             Some((id,)) => Some(id),
             None => return Ok(()),
         }
-    } else {
-        None
     };
     for link in links {
         IssueService::assign(pool, link.issue_id, user_id, user_id.map(|_| "user")).await?;

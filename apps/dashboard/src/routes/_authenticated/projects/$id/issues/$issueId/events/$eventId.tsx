@@ -254,7 +254,11 @@ function EventView({
         message={message}
         levelText={levelText}
         userCount={userCount}
-        githubLinks={repository ? (code?.links ?? []) : null}
+        // Links outlive a disconnected repository and can still be unlinked.
+        githubLinks={
+          repository || code?.links.length ? (code?.links ?? []) : null
+        }
+        githubConnected={repository != null}
       />
 
       {/* Body */}
