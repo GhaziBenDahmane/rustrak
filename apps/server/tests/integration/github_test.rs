@@ -347,6 +347,54 @@ async fn manifest_flow_creates_the_app() {
 }
 
 #[actix_web::test]
+async fn manifest_sends_the_browser_to_the_dashboard_host() {
+    let db = TestDb::new().await;
+    let token = token(&db).await;
+    let base = test_config();
+    let config = rustrak::config::Config {
+        dashboard: DashboardConfig {
+            url: Some("https://errors.example.com".to_string()),
+            ..base.dashboard.clone()
+        },
+        ..base
+    };
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(db.pool.clone()))
+            .app_data(web::Data::new(config))
+            .wrap(
+                SessionMiddleware::builder(CookieSessionStore::default(), Key::generate())
+                    .cookie_secure(false)
+                    .build(),
+            )
+            .configure(routes::github::configure),
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/api/github/manifest")
+        .insert_header(bearer(&token))
+        .set_json(json!({}))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    let manifest: Value = serde_json::from_str(body["manifest"].as_str().unwrap()).unwrap();
+    // The session cookie lives on the dashboard's host, so GitHub must send
+    // the browser back there; only the webhook goes to PUBLIC_URL.
+    assert_eq!(
+        manifest["redirect_url"],
+        "https://errors.example.com/api/github/callback"
+    );
+    assert_eq!(
+        manifest["setup_url"],
+        "https://errors.example.com/api/github/installed"
+    );
+    assert_eq!(
+        manifest["hook_attributes"]["url"],
+        "https://rustrak.example.com/api/github/webhook"
+    );
+}
+
+#[actix_web::test]
 async fn installing_the_app_records_the_installation() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;
