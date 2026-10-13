@@ -470,7 +470,13 @@ pub async fn sync_codeowners(
             break;
         }
     }
-    GitHubService::save_codeowners(pool.get_ref(), project_id, content.as_deref()).await?;
+    GitHubService::save_codeowners(
+        pool.get_ref(),
+        project_id,
+        &repo.repo_full_name,
+        content.as_deref(),
+    )
+    .await?;
     Ok(HttpResponse::Ok()
         .json(GitHubService::project_repository(pool.get_ref(), project_id).await?))
 }

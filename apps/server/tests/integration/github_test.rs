@@ -599,6 +599,53 @@ async fn codeowners_sync_counts_the_rules() {
         .to_request();
     let body: Value = test::call_and_read_body_json(&app, req).await;
     assert_eq!(body["codeowners_rules"], 2);
+
+    let codeowners = || async {
+        GitHubService::project_repository_row(&db.pool, project.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .codeowners
+    };
+    // A sync that finishes after the project moved to another repository
+    // does not write the old one's owners onto it.
+    GitHubService::save_codeowners(&db.pool, project.id, "acme/old", Some("* @old"))
+        .await
+        .unwrap();
+    assert_ne!(codeowners().await.as_deref(), Some("* @old"));
+    // Saving the same repository, however GitHub cases it, keeps them.
+    GitHubService::save_project_repository(&db.pool, project.id, 99, "Acme/Web", "trunk", &[])
+        .await
+        .unwrap();
+    assert!(codeowners().await.is_some());
+}
+
+#[actix_web::test]
+async fn suspect_commits_look_past_a_busy_window() {
+    let db = TestDb::new().await;
+    let commit = |sha: String, file: &str, minutes: i64| rustrak::models::github::RepoCommit {
+        repo_full_name: "acme/web".into(),
+        sha,
+        message: "Change".into(),
+        author_name: "Ana".into(),
+        author_login: None,
+        url: String::new(),
+        files: json!([file]).to_string(),
+        committed_at: Utc::now() - chrono::Duration::minutes(minutes),
+    };
+    GitHubService::save_commit(&db.pool, &commit("old".into(), "lib/db.ts", 2000))
+        .await
+        .unwrap();
+    for i in 0..1001 {
+        GitHubService::save_commit(&db.pool, &commit(format!("n{i}"), "README.md", 10))
+            .await
+            .unwrap();
+    }
+    let found = GitHubService::suspect_commits(&db.pool, "acme/web", "lib/db.ts", Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].sha, "old");
 }
 
 // =============================================================================
@@ -901,9 +948,14 @@ async fn issue_code_block_names_suspect_commits_and_owners() {
     let project = project(&db).await;
     connect(&db, &github, project.id).await;
     let issue = issue(&db, project.id, "/app/lib/db.ts").await;
-    GitHubService::save_codeowners(&db.pool, project.id, Some("* @acme/all\n/lib/ @acme/db\n"))
-        .await
-        .unwrap();
+    GitHubService::save_codeowners(
+        &db.pool,
+        project.id,
+        "acme/web",
+        Some("* @acme/all\n/lib/ @acme/db\n"),
+    )
+    .await
+    .unwrap();
     for (sha, file, hours_before) in [("aaa", "lib/db.ts", 2), ("bbb", "README.md", 1)] {
         GitHubService::save_commit(
             &db.pool,
@@ -1163,10 +1215,13 @@ async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
     let issue = issue(&db, project.id, "/app/lib/db.ts").await;
     let app = app!(db);
 
+    link_12(&db, issue.id).await;
+    // GitHub renamed the default branch since the project was connected
+    // (`trunk` then); the push says which one it is now.
     let push = |branch: &str, sha: &str| {
         json!({
             "ref": format!("refs/heads/{branch}"),
-            "repository": { "full_name": "acme/web" },
+            "repository": { "full_name": "acme/web", "default_branch": "main" },
             "commits": [{
                 "id": sha, "message": "Guard the pool\n\nFixes WEB-1",
                 "timestamp": (Utc::now() - chrono::Duration::minutes(5)).to_rfc3339(),
@@ -1185,8 +1240,15 @@ async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
     .await;
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.status, "unresolved");
+    test::call_service(
+        &app,
+        webhook("push", &push("trunk", "0ld"), "whs").to_request(),
+    )
+    .await;
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "unresolved");
 
-    let req = webhook("push", &push("trunk", "abc123"), "whs").to_request();
+    let req = webhook("push", &push("main", "abc123"), "whs").to_request();
     assert_eq!(test::call_service(&app, req).await.status(), 204);
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.status, "resolved");
@@ -1195,12 +1257,27 @@ async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
         .unwrap();
     let data: Value = serde_json::from_str(&activity[0].data).unwrap();
     assert_eq!(data["commit"]["sha"], "abc123");
+    // The linked GitHub issue closes too.
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/12").await;
+    assert_eq!(call.body["state"], "closed");
 
     let commits: Vec<(String,)> = sqlx::query_as("SELECT sha FROM repo_commits")
         .fetch_all(&db.pool)
         .await
         .unwrap();
     assert_eq!(commits, vec![("abc123".to_string(),)]);
+
+    // A redelivered push does not resolve the issue again once it came back.
+    IssueService::set_status(&db.pool, issue.id, "unresolved", None)
+        .await
+        .unwrap();
+    test::call_service(
+        &app,
+        webhook("push", &push("main", "abc123"), "whs").to_request(),
+    )
+    .await;
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "unresolved");
 }
 
 #[actix_web::test]

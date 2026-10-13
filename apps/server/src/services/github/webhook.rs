@@ -149,11 +149,12 @@ async fn issue_comment(pool: &DbPool, payload: &Value) -> AppResult<()> {
 async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
     let repo = text(payload, "/repository/full_name");
     let branch = text(payload, "/ref").trim_start_matches("refs/heads/");
-    let projects: Vec<_> = GitHubService::projects_for_repo(pool, repo)
-        .await?
-        .into_iter()
-        .filter(|p| p.default_branch == branch)
-        .collect();
+    // The push names the default branch as it is now; the one saved when the
+    // project was connected goes stale when someone renames it on GitHub.
+    if branch != text(payload, "/repository/default_branch") {
+        return Ok(());
+    }
+    let projects = GitHubService::projects_for_repo(pool, repo).await?;
     if projects.is_empty() {
         return Ok(());
     }
@@ -189,8 +190,10 @@ async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
                 .map(|d| d.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
         };
-        GitHubService::save_commit(pool, &saved).await?;
-        resolve_fixed(pool, &projects, &saved).await?;
+        // A redelivered push must not resolve an issue that came back since.
+        if GitHubService::save_commit(pool, &saved).await? {
+            resolve_fixed(pool, &projects, &saved).await?;
+        }
     }
     Ok(())
 }
@@ -232,6 +235,10 @@ async fn resolve_fixed(
             })
             .to_string();
             IssueSocialService::add_activity(pool, issue_id, None, "set_status", &data).await?;
+            super::sync::spawn(
+                "status sync",
+                super::sync::mirror_status(pool.clone(), issue_id),
+            );
         }
     }
     Ok(())

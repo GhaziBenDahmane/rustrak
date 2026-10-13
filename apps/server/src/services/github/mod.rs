@@ -220,9 +220,9 @@ impl GitHubService {
                    installation_id = EXCLUDED.installation_id,
                    default_branch = EXCLUDED.default_branch,
                    code_mappings = EXCLUDED.code_mappings,
-                   codeowners = CASE WHEN project_repositories.repo_full_name = EXCLUDED.repo_full_name
+                   codeowners = CASE WHEN LOWER(project_repositories.repo_full_name) = LOWER(EXCLUDED.repo_full_name)
                                      THEN project_repositories.codeowners END,
-                   codeowners_synced_at = CASE WHEN project_repositories.repo_full_name = EXCLUDED.repo_full_name
+                   codeowners_synced_at = CASE WHEN LOWER(project_repositories.repo_full_name) = LOWER(EXCLUDED.repo_full_name)
                                      THEN project_repositories.codeowners_synced_at END,
                    repo_full_name = EXCLUDED.repo_full_name"#,
         )
@@ -245,18 +245,22 @@ impl GitHubService {
         Ok(())
     }
 
+    /// Stores `repo_full_name`'s CODEOWNERS, unless the project moved to
+    /// another repository while GitHub was being asked.
     pub async fn save_codeowners(
         pool: &DbPool,
         project_id: i32,
+        repo_full_name: &str,
         content: Option<&str>,
     ) -> AppResult<()> {
         sqlx::query(
             "UPDATE project_repositories SET codeowners = $2, codeowners_synced_at = $3
-             WHERE project_id = $1",
+             WHERE project_id = $1 AND LOWER(repo_full_name) = LOWER($4)",
         )
         .bind(project_id)
         .bind(content)
         .bind(Utc::now())
+        .bind(repo_full_name)
         .execute(pool)
         .await?;
         Ok(())
@@ -378,8 +382,9 @@ impl GitHubService {
 
     // -------------------------------------------------------------- commits
 
-    pub async fn save_commit(pool: &DbPool, commit: &RepoCommit) -> AppResult<()> {
-        sqlx::query(
+    /// Keeps a commit; `false` when it was already here (a redelivered push).
+    pub async fn save_commit(pool: &DbPool, commit: &RepoCommit) -> AppResult<bool> {
+        let result = sqlx::query(
             r#"INSERT INTO repo_commits (repo_full_name, sha, message, author_name, author_login, url, files, committed_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT (repo_full_name, sha) DO NOTHING"#,
@@ -394,7 +399,7 @@ impl GitHubService {
         .bind(commit.committed_at)
         .execute(pool)
         .await?;
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
     /// Up to three commits that touched `path` in the 30 days before
@@ -405,18 +410,22 @@ impl GitHubService {
         path: &str,
         before: DateTime<Utc>,
     ) -> AppResult<Vec<RepoCommit>> {
-        // ponytail: matches paths in Rust over the window's commits; a
-        // commit_files table becomes worth it once a window holds thousands.
+        // ponytail: a LIKE on the file name narrows the window in SQL, Rust
+        // matches the path; a commit_files table if one name is everywhere.
+        // `%` and `_` in the name only widen the LIKE, never miss a match.
+        let name = path.rsplit('/').next().unwrap_or(path);
         let commits = sqlx::query_as::<_, RepoCommit>(
             r#"SELECT repo_full_name, sha, message, author_name, author_login, url, files, committed_at
                FROM repo_commits
                WHERE LOWER(repo_full_name) = LOWER($1) AND committed_at <= $2 AND committed_at >= $3
+                 AND files LIKE $4
                ORDER BY committed_at DESC
                LIMIT 1000"#,
         )
         .bind(repo_full_name)
         .bind(before)
         .bind(before - Duration::days(30))
+        .bind(format!("%{name}%"))
         .fetch_all(pool)
         .await?;
         Ok(commits
@@ -574,13 +583,15 @@ pub fn parse_issue_reference(reference: &str, default_repo: Option<&str>) -> Opt
 
 /// CODEOWNERS as `(pattern, owners)` rules in file order.
 pub fn parse_codeowners(content: &str) -> Vec<(String, Vec<String>)> {
+    // gitignore rules: `#` starts a comment at the start of a line or after
+    // whitespace; `\#` is a literal `#` in a pattern.
     content
         .lines()
-        .map(|line| line.split('#').next().unwrap_or("").trim())
-        .filter(|line| !line.is_empty())
         .filter_map(|line| {
-            let mut parts = line.split_whitespace();
-            let pattern = parts.next()?.to_string();
+            let mut parts = line
+                .split_whitespace()
+                .take_while(|word| !word.starts_with('#'));
+            let pattern = parts.next()?.replace("\\#", "#");
             let owners: Vec<String> = parts.map(str::to_string).collect();
             Some((pattern, owners))
         })
@@ -737,6 +748,16 @@ mod tests {
         );
         assert_eq!(parse_issue_reference("#4", None), None);
         assert_eq!(parse_issue_reference("nonsense", Some("a/b")), None);
+    }
+
+    #[test]
+    fn codeowners_hash_is_a_comment_only_where_gitignore_says() {
+        let file = "/docs/\\#notes.md @team # who\n#comment @nobody\n";
+        assert_eq!(
+            parse_codeowners(file),
+            vec![("/docs/#notes.md".to_string(), vec!["@team".to_string()])]
+        );
+        assert_eq!(codeowners_for(file, "docs/#notes.md"), vec!["@team"]);
     }
 
     #[test]
