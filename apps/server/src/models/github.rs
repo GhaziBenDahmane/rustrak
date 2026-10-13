@@ -90,6 +90,8 @@ pub struct ProjectRepositoryRow {
     pub repo_full_name: String,
     pub default_branch: String,
     pub code_mappings: String,
+    pub auto_create_issues: bool,
+    pub auto_create_conditions: String,
     pub codeowners: Option<String>,
     pub codeowners_synced_at: Option<DateTime<Utc>>,
 }
@@ -103,6 +105,10 @@ pub struct ProjectRepository {
     pub default_branch: String,
     pub html_url: String,
     pub code_mappings: Vec<CodeMapping>,
+    /// Open a GitHub issue for new issues that pass `auto_create_conditions`.
+    pub auto_create_issues: bool,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
+    pub auto_create_conditions: serde_json::Value,
     /// How many ownership rules the last CODEOWNERS sync found; `None` before
     /// the first sync.
     pub codeowners_rules: Option<usize>,
@@ -116,6 +122,13 @@ pub struct UpdateProjectRepository {
     pub repo_full_name: String,
     #[serde(default)]
     pub code_mappings: Option<Vec<CodeMapping>>,
+    #[serde(default)]
+    pub auto_create_issues: Option<bool>,
+    /// The same filters an alert rule takes: `min_level`, `environments`,
+    /// `min_events`.
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Object>))]
+    pub auto_create_conditions: Option<serde_json::Value>,
 }
 
 /// A repository an installation can reach.

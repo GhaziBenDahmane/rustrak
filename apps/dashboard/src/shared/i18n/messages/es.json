@@ -624,7 +624,8 @@
       "fieldAlertType": "ese tipo de alerta",
       "saveFailed": "No se pudo guardar la regla",
       "updated": "Regla de alerta actualizada",
-      "created": "Regla de alerta creada"
+      "created": "Regla de alerta creada",
+      "filters": "Filtros"
     },
     "integrationDialog": {
       "name": "Nombre",
@@ -1756,6 +1757,8 @@
       "addMapping": "Añadir ruta",
       "removeMapping": "Quitar ruta",
       "issues": "Issues",
+      "autoCreate": "Abrir issues en GitHub automáticamente",
+      "autoCreateDescription": "Un error nuevo abre un issue en GitHub, una vez por issue, si pasa los filtros de abajo.",
       "fixes": "Resolver desde commits",
       "fixesDescription": "Un commit en la rama principal que diga esto resuelve el issue.",
       "codeowners": "Responsables del código",
@@ -1767,7 +1770,9 @@
       "danger": "Zona de peligro",
       "disconnect": "Desconectar repositorio",
       "disconnectDescription": "Deja de enlazar los issues de este proyecto con GitHub. Los enlaces existentes se mantienen.",
-      "saveFailed": "No se pudo guardar el repositorio"
+      "saveFailed": "No se pudo guardar el repositorio",
+      "autoCreateFilters": "Qué errores",
+      "autoCreateFiltersDescription": "Sin filtros, cada issue nuevo abre uno. \"Mínimo de eventos\" espera a que el issue haya ocurrido esas veces."
     },
     "issue": {
       "menu": "Acciones de GitHub",
@@ -1795,5 +1800,13 @@
       "saved": "Usuario de GitHub guardado",
       "saveFailed": "No se pudo guardar tu usuario de GitHub"
     }
+  },
+  "conditions": {
+    "minLevel": "Nivel",
+    "anyLevel": "Cualquier nivel",
+    "levelOrAbove": "{level} o superior",
+    "minEvents": "Mínimo de eventos",
+    "environments": "Entornos",
+    "description": "Separados por comas. Vacío significa todos."
   }
 }

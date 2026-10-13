@@ -248,6 +248,8 @@ async fn connect(db: &TestDb, github: &FakeGitHub, project_id: i32) {
             stack_root: "/app/".into(),
             source_root: "".into(),
         }],
+        false,
+        &json!({}),
     )
     .await
     .unwrap();
@@ -462,6 +464,8 @@ async fn project_repository_round_trip() {
             "installation_id": 99,
             "repo_full_name": "acme/web",
             "code_mappings": [{ "stack_root": "/app/", "source_root": "src/" }],
+            "auto_create_issues": true,
+            "auto_create_conditions": { "min_level": "error", "min_events": 10 },
         }))
         .to_request();
     let body: Value = test::call_and_read_body_json(&app, req).await;
@@ -469,6 +473,19 @@ async fn project_repository_round_trip() {
     assert_eq!(body["default_branch"], "trunk");
     assert_eq!(body["html_url"], "https://github.com/acme/web");
     assert_eq!(body["code_mappings"][0]["source_root"], "src/");
+    assert_eq!(body["auto_create_issues"], true);
+    assert_eq!(body["auto_create_conditions"]["min_events"], 10);
+
+    let req = test::TestRequest::put()
+        .uri(&uri)
+        .insert_header(bearer(&token))
+        .set_json(json!({
+            "installation_id": 99,
+            "repo_full_name": "acme/web",
+            "auto_create_conditions": { "min_level": "loud" },
+        }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 400);
 
     let req = test::TestRequest::delete()
         .uri(&uri)
@@ -913,6 +930,124 @@ async fn uninstalling_the_app_on_github_removes_the_installation() {
         .await
         .unwrap()
         .is_empty());
+}
+
+// =============================================================================
+// New issues
+// =============================================================================
+
+/// Digests one `TypeError` event, always the same group, in `environment`.
+async fn digest(db: &TestDb, project_id: i32, environment: &str) {
+    let ingest = tempfile::TempDir::new().unwrap();
+    let event_id = uuid::Uuid::new_v4().simple().to_string();
+    let event = crate::common::EventBuilder::new()
+        .with_event_id(&event_id)
+        .with_exception("TypeError", "x is undefined")
+        .with_environment(environment)
+        .build();
+    rustrak::ingest::store_event(
+        ingest.path(),
+        &event_id,
+        &serde_json::to_vec(&event).unwrap(),
+    )
+    .await
+    .unwrap();
+    crate::common::process_error_event(
+        &db.pool,
+        &rustrak::ingest::EventMetadata {
+            event_id,
+            project_id,
+            ingested_at: Utc::now(),
+            remote_addr: None,
+        },
+        ingest.path(),
+        &test_config().rate_limit,
+        crate::common::null_sourcemap_provider(),
+    )
+    .await
+    .unwrap();
+}
+
+/// Turns on automatic GitHub issues for the project, with these filters.
+async fn auto_create(db: &TestDb, project_id: i32, conditions: Value) {
+    sqlx::query(
+        "UPDATE project_repositories SET auto_create_issues = TRUE, auto_create_conditions = $1 WHERE project_id = $2",
+    )
+    .bind(conditions.to_string())
+    .bind(project_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+fn issues_opened(github: &FakeGitHub) -> usize {
+    github
+        .calls()
+        .iter()
+        .filter(|c| c.method == "POST" && c.path == "/repos/acme/web/issues")
+        .count()
+}
+
+#[actix_web::test]
+async fn a_new_issue_opens_a_github_issue_when_the_project_asks() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    auto_create(&db, project.id, json!({})).await;
+
+    digest(&db, project.id, "production").await;
+
+    let sent = github.wait_for("POST", "/repos/acme/web/issues").await;
+    assert_eq!(sent.body["title"], "TypeError: x is undefined");
+}
+
+#[actix_web::test]
+async fn the_filters_decide_when_the_github_issue_opens() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    auto_create(
+        &db,
+        project.id,
+        json!({ "min_events": 3, "environments": ["production"] }),
+    )
+    .await;
+
+    digest(&db, project.id, "production").await;
+    digest(&db, project.id, "staging").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(issues_opened(&github), 0, "two events are not three");
+
+    // The third event, but from staging: the count is right, the place is not.
+    digest(&db, project.id, "staging").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(issues_opened(&github), 0, "staging is filtered out");
+
+    digest(&db, project.id, "production").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        issues_opened(&github),
+        0,
+        "the fourth event is past the count"
+    );
+}
+
+#[actix_web::test]
+async fn the_github_issue_opens_on_the_event_that_reaches_the_count() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    auto_create(&db, project.id, json!({ "min_events": 2 })).await;
+
+    digest(&db, project.id, "production").await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(issues_opened(&github), 0);
+
+    digest(&db, project.id, "production").await;
+    github.wait_for("POST", "/repos/acme/web/issues").await;
 }
 
 // =============================================================================

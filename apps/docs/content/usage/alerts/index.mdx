@@ -191,6 +191,7 @@ Alert rules define when to send notifications for a specific project.
    - **Name**: e.g., "Notify team on new issues"
    - **Trigger**: When to alert
    - **Channels**: Where to send (select one or more)
+   - **Filters**: Which issues are worth it (level, environments, number of events)
    - **Cooldown**: Minimum time between alerts for the same issue
 5. Click **Create Rule**
 
@@ -201,6 +202,18 @@ Alert rules define when to send notifications for a specific project.
 | **New Issue** | When an issue is first detected |
 | **Regression** | When a resolved issue reappears |
 | **Unmute** | When a muted issue is unmuted |
+
+### Filters
+
+A rule without filters fires for every issue its trigger sees. Each filter narrows it:
+
+| Filter | Fires when |
+|--------|------------|
+| **Level** | The event is at least this level (`error or above` skips warnings and info). An event with no level counts as `error`. |
+| **Environments** | The event's environment is one of these. Empty means every environment. |
+| **New issue after** | New Issue rules only: the issue reaches this many events. It fires once, on the event that reaches the count, instead of on the first one. |
+
+`New issue after: 10` together with `Environments: production` is what keeps a one-off error on a laptop from ever reaching anyone.
 
 ### Cooldown
 

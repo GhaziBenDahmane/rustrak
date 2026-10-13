@@ -13,8 +13,9 @@ use super::client::GitHubClient;
 use super::{parse_issue_reference, GitHubService};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
+use crate::models::alert::RuleConditions;
 use crate::models::github::{GitHubApp, IssueLink};
-use crate::models::{Issue, Project};
+use crate::models::{AlertType, Issue, Project};
 use crate::services::{AlertService, IssueSocialService};
 
 /// Runs a sync in the background and logs, rather than surfaces, a failure.
@@ -257,5 +258,36 @@ pub async fn mirror_assignee(pool: DbPool, issue_id: Uuid, user_id: Option<i32>)
             .set_assignees(installation_id, &link.repo_full_name, link.number, &logins)
             .await?;
     }
+    Ok(())
+}
+
+/// Opens a GitHub issue for a new Rustrak issue when the project asked for it
+/// and the event passes the project's filters. An issue that already has one
+/// keeps it: a replayed event must not open a second.
+pub async fn auto_create(
+    pool: DbPool,
+    project: Project,
+    issue: Issue,
+    level: Option<String>,
+    environment: Option<String>,
+    dashboard_url: String,
+) -> AppResult<()> {
+    let Some(repo) = GitHubService::project_repository_row(&pool, project.id).await? else {
+        return Ok(());
+    };
+    let conditions =
+        serde_json::from_str::<RuleConditions>(&repo.auto_create_conditions).unwrap_or_default();
+    if !repo.auto_create_issues
+        || !conditions.matches(
+            AlertType::NewIssue,
+            level.as_deref(),
+            environment.as_deref(),
+            issue.digested_event_count,
+        )
+        || !GitHubService::links(&pool, issue.id).await?.is_empty()
+    {
+        return Ok(());
+    }
+    create_issue(&pool, &project, &issue, None, None, None, &dashboard_url).await?;
     Ok(())
 }

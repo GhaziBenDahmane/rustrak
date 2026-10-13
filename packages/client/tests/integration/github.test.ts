@@ -15,6 +15,8 @@ const repository = {
   default_branch: 'main',
   html_url: 'https://github.com/acme/web',
   code_mappings: [{ stack_root: '/app/', source_root: 'src/' }],
+  auto_create_issues: true,
+  auto_create_conditions: { min_level: 'error', min_events: 10 },
   codeowners_rules: null,
   codeowners_synced_at: null,
 };
@@ -103,6 +105,8 @@ describe('GitHubResource', () => {
       }),
     );
     expect(saved.code_mappings[0]?.source_root).toBe('src/');
+    expect(saved.auto_create_issues).toBe(true);
+    expect(saved.auto_create_conditions.min_events).toBe(10);
     expectOk(await client.github.removeProjectRepository(1));
   });
 

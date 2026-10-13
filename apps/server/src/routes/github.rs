@@ -377,6 +377,11 @@ pub async fn put_project_repository(
 ) -> AppResult<HttpResponse> {
     let project_id = path.into_inner();
     require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
+    let conditions = body
+        .auto_create_conditions
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({}));
+    crate::models::alert::RuleConditions::parse(&conditions)?;
     let app = GitHubService::require_app(pool.get_ref()).await?;
     // Asking GitHub proves the installation reaches the repository.
     let repo = GitHubClient::new(&app)
@@ -389,6 +394,8 @@ pub async fn put_project_repository(
         &repo.full_name,
         &repo.default_branch,
         body.code_mappings.as_deref().unwrap_or_default(),
+        body.auto_create_issues.unwrap_or(false),
+        &conditions,
     )
     .await?;
     Ok(HttpResponse::Ok()

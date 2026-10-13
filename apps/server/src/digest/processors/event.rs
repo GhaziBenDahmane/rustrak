@@ -205,6 +205,7 @@ impl ErrorProcessor {
                         &issue,
                         alert_type,
                         event_id,
+                        event_facts(&event_data),
                         &self.dashboard_url,
                     )
                     .await?;
@@ -250,6 +251,7 @@ impl ErrorProcessor {
                 .and_then(|v| v.as_str())
                 .map(|s| clamp(s, max_chars))
         };
+        let facts = event_facts(&event_data);
         let level = event_data
             .get("level")
             .and_then(|v| v.as_str())
@@ -317,21 +319,39 @@ impl ErrorProcessor {
         }
 
         // 10. Persist alert history before deleting the only durable source.
-        if issue_created || regressed {
-            let alert_type = if issue_created {
-                AlertType::NewIssue
-            } else {
-                AlertType::Regression
-            };
+        // A later event of an issue that is not new can still be the one that
+        // brings it to a new-issue rule's `min_events`; the rule decides.
+        let alert_type = if issue_created {
+            Some(AlertType::NewIssue)
+        } else if regressed {
+            Some(AlertType::Regression)
+        } else {
+            (!issue.is_muted()).then_some(AlertType::NewIssue)
+        };
+        if let Some(alert_type) = alert_type {
             AlertService::trigger_event_alert(
                 pool,
                 &project,
                 &issue,
                 alert_type,
                 event_id,
+                facts,
                 &self.dashboard_url,
             )
             .await?;
+        }
+        if alert_type == Some(AlertType::NewIssue) {
+            crate::services::github::sync::spawn(
+                "issue auto-create",
+                crate::services::github::sync::auto_create(
+                    pool.clone(),
+                    project.clone(),
+                    issue.clone(),
+                    facts.level.map(str::to_string),
+                    facts.environment.map(str::to_string),
+                    self.dashboard_url.clone(),
+                ),
+            );
         }
 
         // 11. Delete after the event and alert writes complete; SQLite also
@@ -1257,4 +1277,15 @@ struct PrevIssue {
     last_frame_module: String,
     last_frame_function: String,
     level: Option<String>,
+}
+
+/// The fields an alert rule's filters read, straight from the event.
+fn event_facts(event_data: &serde_json::Value) -> crate::services::alert::EventFacts<'_> {
+    crate::services::alert::EventFacts {
+        level: event_data
+            .get("level")
+            .and_then(|v| v.as_str())
+            .and_then(relay_level),
+        environment: event_data.get("environment").and_then(|v| v.as_str()),
+    }
 }

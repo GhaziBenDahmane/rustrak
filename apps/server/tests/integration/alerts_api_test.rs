@@ -235,6 +235,7 @@ async fn test_event_alert_cooldown_is_a_durable_replay_barrier() {
         &issue,
         AlertType::NewIssue,
         event_id,
+        Default::default(),
         "https://dashboard.example.com",
     )
     .await
@@ -1234,4 +1235,27 @@ async fn test_trigger_alert_does_not_block_on_slow_webhook_delivery() {
         leased,
         "in-flight delivery must hold a future next_retry_at lease"
     );
+}
+
+#[tokio::test]
+async fn test_rule_conditions_are_validated() {
+    let db = TestDb::new().await;
+    let project_id = create_test_project(&db.pool).await;
+    let input = |conditions: serde_json::Value| CreateAlertRule {
+        name: "Filtered".to_string(),
+        alert_type: AlertType::NewIssue,
+        channels: vec![],
+        conditions,
+        cooldown_minutes: 0,
+    };
+
+    let refused =
+        AlertService::create_rule(&db.pool, project_id, input(json!({ "min_level": "loud" })))
+            .await;
+    assert!(refused.is_err(), "an unknown level is refused");
+
+    let rule = AlertService::create_rule(&db.pool, project_id, input(json!({ "min_events": 5 })))
+        .await
+        .expect("valid conditions are stored");
+    assert_eq!(rule.conditions["min_events"], 5);
 }
