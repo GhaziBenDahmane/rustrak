@@ -302,8 +302,14 @@ pub async fn repositories(
     let client = GitHubClient::new(&app);
     let mut repositories = Vec::new();
     for installation in GitHubService::installations(pool.get_ref()).await? {
-        if !installation.suspended {
-            repositories.extend(client.repositories(installation.id).await?);
+        if installation.suspended {
+            continue;
+        }
+        // One installation GitHub no longer has (its `deleted` webhook lost)
+        // must not hide every other installation's repositories.
+        match client.repositories(installation.id).await {
+            Ok(found) => repositories.extend(found),
+            Err(e) => log::warn!("Skipping GitHub installation {}: {e}", installation.id),
         }
     }
     Ok(HttpResponse::Ok().json(repositories))
@@ -373,6 +379,20 @@ pub async fn put_project_repository(
 ) -> AppResult<HttpResponse> {
     let project_id = path.into_inner();
     require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
+    // The name goes into a GitHub API path; anything but `owner/repo` would
+    // point the installation token at another endpoint.
+    let valid = |part: &str| {
+        !part.is_empty()
+            && part != "."
+            && part != ".."
+            && part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    match body.repo_full_name.split_once('/') {
+        Some((owner, name)) if valid(owner) && valid(name) => {}
+        _ => return Err(AppError::Validation("Invalid repository name".into())),
+    }
     let app = GitHubService::require_app(pool.get_ref()).await?;
     // Asking GitHub proves the installation reaches the repository.
     let repo = GitHubClient::new(&app)
@@ -474,7 +494,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/callback", web::get().to(callback))
             .route("/installed", web::get().to(installed))
             .route("/repositories", web::get().to(repositories))
-            .route("/webhook", web::post().to(webhook)),
+            .service(
+                // GitHub sends up to 25 MB; `installation` events list every
+                // repository and outgrow actix's 256 KiB default.
+                web::resource("/webhook")
+                    .app_data(web::PayloadConfig::new(25 * 1024 * 1024))
+                    .route(web::post().to(webhook)),
+            ),
     )
     .service(
         web::scope("/api/projects/{project_id}/github")
