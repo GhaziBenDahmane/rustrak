@@ -59,8 +59,19 @@ pub trait SourceMapProvider: Send + Sync {
 
 /// DecodedMap auto-detects Hermes (`x_facebook_sources`) vs regular maps;
 /// SourceMap::from_reader alone returns IncompatibleSourceMap for Hermes.
+///
+/// Index maps (`sections`, which Turbopack writes for nearly every chunk) are
+/// flattened here, once per parse, so frame lookup only ever sees a regular
+/// map. Flattening needs every section embedded; one that is not is a miss.
 fn parse_sourcemap(debug_id: &str, data: &[u8]) -> Option<sourcemap::DecodedMap> {
     match sourcemap::DecodedMap::from_reader(Cursor::new(data)) {
+        Ok(sourcemap::DecodedMap::Index(index)) => match index.flatten() {
+            Ok(flat) => Some(sourcemap::DecodedMap::Regular(flat)),
+            Err(e) => {
+                log::warn!("failed to flatten index source map for {}: {}", debug_id, e);
+                None
+            }
+        },
         Ok(m) => Some(m),
         Err(e) => {
             log::warn!("failed to parse source map for {}: {}", debug_id, e);
@@ -1003,7 +1014,7 @@ async fn rewrite_frames_under(
                 continue;
             };
 
-            // Indexed maps need embedded sections for lookup + contents; skip them.
+            // parse_sourcemap flattens index maps, so Index never reaches here.
             let sm: &sourcemap::SourceMap = match &*decoded {
                 sourcemap::DecodedMap::Regular(sm) => sm,
                 sourcemap::DecodedMap::Hermes(smh) => smh,

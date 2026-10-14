@@ -509,6 +509,85 @@ fn make_hermes_sourcemap() -> Bytes {
     Bytes::from(json)
 }
 
+/// Index map shaped like Turbopack's output: embedded sections, the second
+/// starting at generated line 3 and the third further along that same line.
+fn make_index_sourcemap() -> Bytes {
+    let json = r#"{
+        "version": 3,
+        "sections": [
+            {
+                "offset": {"line": 0, "column": 0},
+                "map": {
+                    "version": 3,
+                    "sources": ["src/a.ts"],
+                    "sourcesContent": ["a line 1\na line 2"],
+                    "names": [],
+                    "mappings": "AAAA;AACA"
+                }
+            },
+            {
+                "offset": {"line": 3, "column": 0},
+                "map": {
+                    "version": 3,
+                    "sources": ["src/b.ts"],
+                    "sourcesContent": ["b line 1\nb line 2\nb line 3"],
+                    "names": [],
+                    "mappings": "AAEA"
+                }
+            },
+            {
+                "offset": {"line": 3, "column": 40},
+                "map": {
+                    "version": 3,
+                    "sources": ["src/c.ts"],
+                    "sourcesContent": ["c line 1"],
+                    "names": [],
+                    "mappings": "AAAA"
+                }
+            }
+        ]
+    }"#;
+    Bytes::from(json)
+}
+
+#[tokio::test]
+async fn test_rewrite_index_map_line_offset() {
+    let provider = FakeSourceMapProvider::with_data(make_index_sourcemap());
+    // Generated line 4 (1-based) is the second section's first line.
+    let mut event = make_event("_next/server/chunks/app.js", "abc123", 4, 5);
+
+    rewrite_frames(&provider, 1, &mut event).await.unwrap();
+
+    let frame = &event["exception"]["values"][0]["stacktrace"]["frames"][0];
+    assert_eq!(frame["filename"].as_str().unwrap(), "src/b.ts");
+    assert_eq!(frame["lineno"].as_u64().unwrap(), 3);
+    assert_eq!(frame["context_line"].as_str().unwrap(), "b line 3");
+}
+
+#[tokio::test]
+async fn test_rewrite_index_map_column_offset() {
+    let provider = FakeSourceMapProvider::with_data(make_index_sourcemap());
+    let mut event = make_event("_next/server/chunks/app.js", "abc123", 4, 45);
+
+    rewrite_frames(&provider, 1, &mut event).await.unwrap();
+
+    let frame = &event["exception"]["values"][0]["stacktrace"]["frames"][0];
+    assert_eq!(frame["filename"].as_str().unwrap(), "src/c.ts");
+    assert_eq!(frame["context_line"].as_str().unwrap(), "c line 1");
+}
+
+#[tokio::test]
+async fn test_rewrite_index_map_first_section() {
+    let provider = FakeSourceMapProvider::with_data(make_index_sourcemap());
+    let mut event = make_event("_next/server/chunks/app.js", "abc123", 2, 0);
+
+    rewrite_frames(&provider, 1, &mut event).await.unwrap();
+
+    let frame = &event["exception"]["values"][0]["stacktrace"]["frames"][0];
+    assert_eq!(frame["filename"].as_str().unwrap(), "src/a.ts");
+    assert_eq!(frame["context_line"].as_str().unwrap(), "a line 2");
+}
+
 #[tokio::test]
 async fn test_rewrite_hermes_map() {
     let provider = FakeSourceMapProvider::with_data(make_hermes_sourcemap());
