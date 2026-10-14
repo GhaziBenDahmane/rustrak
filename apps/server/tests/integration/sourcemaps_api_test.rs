@@ -2200,6 +2200,91 @@ async fn test_assemble_bundle_tilde_prefix_with_debug_id_stores_source_file() {
     );
 }
 
+fn build_bundle(debug_id: &str, source_map: &[u8]) -> Vec<u8> {
+    use std::io::Write as _;
+    use zip::write::SimpleFileOptions;
+
+    let manifest = format!(
+        r#"{{"files":{{"~/app.min.js.map":{{"url":"~/app.min.js.map","type":"source_map","headers":{{"debug-id":"{debug_id}"}}}}}},"debugIdMap":{{}}}}"#
+    );
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("~/app.min.js.map", opts).unwrap();
+        zip.write_all(source_map).unwrap();
+        zip.start_file("manifest.json", opts).unwrap();
+        zip.write_all(manifest.as_bytes()).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+#[actix_web::test]
+async fn test_assemble_bundle_reupload_same_debug_id_replaces_map() {
+    // Sentry resolves a debug_id to the newest bundle that contains it
+    // (debug_files/artifact_bundles.py, order_by("-date_last_modified")), so
+    // re-uploading a corrected map for an unchanged chunk takes effect.
+    let db = TestDb::new().await;
+    let project = ProjectService::create(
+        &db.pool,
+        CreateProject {
+            name: "reupload-test".to_string(),
+            slug: Some("reupload-test".to_string()),
+            platform: None,
+        },
+    )
+    .await
+    .expect("project creation must succeed");
+
+    let config = create_test_config();
+    let store: std::sync::Arc<dyn rustrak::services::SourceMapStore> = std::sync::Arc::new(
+        rustrak::services::LocalSourceMapStore::new(&config.sourcemap_storage_path),
+    );
+
+    let debug_id = "11112222-3333-4444-5555-666677778888";
+    let first = br#"{"version":3,"sources":["src/old.ts"],"sourcesContent":["old"],"mappings":"AAAA","names":[]}"#;
+    let second = br#"{"version":3,"sources":["src/new.ts"],"sourcesContent":["new"],"mappings":"AAAA","names":[]}"#;
+
+    for map in [&first[..], &second[..]] {
+        let bundle = build_bundle(debug_id, map);
+        let bundle_checksum = sha1_hex(&bundle);
+        rustrak::services::sourcemap::store_chunks(
+            &db.pool,
+            vec![(bundle_checksum.clone(), bundle)],
+            20 * 1024 * 1024,
+        )
+        .await
+        .expect("store_chunks must succeed");
+        rustrak::services::sourcemap::assemble_bundle(
+            &db.pool,
+            store.as_ref(),
+            project.id,
+            &bundle_checksum,
+            std::slice::from_ref(&bundle_checksum),
+            100 * 1024 * 1024,
+        )
+        .await
+        .expect("assembly must succeed");
+    }
+
+    let stored: Vec<String> = sqlx::query_scalar(
+        "SELECT sf.checksum FROM source_file_metadata sfm \
+         JOIN source_file sf ON sf.id = sfm.file_id WHERE sfm.project_id = $1",
+    )
+    .bind(project.id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("metadata query must succeed");
+
+    assert_eq!(
+        stored,
+        vec![sha1_hex(second)],
+        "the re-uploaded map must replace the first one for the same debug_id"
+    );
+}
+
 // =============================================================================
 // Group 6: Worker recovery — keep #[ignore = "requires worker"]
 // =============================================================================

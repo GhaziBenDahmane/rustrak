@@ -747,14 +747,15 @@ async fn assemble_bundle_inner(
         #[cfg(not(feature = "postgres"))]
         let sf_id = Uuid::parse_str(&sf_id).map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Upsert source_file_metadata
+        // Upsert source_file_metadata. A re-upload for the same debug_id wins,
+        // as in Sentry, which resolves to the newest bundle.
         let new_sfm_id = Uuid::new_v4();
         #[cfg(feature = "postgres")]
         sqlx::query(
             r#"
             INSERT INTO source_file_metadata(id, project_id, debug_id, file_type, file_id)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT(project_id, debug_id, file_type) DO NOTHING
+            ON CONFLICT(project_id, debug_id, file_type) DO UPDATE SET file_id = EXCLUDED.file_id
             "#,
         )
         .bind(new_sfm_id)
@@ -770,7 +771,7 @@ async fn assemble_bundle_inner(
             r#"
             INSERT INTO source_file_metadata(id, project_id, debug_id, file_type, file_id)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT(project_id, debug_id, file_type) DO NOTHING
+            ON CONFLICT(project_id, debug_id, file_type) DO UPDATE SET file_id = EXCLUDED.file_id
             "#,
         )
         .bind(new_sfm_id.to_string())
