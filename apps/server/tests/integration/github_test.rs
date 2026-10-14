@@ -1278,6 +1278,28 @@ async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
     .await;
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.status, "unresolved");
+
+    // A push that fails halfway is redelivered and resolves the issue then.
+    let failing = push("main", "def456");
+    sqlx::query("ALTER TABLE issue_activity RENAME TO issue_activity_gone")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let req = webhook("push", &failing, "whs").to_request();
+    assert!(test::call_service(&app, req)
+        .await
+        .status()
+        .is_server_error());
+    sqlx::query("ALTER TABLE issue_activity_gone RENAME TO issue_activity")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    IssueService::set_status(&db.pool, issue.id, "unresolved", None)
+        .await
+        .unwrap();
+    test::call_service(&app, webhook("push", &failing, "whs").to_request()).await;
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "resolved");
 }
 
 #[actix_web::test]

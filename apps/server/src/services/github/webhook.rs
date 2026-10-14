@@ -192,7 +192,15 @@ async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
         };
         // A redelivered push must not resolve an issue that came back since.
         if GitHubService::save_commit(pool, &saved).await? {
-            resolve_fixed(pool, &projects, &saved).await?;
+            if let Err(e) = resolve_fixed(pool, &projects, &saved).await {
+                // Forget the commit so the redelivery resolves its issues.
+                sqlx::query("DELETE FROM repo_commits WHERE repo_full_name = $1 AND sha = $2")
+                    .bind(&saved.repo_full_name)
+                    .bind(&saved.sha)
+                    .execute(pool)
+                    .await?;
+                return Err(e);
+            }
         }
     }
     Ok(())
