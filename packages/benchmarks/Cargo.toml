@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.53.2", features = ["full"] }
+tokio = { version = "1.53.3", features = ["full"] }
 
 # HTTP client
 reqwest = { version = "0.13.5", default-features = false, features = [
@@ -25,8 +25,8 @@ clap = { version = "4.6.7", features = ["derive", "env"] }
 
 # Serialization
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-toml = "1.1.6"
+serde_json = "1.0.154"
+toml = "1.1.8"
 
 # Docker API for metrics
 bollard = "0.21.1"
@@ -44,7 +44,7 @@ hdrhistogram = "7.6.0"
 chrono = { version = "0.4.45", features = ["serde"] }
 
 # UUID generation
-uuid = { version = "1.27.0", features = ["v4"] }
+uuid = { version = "1.28.0", features = ["v4"] }
 
 # Compression
 flate2 = "1.1.10"

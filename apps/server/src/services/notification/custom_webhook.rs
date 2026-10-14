@@ -141,7 +141,7 @@ impl CustomWebhookNotifier {
         let mut rendered = LimitedWriter::new(MAX_RENDERED_BODY_BYTES);
         env.get_template("body")
             .map_err(|e| format!("Invalid template: {e}"))?
-            .render_captured_to(payload, &mut rendered)
+            .render_captured_to(minijinja::value::Serde(payload), &mut rendered)
             .map_err(|e| Self::describe_render_error(&e))?;
         let body = rendered.into_inner();
         serde_json::from_slice::<serde::de::IgnoredAny>(&body)

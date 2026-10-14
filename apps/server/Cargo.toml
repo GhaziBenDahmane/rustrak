@@ -8,7 +8,7 @@ license = "GPL-3.0-only"
 
 [dependencies]
 # Web framework (HTTP/2 is disabled until Actix moves to h2 0.4.)
-actix-web = { version = "4.15.0", default-features = false, features = [
+actix-web = { version = "4.16.0", default-features = false, features = [
     "macros",
     "compress-brotli",
     "compress-gzip",
@@ -29,11 +29,11 @@ actix-session = { version = "0.11", features = ["cookie-session"] }
 argon2 = "0.6.0"
 
 # Async runtime
-tokio = { version = "1.53.2", features = ["full"] }
+tokio = { version = "1.53.3", features = ["full"] }
 
 # Serialization
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = "1.0.154"
 
 # Logging
 env_logger = "0.11.11"
@@ -58,7 +58,7 @@ sqlx = { version = "0.9.0", features = [
 ] }
 
 # UUID generation
-uuid = { version = "1.27.0", features = ["v4", "serde"] }
+uuid = { version = "1.28.0", features = ["v4", "serde"] }
 
 # Slug generation
 slug = "0.1.6"
@@ -76,8 +76,8 @@ hex = "0.4.3"
 flate2 = "1.1.10"
 # brotli and zstd held at the versions actix-http 3.18 depends on; going past
 # them compiles a second copy of each. Bump together with actix-http.
-brotli = "8.0.4"
-zstd = "0.13.3"
+brotli = "9.0.0"
+zstd = "0.14.2"
 
 # Async utilities
 futures-util = "0.3.34"
@@ -85,7 +85,7 @@ bytes = "1.12.1"
 
 
 # Hashing (for grouping key hash)
-sha2 = "0.11.0"
+sha2 = "0.11.1"
 
 # formatting edge cases match.
 dynfmt = { version = "0.2", features = ["python", "curly"] }
@@ -114,7 +114,7 @@ openidconnect = { version = "4.0.1", default-features = false }
 hmac = "0.13.0"
 
 # Template rendering for custom webhook bodies (minijinja: pure Rust, no codegen)
-minijinja = { version = "2", features = ["json", "fuel"] }
+minijinja = { version = "3", features = ["json", "fuel", "serde"] }
 
 # URL parsing/validation
 url = "2.5.8"
@@ -124,7 +124,7 @@ async-trait = "0.1.92"
 
 # Source map processing
 sourcemap = "9"
-zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }  # CVE-2025-29787 fixed in 2.3+; DO NOT lower below 2.3; no zstd (non-SPDX license)
+zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }  # CVE-2025-29787 fixed in 2.3+; DO NOT lower below 2.3; no zstd (non-SPDX license)
 actix-multipart = "0.8"
 sha1 = "0.11"
 tempfile = "3.27.0"
@@ -148,7 +148,7 @@ utoipa-scalar = { version = "0.4.0", features = ["actix-web"], optional = true }
 rustrak = { path = ".", default-features = false, features = ["test-seams"] }
 
 # Names the request type for helpers that drive an `init_service` app
-actix-http = "3.18.12"
+actix-http = "3.18.13"
 
 # Test framework & fixtures
 rstest = "0.27.0"
@@ -167,7 +167,7 @@ testcontainers-modules = { version = "0.15.0", features = ["postgres"] }
 sentry = { version = "0.49.3", features = ["test"] }
 
 # Property-based testing
-proptest = "1.11.0"
+proptest = "1.12.0"
 
 # Better assertion diffs
 pretty_assertions = "1.4.1"
