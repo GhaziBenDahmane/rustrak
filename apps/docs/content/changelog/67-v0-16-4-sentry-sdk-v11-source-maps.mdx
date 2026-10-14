@@ -1,0 +1,35 @@
+---
+version: v0.16.4
+title: Source Maps for Sentry SDK v11
+description: Source maps uploaded by the Sentry SDK v11 bundler plugins now upload and resolve, index maps included
+date: 2026-10-14
+tags: [server, sourcemaps, security]
+---
+
+## Uploads from Sentry SDK v11 bundler plugins
+
+The v11 bundler plugins, `@sentry/nextjs` among them, upload source maps with
+the `sentry` npm package instead of `sentry-cli`. That uploader requires a
+`compression` field in the chunk-upload capability, and Rustrak did not send
+one, so every upload failed before a single chunk went out. The capability now
+answers `"compression": []`, which means chunks arrive uncompressed
+([@chrisedington](https://github.com/chrisedington)).
+
+## Index source maps resolve
+
+An index map is built from `sections`, each with its own embedded map, and
+Rustrak skipped them, so their frames stayed minified. `sentry-cli
+sourcemaps upload` flattens them before sending, but the v11 uploader sends them
+as they are, and Next.js builds with Turbopack write one for nearly every chunk.
+A frame now resolves inside the section that contains its position. A position
+before that section's first mapping stays unresolved instead of borrowing the
+previous section's last token. Index maps already stored start resolving
+without a re-upload ([@chrisedington](https://github.com/chrisedington)).
+
+## Improvements
+
+- Re-uploading a source map for the same `debug_id` replaces the previous one,
+  as in Sentry. Before, the first upload won and a corrected map for an
+  unchanged chunk was silently dropped
+- rustls 0.23.46, for RUSTSEC-2026-0346 through RUSTSEC-2026-0349
+- Dependency updates, including minijinja 3, zip 9 and actix-web 4.16
