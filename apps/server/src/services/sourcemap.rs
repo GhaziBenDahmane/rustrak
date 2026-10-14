@@ -570,7 +570,10 @@ async fn assemble_bundle_inner(
                 continue;
             }
 
-            let name = file.name().to_string();
+            let name = file
+                .name()
+                .map_err(|e| AppError::Internal(e.to_string()))?
+                .to_string();
             // Strip the "~/" prefix used by Sentry artifact bundles so that extraction
             // and manifest lookup both resolve to the same relative path.
             let name = name.trim_start_matches("~/").to_string();
