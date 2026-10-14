@@ -408,6 +408,40 @@ async fn test_chunk_capability_includes_artifact_bundles_v2() {
     assert!(chunks_per_req > 0, "chunksPerRequest must be positive");
 }
 
+#[actix_web::test]
+async fn test_chunk_capability_advertises_no_compression() {
+    let db = TestDb::new().await;
+    let token = create_test_token(&db.pool).await;
+    let config = create_test_config();
+    let (provider, config_data) = sourcemap_app_data(&db.pool, &config);
+
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(db.pool.clone()))
+            .app_data(config_data)
+            .app_data(web::Data::new(Arc::clone(&provider)))
+            .configure(routes::sourcemaps::configure),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri("/api/0/organizations/my-org/chunk-upload/")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let body: Value = test::read_body_json(resp).await;
+
+    // The `sentry` npm uploader (Sentry SDK v11) requires this array and
+    // rejects the response without it; empty means uncompressed chunks.
+    let compression = body["compression"]
+        .as_array()
+        .expect("compression must be an array");
+    assert!(compression.is_empty(), "chunks are read uncompressed");
+}
+
 // =============================================================================
 // Group 3: Chunk upload — needs BearerAuth + multipart
 // =============================================================================
