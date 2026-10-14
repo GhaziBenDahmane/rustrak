@@ -747,14 +747,15 @@ async fn assemble_bundle_inner(
         #[cfg(not(feature = "postgres"))]
         let sf_id = Uuid::parse_str(&sf_id).map_err(|e| AppError::Internal(e.to_string()))?;
 
-        // Upsert source_file_metadata
+        // Upsert source_file_metadata. A re-upload for the same debug_id wins,
+        // as in Sentry, which resolves to the newest bundle.
         let new_sfm_id = Uuid::new_v4();
         #[cfg(feature = "postgres")]
         sqlx::query(
             r#"
             INSERT INTO source_file_metadata(id, project_id, debug_id, file_type, file_id)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT(project_id, debug_id, file_type) DO NOTHING
+            ON CONFLICT(project_id, debug_id, file_type) DO UPDATE SET file_id = EXCLUDED.file_id
             "#,
         )
         .bind(new_sfm_id)
@@ -770,7 +771,7 @@ async fn assemble_bundle_inner(
             r#"
             INSERT INTO source_file_metadata(id, project_id, debug_id, file_type, file_id)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT(project_id, debug_id, file_type) DO NOTHING
+            ON CONFLICT(project_id, debug_id, file_type) DO UPDATE SET file_id = EXCLUDED.file_id
             "#,
         )
         .bind(new_sfm_id.to_string())
@@ -916,6 +917,30 @@ pub async fn rewrite_frames(
     Ok(())
 }
 
+/// The map and 0-indexed position a frame lookup should use. An index map
+/// (`sections`, which Turbopack writes for nearly every chunk) resolves inside
+/// the section that contains the position, as `SourceMapIndex::lookup_token`
+/// does: a position before that section's first mapping stays unresolved
+/// instead of borrowing the preceding section's last token. Sections are
+/// ordered by offset; one that is referenced by URL rather than embedded is a
+/// miss.
+fn section_for(
+    map: &sourcemap::DecodedMap,
+    line: u32,
+    col: u32,
+) -> Option<(&sourcemap::DecodedMap, u32, u32)> {
+    let sourcemap::DecodedMap::Index(index) = map else {
+        return Some((map, line, col));
+    };
+    let section = index
+        .sections()
+        .take_while(|s| s.get_offset() <= (line, col))
+        .last()?;
+    let (off_line, off_col) = section.get_offset();
+    let col = if line == off_line { col - off_col } else { col };
+    section_for(section.get_sourcemap()?, line - off_line, col)
+}
+
 /// Source maps already resolved for the event in flight, by debug_id. `None`
 /// records a miss so the next frame does not ask the provider again.
 type ParsedMaps = HashMap<String, Option<Arc<sourcemap::DecodedMap>>>;
@@ -1003,13 +1028,6 @@ async fn rewrite_frames_under(
                 continue;
             };
 
-            // Indexed maps need embedded sections for lookup + contents; skip them.
-            let sm: &sourcemap::SourceMap = match &*decoded {
-                sourcemap::DecodedMap::Regular(sm) => sm,
-                sourcemap::DecodedMap::Hermes(smh) => smh,
-                sourcemap::DecodedMap::Index(_) => continue,
-            };
-
             // 3e. Normalize position — use let-else, NOT '?' (normalize returns Option not Result)
             let Some((norm_lineno, norm_colno)) =
                 normalize_sentry_position(frame_lineno, frame_colno)
@@ -1017,8 +1035,21 @@ async fn rewrite_frames_under(
                 continue;
             };
 
+            // An index map resolves inside the section holding the position.
+            let Some((map, norm_lineno, norm_colno)) =
+                section_for(&decoded, norm_lineno, norm_colno)
+            else {
+                continue;
+            };
+            let sm: &sourcemap::SourceMap = match map {
+                sourcemap::DecodedMap::Regular(sm) => sm,
+                sourcemap::DecodedMap::Hermes(smh) => smh,
+                // section_for never returns an index map.
+                sourcemap::DecodedMap::Index(_) => continue,
+            };
+
             // 3f. Lookup token
-            let Some(token) = decoded.lookup_token(norm_lineno, norm_colno) else {
+            let Some(token) = map.lookup_token(norm_lineno, norm_colno) else {
                 continue;
             };
 
@@ -1059,7 +1090,7 @@ async fn rewrite_frames_under(
             let new_colno = src_col;
             // Hermes resolves names from x_facebook_sources (line==0, col=bytecode offset).
             // Regular maps return None without a minified SourceView; fall back to token name.
-            let new_function = decoded
+            let new_function = map
                 .get_original_function_name(norm_lineno, norm_colno, Some(&existing_function), None)
                 .map(|n| n.to_string())
                 .or(token_name)
