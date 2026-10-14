@@ -14,15 +14,17 @@ import { Link } from '@/shared/ui/components/link';
 export function IssueCodeBlock({
   projectId,
   code,
+  connected,
 }: {
   projectId: number;
-  /** `null` when the project has no repository. */
+  /** `null` when it could not be loaded, which is not "no repository". */
   code: IssueGitHub | null;
+  connected: boolean;
 }) {
   const t = useTranslations('github');
   const format = useFormatter();
 
-  if (!code) {
+  if (!connected) {
     return (
       <div className="p-4 border-b">
         <Link
@@ -36,7 +38,10 @@ export function IssueCodeBlock({
     );
   }
 
-  if (code.suspect_commits.length === 0 && code.owners.length === 0) {
+  if (
+    !code ||
+    (code.suspect_commits.length === 0 && code.owners.length === 0)
+  ) {
     return null;
   }
 

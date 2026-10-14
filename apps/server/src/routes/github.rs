@@ -36,13 +36,13 @@ fn require_admin(actor: &ApiActor) -> AppResult<()> {
     }
 }
 
-/// The address GitHub and browsers reach this server at: `PUBLIC_URL`, else
-/// the one this request came in on.
-fn public_base(config: &Config, req: &HttpRequest) -> String {
-    config.public_url.clone().unwrap_or_else(|| {
-        let info = req.connection_info();
-        format!("{}://{}", info.scheme(), info.host())
-    })
+/// The address GitHub's webhooks reach this server at: `PUBLIC_URL`, else the
+/// bind address. Never the request's `Host`, which the client controls.
+fn public_base(config: &Config) -> String {
+    config
+        .public_url
+        .clone()
+        .unwrap_or_else(|| format!("http://{}:{}", config.host, config.port))
 }
 
 fn redirect(location: &str) -> HttpResponse {
@@ -66,7 +66,6 @@ fn redirect(location: &str) -> HttpResponse {
 pub async fn status(
     pool: web::Data<DbPool>,
     config: web::Data<Config>,
-    req: HttpRequest,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
@@ -74,7 +73,7 @@ pub async fn status(
     Ok(HttpResponse::Ok().json(GitHubStatus {
         app: app.as_ref().map(GitHubAppInfo::from),
         installations: GitHubService::installations(pool.get_ref()).await?,
-        webhook_url: format!("{}/api/github/webhook", public_base(&config, &req)),
+        webhook_url: format!("{}/api/github/webhook", public_base(&config)),
     }))
 }
 
@@ -113,13 +112,15 @@ pub async fn disconnect(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<H
 /// creates an app already configured for this server.
 pub async fn manifest(
     config: web::Data<Config>,
-    req: HttpRequest,
     session: Session,
     body: web::Json<ManifestRequest>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    let base = public_base(&config, &req);
+    let base = public_base(&config);
+    // The browser comes back to the dashboard's host, where the session
+    // cookie lives; only the webhook goes to PUBLIC_URL.
+    let browser = config.dashboard_url();
     let state = crate::auth::token::generate_token();
     session
         .insert(STATE_KEY, &state)
@@ -131,14 +132,14 @@ pub async fn manifest(
         Some(_) => return Err(AppError::Validation("Invalid organization name".into())),
         None => format!("{WEB_URL}/settings/apps/new?state={state}"),
     };
-    let host = base.split("://").nth(1).unwrap_or(&base);
+    let host = browser.split("://").nth(1).unwrap_or(&browser);
     let manifest = json!({
         // GitHub caps app names at 34 characters; people can rename it on the form.
         "name": format!("Rustrak {host}").chars().take(34).collect::<String>(),
-        "url": base,
+        "url": browser,
         "hook_attributes": { "url": format!("{base}/api/github/webhook") },
-        "redirect_url": format!("{base}/api/github/callback"),
-        "setup_url": format!("{base}/api/github/installed"),
+        "redirect_url": format!("{browser}/api/github/callback"),
+        "setup_url": format!("{browser}/api/github/installed"),
         "setup_on_update": true,
         "public": false,
         "default_permissions": { "issues": "write", "contents": "read", "metadata": "read" },
@@ -306,8 +307,14 @@ pub async fn repositories(
     let client = GitHubClient::new(&app);
     let mut repositories = Vec::new();
     for installation in GitHubService::installations(pool.get_ref()).await? {
-        if !installation.suspended {
-            repositories.extend(client.repositories(installation.id).await?);
+        if installation.suspended {
+            continue;
+        }
+        // One installation GitHub no longer has (its `deleted` webhook lost)
+        // must not hide every other installation's repositories.
+        match client.repositories(installation.id).await {
+            Ok(found) => repositories.extend(found),
+            Err(e) => log::warn!("Skipping GitHub installation {}: {e}", installation.id),
         }
     }
     Ok(HttpResponse::Ok().json(repositories))
@@ -377,6 +384,9 @@ pub async fn put_project_repository(
 ) -> AppResult<HttpResponse> {
     let project_id = path.into_inner();
     require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
+    if !crate::services::github::is_repo_full_name(&body.repo_full_name) {
+        return Err(AppError::Validation("Invalid repository name".into()));
+    }
     let conditions = body
         .auto_create_conditions
         .clone()
@@ -467,7 +477,13 @@ pub async fn sync_codeowners(
             break;
         }
     }
-    GitHubService::save_codeowners(pool.get_ref(), project_id, content.as_deref()).await?;
+    GitHubService::save_codeowners(
+        pool.get_ref(),
+        project_id,
+        &repo.repo_full_name,
+        content.as_deref(),
+    )
+    .await?;
     Ok(HttpResponse::Ok()
         .json(GitHubService::project_repository(pool.get_ref(), project_id).await?))
 }
@@ -737,6 +753,22 @@ pub async fn put_my_login(
     if login.is_some_and(|l| !l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(AppError::Validation("Invalid GitHub username".into()));
     }
+    // Inbound assignments find people by login; two owners would be a guess.
+    // The unique index catches a race this check loses.
+    if let Some(login) = login {
+        let taken: Option<(i32,)> = sqlx::query_as(
+            "SELECT id FROM users WHERE LOWER(github_login) = LOWER($1) AND id <> $2",
+        )
+        .bind(login)
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?;
+        if taken.is_some() {
+            return Err(AppError::Conflict(format!(
+                "GitHub user {login} is already someone else's"
+            )));
+        }
+    }
     sqlx::query("UPDATE users SET github_login = $2 WHERE id = $1")
         .bind(user_id)
         .bind(login)
@@ -809,7 +841,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/callback", web::get().to(callback))
             .route("/installed", web::get().to(installed))
             .route("/repositories", web::get().to(repositories))
-            .route("/webhook", web::post().to(webhook))
+            .service(
+                // GitHub sends up to 25 MB; `installation` events list every
+                // repository and outgrow actix's 256 KiB default.
+                web::resource("/webhook")
+                    .app_data(web::PayloadConfig::new(25 * 1024 * 1024))
+                    .route(web::post().to(webhook)),
+            )
             .route("/me", web::get().to(get_my_login))
             .route("/me", web::put().to(put_my_login)),
     )

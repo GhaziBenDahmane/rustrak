@@ -8,8 +8,10 @@ interface EventRailProps {
   issueId: string;
   issue: Issue;
   activity: ActivityEntry[];
-  /** What GitHub says about the issue; `null` when the project has no repository. */
+  /** What GitHub says about the issue; `null` when it could not be loaded. */
   code: IssueGitHub | null;
+  /** Whether the project has a GitHub repository. */
+  connected: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export function EventRail({
   issue,
   activity,
   code,
+  connected,
 }: EventRailProps) {
   const t = useTranslations('projectPages');
   const format = useFormatter();
@@ -55,7 +58,7 @@ export function EventRail({
         )}
       </div>
 
-      <IssueCodeBlock projectId={projectId} code={code} />
+      <IssueCodeBlock projectId={projectId} code={code} connected={connected} />
 
       <div className="p-4">
         <IssueActivity

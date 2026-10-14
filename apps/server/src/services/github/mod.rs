@@ -228,9 +228,9 @@ impl GitHubService {
                    code_mappings = EXCLUDED.code_mappings,
                    auto_create_issues = EXCLUDED.auto_create_issues,
                    auto_create_conditions = EXCLUDED.auto_create_conditions,
-                   codeowners = CASE WHEN project_repositories.repo_full_name = EXCLUDED.repo_full_name
+                   codeowners = CASE WHEN LOWER(project_repositories.repo_full_name) = LOWER(EXCLUDED.repo_full_name)
                                      THEN project_repositories.codeowners END,
-                   codeowners_synced_at = CASE WHEN project_repositories.repo_full_name = EXCLUDED.repo_full_name
+                   codeowners_synced_at = CASE WHEN LOWER(project_repositories.repo_full_name) = LOWER(EXCLUDED.repo_full_name)
                                      THEN project_repositories.codeowners_synced_at END,
                    repo_full_name = EXCLUDED.repo_full_name"#,
         )
@@ -255,18 +255,22 @@ impl GitHubService {
         Ok(())
     }
 
+    /// Stores `repo_full_name`'s CODEOWNERS, unless the project moved to
+    /// another repository while GitHub was being asked.
     pub async fn save_codeowners(
         pool: &DbPool,
         project_id: i32,
+        repo_full_name: &str,
         content: Option<&str>,
     ) -> AppResult<()> {
         sqlx::query(
             "UPDATE project_repositories SET codeowners = $2, codeowners_synced_at = $3
-             WHERE project_id = $1",
+             WHERE project_id = $1 AND LOWER(repo_full_name) = LOWER($4)",
         )
         .bind(project_id)
         .bind(content)
         .bind(Utc::now())
+        .bind(repo_full_name)
         .execute(pool)
         .await?;
         Ok(())
@@ -308,7 +312,7 @@ impl GitHubService {
         let existing: Option<IssueLink> = sqlx::query_as(
             "SELECT id, issue_id, repo_full_name, number, title, url, state, created_at
              FROM issue_external_links
-             WHERE issue_id = $1 AND repo_full_name = $2 AND number = $3",
+             WHERE issue_id = $1 AND LOWER(repo_full_name) = LOWER($2) AND number = $3",
         )
         .bind(issue_id)
         .bind(repo_full_name)
@@ -388,8 +392,9 @@ impl GitHubService {
 
     // -------------------------------------------------------------- commits
 
-    pub async fn save_commit(pool: &DbPool, commit: &RepoCommit) -> AppResult<()> {
-        sqlx::query(
+    /// Keeps a commit; `false` when it was already here (a redelivered push).
+    pub async fn save_commit(pool: &DbPool, commit: &RepoCommit) -> AppResult<bool> {
+        let result = sqlx::query(
             r#"INSERT INTO repo_commits (repo_full_name, sha, message, author_name, author_login, url, files, committed_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT (repo_full_name, sha) DO NOTHING"#,
@@ -404,7 +409,7 @@ impl GitHubService {
         .bind(commit.committed_at)
         .execute(pool)
         .await?;
-        Ok(())
+        Ok(result.rows_affected() > 0)
     }
 
     /// Up to three commits that touched `path` in the 30 days before
@@ -415,18 +420,22 @@ impl GitHubService {
         path: &str,
         before: DateTime<Utc>,
     ) -> AppResult<Vec<RepoCommit>> {
-        // ponytail: matches paths in Rust over the window's commits; a
-        // commit_files table becomes worth it once a window holds thousands.
+        // ponytail: a LIKE on the file name narrows the window in SQL, Rust
+        // matches the path; a commit_files table if one name is everywhere.
+        // `%` and `_` in the name only widen the LIKE, never miss a match.
+        let name = path.rsplit('/').next().unwrap_or(path);
         let commits = sqlx::query_as::<_, RepoCommit>(
             r#"SELECT repo_full_name, sha, message, author_name, author_login, url, files, committed_at
                FROM repo_commits
                WHERE LOWER(repo_full_name) = LOWER($1) AND committed_at <= $2 AND committed_at >= $3
+                 AND files LIKE $4
                ORDER BY committed_at DESC
                LIMIT 1000"#,
         )
         .bind(repo_full_name)
         .bind(before)
         .bind(before - Duration::days(30))
+        .bind(format!("%{name}%"))
         .fetch_all(pool)
         .await?;
         Ok(commits
@@ -538,23 +547,45 @@ pub fn fixes_references(message: &str) -> Vec<(String, i32)> {
     found
 }
 
+/// Whether `name` is a GitHub `owner/repo`. It goes into API paths, so
+/// anything else would point the installation token at another endpoint.
+pub fn is_repo_full_name(name: &str) -> bool {
+    let part = |p: &str| {
+        !p.is_empty()
+            && p != "."
+            && p != ".."
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    name.split_once('/')
+        .is_some_and(|(owner, repo)| part(owner) && part(repo))
+}
+
 /// A GitHub issue reference: a full issue or pull request URL, `owner/repo#12`,
 /// or `#12` in `default_repo`.
 pub fn parse_issue_reference(reference: &str, default_repo: Option<&str>) -> Option<(String, i64)> {
+    let number = |n: &str| n.parse::<i64>().ok().filter(|n| *n > 0);
     let reference = reference.trim();
-    if let Some(number) = reference.strip_prefix('#') {
-        return Some((default_repo?.to_string(), number.parse().ok()?));
+    if let Some(n) = reference.strip_prefix('#') {
+        return Some((default_repo?.to_string(), number(n)?));
     }
-    if let Some((repo, number)) = reference.split_once('#') {
-        if repo.split('/').count() == 2 {
-            return Some((repo.to_string(), number.parse().ok()?));
+    if let Some((repo, n)) = reference.split_once('#') {
+        if is_repo_full_name(repo) {
+            return Some((repo.to_string(), number(n)?));
         }
     }
     let url = url::Url::parse(reference).ok()?;
+    if !matches!(url.scheme(), "https" | "http")
+        || !matches!(url.host_str(), Some("github.com" | "www.github.com"))
+    {
+        return None;
+    }
     let segments: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
     match segments.as_slice() {
-        [owner, repo, "issues" | "pull", number, ..] => {
-            Some((format!("{owner}/{repo}"), number.parse().ok()?))
+        [owner, repo, "issues" | "pull", n, ..] => {
+            let repo = format!("{owner}/{repo}");
+            is_repo_full_name(&repo).then_some(())?;
+            Some((repo, number(n)?))
         }
         _ => None,
     }
@@ -562,13 +593,15 @@ pub fn parse_issue_reference(reference: &str, default_repo: Option<&str>) -> Opt
 
 /// CODEOWNERS as `(pattern, owners)` rules in file order.
 pub fn parse_codeowners(content: &str) -> Vec<(String, Vec<String>)> {
+    // gitignore rules: `#` starts a comment at the start of a line or after
+    // whitespace; `\#` is a literal `#` in a pattern.
     content
         .lines()
-        .map(|line| line.split('#').next().unwrap_or("").trim())
-        .filter(|line| !line.is_empty())
         .filter_map(|line| {
-            let mut parts = line.split_whitespace();
-            let pattern = parts.next()?.to_string();
+            let mut parts = line
+                .split_whitespace()
+                .take_while(|word| !word.starts_with('#'));
+            let pattern = parts.next()?.replace("\\#", "#");
             let owners: Vec<String> = parts.map(str::to_string).collect();
             Some((pattern, owners))
         })
@@ -728,6 +761,16 @@ mod tests {
     }
 
     #[test]
+    fn codeowners_hash_is_a_comment_only_where_gitignore_says() {
+        let file = "/docs/\\#notes.md @team # who\n#comment @nobody\n";
+        assert_eq!(
+            parse_codeowners(file),
+            vec![("/docs/#notes.md".to_string(), vec!["@team".to_string()])]
+        );
+        assert_eq!(codeowners_for(file, "docs/#notes.md"), vec!["@team"]);
+    }
+
+    #[test]
     fn codeowners_last_matching_rule_wins() {
         let file =
             "# owners\n* @everyone\n/src/api/ @backend\n*.ts @frontend # TS\ndocs/** @docs\n";
@@ -750,12 +793,35 @@ mod tests {
     }
 
     #[test]
+    fn issue_references_refuse_what_github_would_not_name() {
+        for bad in [
+            "https://gitlab.com/o/r/issues/12",
+            "ftp://github.com/o/r/issues/12",
+            "../..#1",
+            "/x#1",
+            "a/#1",
+            "o/r#-5",
+            "o/r#0",
+            "#0",
+            "https://github.com/o/r/issues/-3",
+        ] {
+            assert_eq!(parse_issue_reference(bad, Some("a/b")), None, "{bad}");
+        }
+        assert_eq!(
+            parse_issue_reference("https://www.github.com/o/r/issues/12", None),
+            Some(("o/r".into(), 12))
+        );
+    }
+
+    #[test]
     fn webhook_signature_is_checked() {
-        let mut mac = Hmac::<Sha256>::new_from_slice(b"secret").unwrap();
+        let secret = crate::auth::token::generate_token();
+        let other = crate::auth::token::generate_token();
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
         mac.update(b"{}");
         let header = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
-        assert!(verify_signature("secret", b"{}", &header));
-        assert!(!verify_signature("other", b"{}", &header));
-        assert!(!verify_signature("secret", b"{}", "sha1=abc"));
+        assert!(verify_signature(&secret, b"{}", &header));
+        assert!(!verify_signature(&other, b"{}", &header));
+        assert!(!verify_signature(&secret, b"{}", "sha1=abc"));
     }
 }

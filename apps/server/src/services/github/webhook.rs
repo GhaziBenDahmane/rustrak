@@ -93,25 +93,28 @@ async fn issues(pool: &DbPool, payload: &Value) -> AppResult<()> {
     Ok(())
 }
 
-/// Assigns the Rustrak user whose GitHub login was assigned; one GitHub
+/// Follows the GitHub issue's assignees as they are now, not the one that
+/// changed, as Sentry does: GitHub issues can have several, so the first one
+/// becomes the Rustrak assignee and only an empty list clears it. A first
 /// assignee nobody in Rustrak claims leaves the Rustrak issue as it is.
 async fn assignee(
     pool: &DbPool,
     payload: &Value,
     links: &[crate::models::github::IssueLink],
 ) -> AppResult<()> {
-    let user_id = if text(payload, "/action") == "assigned" {
+    let first = text(payload, "/issue/assignees/0/login");
+    let user_id = if first.is_empty() {
+        None
+    } else {
         let found: Option<(i32,)> =
             sqlx::query_as("SELECT id FROM users WHERE LOWER(github_login) = LOWER($1)")
-                .bind(text(payload, "/assignee/login"))
+                .bind(first)
                 .fetch_optional(pool)
                 .await?;
         match found {
             Some((id,)) => Some(id),
             None => return Ok(()),
         }
-    } else {
-        None
     };
     for link in links {
         IssueService::assign(pool, link.issue_id, user_id, user_id.map(|_| "user")).await?;
@@ -146,11 +149,12 @@ async fn issue_comment(pool: &DbPool, payload: &Value) -> AppResult<()> {
 async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
     let repo = text(payload, "/repository/full_name");
     let branch = text(payload, "/ref").trim_start_matches("refs/heads/");
-    let projects: Vec<_> = GitHubService::projects_for_repo(pool, repo)
-        .await?
-        .into_iter()
-        .filter(|p| p.default_branch == branch)
-        .collect();
+    // The push names the default branch as it is now; the one saved when the
+    // project was connected goes stale when someone renames it on GitHub.
+    if branch != text(payload, "/repository/default_branch") {
+        return Ok(());
+    }
+    let projects = GitHubService::projects_for_repo(pool, repo).await?;
     if projects.is_empty() {
         return Ok(());
     }
@@ -186,8 +190,18 @@ async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
                 .map(|d| d.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
         };
-        GitHubService::save_commit(pool, &saved).await?;
-        resolve_fixed(pool, &projects, &saved).await?;
+        // A redelivered push must not resolve an issue that came back since.
+        if GitHubService::save_commit(pool, &saved).await? {
+            if let Err(e) = resolve_fixed(pool, &projects, &saved).await {
+                // Forget the commit so the redelivery resolves its issues.
+                sqlx::query("DELETE FROM repo_commits WHERE repo_full_name = $1 AND sha = $2")
+                    .bind(&saved.repo_full_name)
+                    .bind(&saved.sha)
+                    .execute(pool)
+                    .await?;
+                return Err(e);
+            }
+        }
     }
     Ok(())
 }
@@ -229,6 +243,10 @@ async fn resolve_fixed(
             })
             .to_string();
             IssueSocialService::add_activity(pool, issue_id, None, "set_status", &data).await?;
+            super::sync::spawn(
+                "status sync",
+                super::sync::mirror_status(pool.clone(), issue_id),
+            );
         }
     }
     Ok(())
