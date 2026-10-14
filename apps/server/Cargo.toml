@@ -76,8 +76,8 @@ hex = "0.4.3"
 flate2 = "1.1.10"
 # brotli and zstd held at the versions actix-http 3.18 depends on; going past
 # them compiles a second copy of each. Bump together with actix-http.
-brotli = "9.0.0"
-zstd = "0.14.2"
+brotli = "8.0.4"
+zstd = "0.13.3"
 
 # Async utilities
 futures-util = "0.3.34"
