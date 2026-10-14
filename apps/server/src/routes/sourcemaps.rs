@@ -99,7 +99,11 @@ pub async fn chunk_upload_capability(
         "maxRequestSize": chunk_size * 64,
         "hashAlgorithm": "sha1",
         "accept": ["release_files", "sources", "artifact_bundles", "artifact_bundles_v2"],
-        "concurrency": 8u64
+        "concurrency": 8u64,
+        // Required by the `sentry` npm uploader that Sentry SDK v11 bundler
+        // plugins use; it rejects the response without it. Empty means chunks
+        // are sent uncompressed, which is what `chunk_upload` reads.
+        "compression": []
     })))
 }
 
