@@ -59,19 +59,8 @@ pub trait SourceMapProvider: Send + Sync {
 
 /// DecodedMap auto-detects Hermes (`x_facebook_sources`) vs regular maps;
 /// SourceMap::from_reader alone returns IncompatibleSourceMap for Hermes.
-///
-/// Index maps (`sections`, which Turbopack writes for nearly every chunk) are
-/// flattened here, once per parse, so frame lookup only ever sees a regular
-/// map. Flattening needs every section embedded; one that is not is a miss.
 fn parse_sourcemap(debug_id: &str, data: &[u8]) -> Option<sourcemap::DecodedMap> {
     match sourcemap::DecodedMap::from_reader(Cursor::new(data)) {
-        Ok(sourcemap::DecodedMap::Index(index)) => match index.flatten() {
-            Ok(flat) => Some(sourcemap::DecodedMap::Regular(flat)),
-            Err(e) => {
-                log::warn!("failed to flatten index source map for {}: {}", debug_id, e);
-                None
-            }
-        },
         Ok(m) => Some(m),
         Err(e) => {
             log::warn!("failed to parse source map for {}: {}", debug_id, e);
@@ -927,6 +916,30 @@ pub async fn rewrite_frames(
     Ok(())
 }
 
+/// The map and 0-indexed position a frame lookup should use. An index map
+/// (`sections`, which Turbopack writes for nearly every chunk) resolves inside
+/// the section that contains the position, as `SourceMapIndex::lookup_token`
+/// does: a position before that section's first mapping stays unresolved
+/// instead of borrowing the preceding section's last token. Sections are
+/// ordered by offset; one that is referenced by URL rather than embedded is a
+/// miss.
+fn section_for(
+    map: &sourcemap::DecodedMap,
+    line: u32,
+    col: u32,
+) -> Option<(&sourcemap::DecodedMap, u32, u32)> {
+    let sourcemap::DecodedMap::Index(index) = map else {
+        return Some((map, line, col));
+    };
+    let section = index
+        .sections()
+        .take_while(|s| s.get_offset() <= (line, col))
+        .last()?;
+    let (off_line, off_col) = section.get_offset();
+    let col = if line == off_line { col - off_col } else { col };
+    section_for(section.get_sourcemap()?, line - off_line, col)
+}
+
 /// Source maps already resolved for the event in flight, by debug_id. `None`
 /// records a miss so the next frame does not ask the provider again.
 type ParsedMaps = HashMap<String, Option<Arc<sourcemap::DecodedMap>>>;
@@ -1014,13 +1027,6 @@ async fn rewrite_frames_under(
                 continue;
             };
 
-            // parse_sourcemap flattens index maps, so Index never reaches here.
-            let sm: &sourcemap::SourceMap = match &*decoded {
-                sourcemap::DecodedMap::Regular(sm) => sm,
-                sourcemap::DecodedMap::Hermes(smh) => smh,
-                sourcemap::DecodedMap::Index(_) => continue,
-            };
-
             // 3e. Normalize position — use let-else, NOT '?' (normalize returns Option not Result)
             let Some((norm_lineno, norm_colno)) =
                 normalize_sentry_position(frame_lineno, frame_colno)
@@ -1028,8 +1034,21 @@ async fn rewrite_frames_under(
                 continue;
             };
 
+            // An index map resolves inside the section holding the position.
+            let Some((map, norm_lineno, norm_colno)) =
+                section_for(&decoded, norm_lineno, norm_colno)
+            else {
+                continue;
+            };
+            let sm: &sourcemap::SourceMap = match map {
+                sourcemap::DecodedMap::Regular(sm) => sm,
+                sourcemap::DecodedMap::Hermes(smh) => smh,
+                // section_for never returns an index map.
+                sourcemap::DecodedMap::Index(_) => continue,
+            };
+
             // 3f. Lookup token
-            let Some(token) = decoded.lookup_token(norm_lineno, norm_colno) else {
+            let Some(token) = map.lookup_token(norm_lineno, norm_colno) else {
                 continue;
             };
 
@@ -1070,7 +1089,7 @@ async fn rewrite_frames_under(
             let new_colno = src_col;
             // Hermes resolves names from x_facebook_sources (line==0, col=bytecode offset).
             // Regular maps return None without a minified SourceView; fall back to token name.
-            let new_function = decoded
+            let new_function = map
                 .get_original_function_name(norm_lineno, norm_colno, Some(&existing_function), None)
                 .map(|n| n.to_string())
                 .or(token_name)
