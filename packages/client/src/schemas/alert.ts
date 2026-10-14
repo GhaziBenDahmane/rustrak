@@ -82,12 +82,12 @@ export const alertRuleChannelInputSchema = z.object({
  * issue its trigger sees.
  */
 export const alertRuleConditionsSchema = z.object({
-  /** The quietest level that still fires. */
-  min_level: z.enum(['debug', 'info', 'warning', 'error', 'fatal']).optional(),
+  /** The quietest level that still fires. The server takes `null` as absent. */
+  min_level: z.enum(['debug', 'info', 'warning', 'error', 'fatal']).nullish(),
   /** When non-empty, the only environments that fire. */
   environments: z.array(z.string()).optional(),
   /** A new issue fires when it reaches this many events, not on its first. */
-  min_events: z.number().int().min(1).optional(),
+  min_events: z.number().int().min(1).nullish(),
 });
 
 /**

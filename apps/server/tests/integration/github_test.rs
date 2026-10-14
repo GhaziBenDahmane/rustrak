@@ -1359,8 +1359,19 @@ async fn uninstalling_the_app_on_github_removes_the_installation() {
 
 /// Digests one `TypeError` event, always the same group, in `environment`.
 async fn digest(db: &TestDb, project_id: i32, environment: &str) {
+    digest_id(
+        db,
+        project_id,
+        environment,
+        &uuid::Uuid::new_v4().simple().to_string(),
+    )
+    .await;
+}
+
+/// Digests the event with this id; a second call replays it.
+async fn digest_id(db: &TestDb, project_id: i32, environment: &str, event_id: &str) {
     let ingest = tempfile::TempDir::new().unwrap();
-    let event_id = uuid::Uuid::new_v4().simple().to_string();
+    let event_id = event_id.to_string();
     let event = crate::common::EventBuilder::new()
         .with_event_id(&event_id)
         .with_exception("TypeError", "x is undefined")
@@ -1468,6 +1479,47 @@ async fn the_github_issue_opens_on_the_event_that_reaches_the_count() {
     assert_eq!(issues_opened(&github), 0);
 
     digest(&db, project.id, "production").await;
+    github.wait_for("POST", "/repos/acme/web/issues").await;
+}
+
+#[actix_web::test]
+async fn a_regression_that_reaches_the_count_opens_the_github_issue() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    auto_create(&db, project.id, json!({ "min_events": 2 })).await;
+
+    digest(&db, project.id, "production").await;
+    let (issue_id,): (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues WHERE project_id = $1")
+        .bind(project.id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    IssueService::set_status(&db.pool, issue_id, "resolved", None)
+        .await
+        .unwrap();
+
+    digest(&db, project.id, "production").await;
+    github.wait_for("POST", "/repos/acme/web/issues").await;
+}
+
+#[actix_web::test]
+async fn a_replayed_event_that_reached_the_count_opens_the_github_issue() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+
+    // The second event reached the count, but the server stopped before it
+    // acted on it; a third event came in since.
+    let second = uuid::Uuid::new_v4().simple().to_string();
+    digest(&db, project.id, "production").await;
+    digest_id(&db, project.id, "production", &second).await;
+    digest(&db, project.id, "production").await;
+    auto_create(&db, project.id, json!({ "min_events": 2 })).await;
+
+    digest_id(&db, project.id, "production", &second).await;
     github.wait_for("POST", "/repos/acme/web/issues").await;
 }
 

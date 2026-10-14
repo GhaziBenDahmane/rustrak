@@ -33,6 +33,9 @@ pub struct Event {
     pub sdk_version: String,
     pub remote_addr: Option<String>,
     pub alert_type: Option<AlertType>,
+    /// The issue's event count this event brought it to, which a replay
+    /// matches rules against. NULL before it was kept.
+    pub issue_event_count: Option<i32>,
     /// "error" for error events, "transaction" for performance events
     pub event_type: String,
 }

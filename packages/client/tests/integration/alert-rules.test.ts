@@ -140,6 +140,21 @@ describe('AlertRulesResource Integration', () => {
       expect(rule.conditions.environments).toEqual(['production']);
     });
 
+    it('should load a rule whose conditions the server kept as null', async () => {
+      server.use(
+        http.get('http://localhost:8080/api/projects/1/alert-rules', () =>
+          HttpResponse.json([
+            {
+              ...mockRule,
+              conditions: { min_level: null, min_events: null },
+            },
+          ]),
+        ),
+      );
+
+      expectOk(await client.alertRules.list(projectId));
+    });
+
     it('should reject a rule whose conditions name an unknown level', async () => {
       server.use(
         http.get('http://localhost:8080/api/projects/1/alert-rules', () =>
