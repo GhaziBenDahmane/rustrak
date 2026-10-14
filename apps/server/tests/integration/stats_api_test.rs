@@ -16,7 +16,10 @@ use crate::common::TestDb;
 
 // ── seed helpers ─────────────────────────────────────────────────────────────
 
-/// Insert one row into `events`, `hours_ago` old.
+/// Insert one row into `events`, `hours_ago` plus half an hour old. The
+/// half hour keeps it mid-bucket: whole hours ago is exactly a sparkline
+/// bucket edge, so rows inserted either side of a second tick split across two
+/// buckets.
 async fn seed_event(
     pool: &DbPool,
     project_id: i32,
@@ -32,8 +35,8 @@ async fn seed_event(
             (event_id, project_id, issue_id, data, timestamp, ingested_at, level, event_type)
         VALUES (
             $1, $2, $3, '{}'::jsonb,
-            NOW() - ($4::text || ' hours')::interval,
-            NOW() - ($4::text || ' hours')::interval,
+            NOW() - ($4::text || ' hours')::interval - interval '30 minutes',
+            NOW() - ($4::text || ' hours')::interval - interval '30 minutes',
             $5, $6
         )
         "#,
@@ -55,8 +58,8 @@ async fn seed_event(
             (event_id, project_id, issue_id, data, timestamp, ingested_at, level, event_type)
         VALUES (
             ?1, ?2, ?3, '{}',
-            datetime('now', '-' || ?4 || ' hours'),
-            datetime('now', '-' || ?4 || ' hours'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
             ?5, ?6
         )
         "#,
