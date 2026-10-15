@@ -685,7 +685,10 @@ async fn list_stats_splits_the_current_window_from_the_one_before_it() {
     // bars 21 and 22 of 24 are both "2h ago".
     assert!(entry.trend.iter().sum::<i64>() >= 1);
     for (bar, issues) in entry.trend.iter().enumerate() {
-        assert!(*issues == 0 || (21..=22).contains(&bar), "bar {bar}: {issues}");
+        assert!(
+            *issues == 0 || (21..=22).contains(&bar),
+            "bar {bar}: {issues}"
+        );
     }
 }
 
