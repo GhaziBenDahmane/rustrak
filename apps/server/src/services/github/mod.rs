@@ -654,17 +654,25 @@ pub fn codeowners_matches(pattern: &str, path: &str) -> bool {
     })
 }
 
+/// Path segments against pattern segments, `**` standing for any number of
+/// them. A table rather than backtracking: the rules come from the
+/// repository, and backtracking over many `**` takes exponential time.
 fn glob_segments(pattern: &[&str], path: &[&str]) -> bool {
-    match (pattern.first(), path.first()) {
-        (None, None) => true,
-        (None, Some(_)) => false,
-        (Some(&"**"), _) => {
-            glob_segments(&pattern[1..], path)
-                || (!path.is_empty() && glob_segments(pattern, &path[1..]))
+    // `rest[j]`: the pattern from the segment after this one matches `path[j..]`.
+    let mut rest = vec![false; path.len() + 1];
+    rest[path.len()] = true;
+    for part in pattern.iter().rev() {
+        let mut here = vec![false; path.len() + 1];
+        for j in (0..=path.len()).rev() {
+            here[j] = if *part == "**" {
+                rest[j] || (j < path.len() && here[j + 1])
+            } else {
+                j < path.len() && glob_segment(part, path[j]) && rest[j + 1]
+            };
         }
-        (Some(_), None) => false,
-        (Some(p), Some(s)) => glob_segment(p, s) && glob_segments(&pattern[1..], &path[1..]),
+        rest = here;
     }
+    rest[0]
 }
 
 /// `*` and `?` within one path segment.
@@ -803,6 +811,18 @@ mod tests {
         assert!(codeowners_matches("/*", "README.md"));
         assert!(!codeowners_matches("/*", "src/api/users.ts"));
         assert!(codeowners_matches("*", "src/api/users.ts"));
+        assert!(codeowners_matches("/a/**/b/**/c.ts", "a/x/b/y/z/c.ts"));
+        assert!(!codeowners_matches("/a/**/b/**/c.ts", "a/x/y/c.ts"));
+    }
+
+    #[test]
+    fn codeowners_matching_stays_fast_on_many_double_stars() {
+        // A rule from the repository, so its shape is not ours to choose.
+        let pattern = format!("{}never.ts", "**/".repeat(20));
+        let path = format!("{}file.ts", "d/".repeat(20));
+        let started = std::time::Instant::now();
+        assert!(!codeowners_matches(&pattern, &path));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
         assert!(codeowners_matches("**/logs", "a/b/logs"));
         assert!(codeowners_matches("Makefile", "build/Makefile"));
     }
