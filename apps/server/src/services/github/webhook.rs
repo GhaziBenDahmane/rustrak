@@ -8,7 +8,7 @@ use super::{fixes_references, GitHubService};
 use crate::db::DbPool;
 use crate::error::AppResult;
 use crate::models::github::{GitHubApp, RepoCommit};
-use crate::services::{IssueService, IssueSocialService, ProjectService};
+use crate::services::{IssueService, IssueSocialService};
 
 fn text<'a>(value: &'a Value, pointer: &str) -> &'a str {
     value
@@ -154,16 +154,14 @@ async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
     if branch != text(payload, "/repository/default_branch") {
         return Ok(());
     }
-    let projects = GitHubService::projects_for_repo(pool, repo).await?;
+    let projects: Vec<(i32, String)> = GitHubService::projects_for_repo(pool, repo)
+        .await?
+        .into_iter()
+        .map(|(id, slug)| (id, slug.to_ascii_uppercase()))
+        .collect();
     if projects.is_empty() {
         return Ok(());
     }
-    let mut slugs = Vec::with_capacity(projects.len());
-    for repo in &projects {
-        let project = ProjectService::get_by_id(pool, repo.project_id).await?;
-        slugs.push((project.id, project.slug.to_ascii_uppercase()));
-    }
-    let projects = slugs;
     let commits = payload
         .get("commits")
         .and_then(Value::as_array)
