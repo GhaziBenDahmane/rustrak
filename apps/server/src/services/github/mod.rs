@@ -393,7 +393,10 @@ impl GitHubService {
     // -------------------------------------------------------------- commits
 
     /// Keeps a commit; `false` when it was already here (a redelivered push).
-    pub async fn save_commit(pool: &DbPool, commit: &RepoCommit) -> AppResult<bool> {
+    pub async fn save_commit<'e, E>(executor: E, commit: &RepoCommit) -> AppResult<bool>
+    where
+        E: sqlx::Executor<'e, Database = crate::db::Db>,
+    {
         let result = sqlx::query(
             r#"INSERT INTO repo_commits (repo_full_name, sha, message, author_name, author_login, url, files, committed_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -407,7 +410,7 @@ impl GitHubService {
         .bind(&commit.url)
         .bind(&commit.files)
         .bind(commit.committed_at)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(result.rows_affected() > 0)
     }

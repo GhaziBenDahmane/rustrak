@@ -753,27 +753,20 @@ pub async fn put_my_login(
     if login.is_some_and(|l| !l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(AppError::Validation("Invalid GitHub username".into()));
     }
-    // Inbound assignments find people by login; two owners would be a guess.
-    // The unique index catches a race this check loses.
-    if let Some(login) = login {
-        let taken: Option<(i32,)> = sqlx::query_as(
-            "SELECT id FROM users WHERE LOWER(github_login) = LOWER($1) AND id <> $2",
-        )
-        .bind(login)
-        .bind(user_id)
-        .fetch_optional(pool.get_ref())
-        .await?;
-        if taken.is_some() {
-            return Err(AppError::Conflict(format!(
-                "GitHub user {login} is already someone else's"
-            )));
-        }
-    }
+    // Inbound assignments find people by login, so the unique index on it
+    // answers whether someone else has it, race included.
     sqlx::query("UPDATE users SET github_login = $2 WHERE id = $1")
         .bind(user_id)
         .bind(login)
         .execute(pool.get_ref())
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(db) if db.is_unique_violation() => AppError::Conflict(format!(
+                "GitHub user {} is already someone else's",
+                login.unwrap_or_default()
+            )),
+            e => e.into(),
+        })?;
     my_login(pool.get_ref(), user_id).await
 }
 

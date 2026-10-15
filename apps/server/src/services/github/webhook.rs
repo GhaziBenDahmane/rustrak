@@ -158,6 +158,12 @@ async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
     if projects.is_empty() {
         return Ok(());
     }
+    let mut slugs = Vec::with_capacity(projects.len());
+    for repo in &projects {
+        let project = ProjectService::get_by_id(pool, repo.project_id).await?;
+        slugs.push((project.id, project.slug.to_ascii_uppercase()));
+    }
+    let projects = slugs;
     let commits = payload
         .get("commits")
         .and_then(Value::as_array)
@@ -190,47 +196,47 @@ async fn push(pool: &DbPool, payload: &Value) -> AppResult<()> {
                 .map(|d| d.with_timezone(&Utc))
                 .unwrap_or_else(|_| Utc::now()),
         };
-        // A redelivered push must not resolve an issue that came back since.
-        if GitHubService::save_commit(pool, &saved).await? {
-            if let Err(e) = resolve_fixed(pool, &projects, &saved).await {
-                // Forget the commit so the redelivery resolves its issues.
-                sqlx::query("DELETE FROM repo_commits WHERE repo_full_name = $1 AND sha = $2")
-                    .bind(&saved.repo_full_name)
-                    .bind(&saved.sha)
-                    .execute(pool)
-                    .await?;
-                return Err(e);
+        // The commit and everything it resolves commit together: a failure
+        // leaves nothing behind for the redelivery to skip, and a redelivered
+        // push must not resolve an issue that came back since.
+        let mut tx = pool.begin().await?;
+        if GitHubService::save_commit(&mut *tx, &saved).await? {
+            let resolved = resolve_fixed(&mut tx, &projects, &saved).await?;
+            tx.commit().await?;
+            for issue_id in resolved {
+                super::sync::spawn(
+                    "status sync",
+                    super::sync::mirror_status(pool.clone(), issue_id),
+                );
             }
         }
     }
     Ok(())
 }
 
+/// Resolves the issues `commit` says it fixes; `projects` holds each
+/// connected project's id and upper-cased slug.
 async fn resolve_fixed(
-    pool: &DbPool,
-    projects: &[crate::models::github::ProjectRepositoryRow],
+    tx: &mut <crate::db::Db as sqlx::Database>::Connection,
+    projects: &[(i32, String)],
     commit: &RepoCommit,
-) -> AppResult<()> {
+) -> AppResult<Vec<uuid::Uuid>> {
+    let mut resolved = Vec::new();
     for (slug, number) in fixes_references(&commit.message) {
-        for repo in projects {
-            let project = ProjectService::get_by_id(pool, repo.project_id).await?;
-            if project.slug.to_ascii_uppercase() != slug {
-                continue;
-            }
-            let issue: Option<(uuid::Uuid, String)> = sqlx::query_as(
-                "SELECT id, status FROM issues WHERE project_id = $1 AND digest_order = $2",
+        for (project_id, _) in projects.iter().filter(|(_, s)| *s == slug) {
+            let issue: Option<(uuid::Uuid,)> = sqlx::query_as(
+                "UPDATE issues SET status = $3, substatus = NULL, status_details = '{}'
+                 WHERE project_id = $1 AND digest_order = $2 AND status <> $3
+                 RETURNING id",
             )
-            .bind(project.id)
+            .bind(project_id)
             .bind(number)
-            .fetch_optional(pool)
+            .bind(crate::models::STATUS_RESOLVED)
+            .fetch_optional(&mut *tx)
             .await?;
-            let Some((issue_id, status)) = issue else {
+            let Some((issue_id,)) = issue else {
                 continue;
             };
-            if status == crate::models::STATUS_RESOLVED {
-                continue;
-            }
-            IssueService::resolve(pool, issue_id).await?;
             let data = json!({
                 "status": crate::models::STATUS_RESOLVED,
                 "source": "github",
@@ -242,12 +248,9 @@ async fn resolve_fixed(
                 },
             })
             .to_string();
-            IssueSocialService::add_activity(pool, issue_id, None, "set_status", &data).await?;
-            super::sync::spawn(
-                "status sync",
-                super::sync::mirror_status(pool.clone(), issue_id),
-            );
+            IssueSocialService::add_activity_on(tx, issue_id, None, "set_status", &data).await?;
+            resolved.push(issue_id);
         }
     }
-    Ok(())
+    Ok(resolved)
 }
