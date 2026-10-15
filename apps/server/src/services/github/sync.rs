@@ -6,6 +6,8 @@
 
 use std::future::Future;
 
+use chrono::Utc;
+
 use serde_json::json;
 use uuid::Uuid;
 
@@ -324,15 +326,49 @@ pub async fn auto_create(
     {
         return Ok(());
     }
-    // Only this event reaches the count, so a refusal from GitHub is retried
-    // here rather than left for a later event.
+    let Some((app, installation_id, repo)) = project_installation(&pool, project.id).await? else {
+        return Ok(());
+    };
+    let client = GitHubClient::new(&app);
+    let started = Utc::now() - chrono::Duration::minutes(1);
+    // The body links back to this issue, so its id finds it on GitHub.
+    let marker = issue.id.to_string();
+    // Only this event reaches the count, so a failure is retried here rather
+    // than left for a later event. GitHub has no idempotency key and a failed
+    // attempt may have opened the issue anyway (an answer lost, a link not
+    // saved), so a retry looks for it before opening another.
     // ponytail: retried in memory; a restart mid-retry still loses it.
-    for wait in [1, 2, 0] {
+    for (attempt, wait) in [1, 2, 0].into_iter().enumerate() {
         if !GitHubService::links(&pool, issue.id).await?.is_empty() {
             return Ok(());
         }
-        match create_issue(&pool, &project, &issue, None, None, None, &dashboard_url).await {
-            Ok(_) => return Ok(()),
+        let opened = async {
+            let found = if attempt == 0 {
+                None
+            } else {
+                client
+                    .issues_since(installation_id, &repo, started)
+                    .await?
+                    .into_iter()
+                    .find(|(body, _)| body.contains(&marker))
+                    .map(|(_, remote)| remote)
+            };
+            let remote = match found {
+                Some(remote) => remote,
+                None => {
+                    let body = issue_body(&project, &issue, &dashboard_url);
+                    client
+                        .create_issue(installation_id, &repo, &issue.title(), &body)
+                        .await?
+                }
+            };
+            let link = GitHubService::add_link(&pool, issue.id, &repo, &remote).await?;
+            record_link(&pool, issue.id, None, &link, "created").await;
+            AppResult::Ok(())
+        }
+        .await;
+        match opened {
+            Ok(()) => return Ok(()),
             Err(error) if wait > 0 => {
                 log::warn!("GitHub issue auto-create failed, retrying in {wait}s: {error}");
                 tokio::time::sleep(std::time::Duration::from_secs(wait)).await;

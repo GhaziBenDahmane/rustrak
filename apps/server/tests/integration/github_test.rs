@@ -148,6 +148,24 @@ async fn answer(
         {
             HttpResponse::BadGateway().json(json!({ "message": "Server Error" }))
         }
+        ("GET", "/repos/acme/flaky/issues") => HttpResponse::Ok().json(json!([])),
+        // Opens the issue, then loses the answer: GitHub has it, Rustrak does not.
+        ("POST", "/repos/acme/lost/issues") => {
+            HttpResponse::BadGateway().json(json!({ "message": "Server Error" }))
+        }
+        ("GET", "/repos/acme/lost/issues") => {
+            let opened: Vec<Value> = calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.method == "POST" && c.path == path)
+                .map(|c| json!({
+                    "number": 9, "title": c.body["title"], "body": c.body["body"], "state": "open",
+                    "html_url": "https://github.com/acme/lost/issues/9",
+                }))
+                .collect();
+            HttpResponse::Ok().json(opened)
+        }
         ("POST", "/repos/acme/flaky/issues") => HttpResponse::Created().json(json!({
             "number": 8, "title": body["title"], "state": "open",
             "html_url": "https://github.com/acme/flaky/issues/8",
@@ -1535,6 +1553,41 @@ async fn an_automatic_github_issue_github_refused_is_tried_again() {
             .unwrap()
             .is_empty()
         {
+            return;
+        }
+        actix_web::rt::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("never linked: {:?}", github.calls());
+}
+
+#[actix_web::test]
+async fn an_automatic_github_issue_whose_answer_was_lost_is_linked_not_opened_again() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    sqlx::query("UPDATE project_repositories SET repo_full_name = 'acme/lost'")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    auto_create(&db, project.id, json!({})).await;
+
+    digest(&db, project.id, "production").await;
+
+    let issue: (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    for _ in 0..100 {
+        let links = GitHubService::links(&db.pool, issue.0).await.unwrap();
+        if let Some(link) = links.first() {
+            assert_eq!(link.number, 9);
+            let opened = github
+                .calls()
+                .iter()
+                .filter(|c| c.method == "POST" && c.path == "/repos/acme/lost/issues")
+                .count();
+            assert_eq!(opened, 1);
             return;
         }
         actix_web::rt::time::sleep(Duration::from_millis(50)).await;
