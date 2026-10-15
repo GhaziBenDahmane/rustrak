@@ -276,15 +276,15 @@ impl GitHubService {
         Ok(())
     }
 
-    /// Every project that points at a repository.
+    /// Every project that points at a repository, as its id and slug.
     pub async fn projects_for_repo(
         pool: &DbPool,
         repo_full_name: &str,
-    ) -> AppResult<Vec<ProjectRepositoryRow>> {
-        Ok(sqlx::query_as::<_, ProjectRepositoryRow>(
-            r#"SELECT project_id, installation_id, repo_full_name, default_branch, code_mappings,
-                      auto_create_issues, auto_create_conditions, codeowners, codeowners_synced_at
-               FROM project_repositories WHERE LOWER(repo_full_name) = LOWER($1)"#,
+    ) -> AppResult<Vec<(i32, String)>> {
+        Ok(sqlx::query_as(
+            r#"SELECT p.id, p.slug FROM project_repositories r
+               JOIN projects p ON p.id = r.project_id
+               WHERE LOWER(r.repo_full_name) = LOWER($1)"#,
         )
         .bind(repo_full_name)
         .fetch_all(pool)
@@ -625,7 +625,8 @@ pub fn codeowners_for(content: &str, path: &str) -> Vec<String> {
 /// a leading `/` anchoring to the root, a trailing `/` meaning a directory,
 /// and a pattern without a `/` matching at any depth. A pattern that matches
 /// a directory owns everything below it, except `dir/*`, which GitHub reads
-/// as the directory's direct children only.
+/// as the directory's direct children only (`dir/*/` is still every folder
+/// in `dir`, and all of each one).
 pub fn codeowners_matches(pattern: &str, path: &str) -> bool {
     let path_parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
     let directory = pattern.ends_with('/');
@@ -635,7 +636,7 @@ pub fn codeowners_matches(pattern: &str, path: &str) -> bool {
     }
     let anchored = pattern.starts_with('/') || trimmed.contains('/');
     let parts: Vec<&str> = trimmed.split('/').collect();
-    let owns_below = parts.last() != Some(&"*");
+    let owns_below = directory || parts.last() != Some(&"*");
     let starts = if anchored { 0..1 } else { 0..path_parts.len() };
     starts.into_iter().any(|start| {
         let rest = &path_parts[start..];
@@ -791,6 +792,9 @@ mod tests {
         assert!(!codeowners_matches("/apps/", "web/apps/x.js"));
         assert!(codeowners_matches("docs/*", "docs/a.md"));
         assert!(!codeowners_matches("docs/*", "docs/a/b.md"));
+        // `dir/*/` is every folder in `dir`, and all of each one.
+        assert!(codeowners_matches("/apps/*/", "apps/web/src/main.ts"));
+        assert!(!codeowners_matches("/apps/*/", "apps/README.md"));
         assert!(codeowners_matches("**/logs", "a/b/logs"));
         assert!(codeowners_matches("Makefile", "build/Makefile"));
     }

@@ -102,14 +102,38 @@ async fn answer(
         ("POST", "/app/installations/13/access_tokens") => {
             HttpResponse::NotFound().json(json!({ "message": "Not Found" }))
         }
+        // The token names its installation, so a call made with it says which.
         ("POST", p) if p.ends_with("/access_tokens") => HttpResponse::Created().json(json!({
-            "token": "ghs_test", "expires_at": (Utc::now() + chrono::Duration::hours(1)).to_rfc3339(),
+            "token": format!("ghs_{}", p.split('/').nth(3).unwrap_or_default()),
+            "expires_at": (Utc::now() + chrono::Duration::hours(1)).to_rfc3339(),
         })),
         ("GET", "/app/installations/99") => HttpResponse::Ok().json(json!({
             "account": { "login": "acme", "type": "Organization" },
         })),
+        // Installation 50 reaches 250 repositories, a page of 100 at a time.
+        ("GET", "/installation/repositories")
+            if req
+                .headers()
+                .get("Authorization")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                == "token ghs_50" =>
+        {
+            let page: usize = req
+                .query_string()
+                .split('&')
+                .find_map(|kv| kv.strip_prefix("page="))
+                .unwrap()
+                .parse()
+                .unwrap();
+            let repositories: Vec<Value> = ((page - 1) * 100..(page * 100).min(250))
+                .map(|i| json!({ "full_name": format!("big/r{i}"), "default_branch": "main", "private": true }))
+                .collect();
+            HttpResponse::Ok().json(json!({ "total_count": 250, "repositories": repositories }))
+        }
         ("GET", "/installation/repositories") => {
-            HttpResponse::Ok().json(json!({ "repositories": [repo] }))
+            HttpResponse::Ok().json(json!({ "total_count": 1, "repositories": [repo] }))
         }
         ("GET", "/repos/acme/web") => HttpResponse::Ok().json(repo),
         ("POST", "/repos/acme/web/issues") => HttpResponse::Created().json(json!({
@@ -491,6 +515,38 @@ async fn repositories_lists_what_the_installations_reach() {
     let body: Value = test::call_and_read_body_json(&app, req).await;
     assert_eq!(body[0]["full_name"], "acme/web");
     assert_eq!(body[0]["installation_id"], 99);
+}
+
+#[actix_web::test]
+async fn repositories_reads_every_page_of_a_large_installation() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    GitHubService::upsert_installation(&db.pool, 50, "big", "Organization")
+        .await
+        .unwrap();
+    let app = app!(db);
+
+    let req = test::TestRequest::get()
+        .uri(&format!(
+            "/api/github/repositories?project_id={}",
+            project.id
+        ))
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    let names: Vec<&str> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["full_name"].as_str())
+        .filter(|n| n.starts_with("big/"))
+        .collect();
+    assert_eq!(names.len(), 250);
+    assert_eq!(names[0], "big/r0");
+    assert_eq!(names[249], "big/r249");
 }
 
 #[actix_web::test]
