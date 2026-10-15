@@ -697,11 +697,23 @@ async fn suspect_commits_look_past_a_busy_window() {
             .await
             .unwrap();
     }
-    let found = GitHubService::suspect_commits(&db.pool, "acme/web", "lib/db.ts", Utc::now())
-        .await
-        .unwrap();
+    let found =
+        GitHubService::suspect_commits(&db.pool, "acme/web", "lib/db.ts", false, Utc::now())
+            .await
+            .unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].sha, "old");
+
+    // A name JSON escapes, or that LIKE would read as a pattern, still matches.
+    for name in [r#"lib/a"b.ts"#, r"lib/a\b.ts", "lib/100%_!.ts"] {
+        GitHubService::save_commit(&db.pool, &commit(name.into(), name, 5))
+            .await
+            .unwrap();
+        let found = GitHubService::suspect_commits(&db.pool, "acme/web", name, true, Utc::now())
+            .await
+            .unwrap();
+        assert_eq!(found.first().map(|c| c.sha.as_str()), Some(name));
+    }
 }
 
 // =============================================================================
@@ -1012,7 +1024,13 @@ async fn issue_code_block_names_suspect_commits_and_owners() {
     )
     .await
     .unwrap();
-    for (sha, file, hours_before) in [("aaa", "lib/db.ts", 2), ("bbb", "README.md", 1)] {
+    // The mapping says the frame is `lib/db.ts` at the root, so another
+    // package's `lib/db.ts` is a different file.
+    for (sha, file, hours_before) in [
+        ("aaa", "lib/db.ts", 2),
+        ("bbb", "README.md", 1),
+        ("ccc", "packages/server/lib/db.ts", 1),
+    ] {
         GitHubService::save_commit(
             &db.pool,
             &rustrak::models::github::RepoCommit {

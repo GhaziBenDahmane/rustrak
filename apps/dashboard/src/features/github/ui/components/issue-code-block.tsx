@@ -19,12 +19,13 @@ export function IssueCodeBlock({
   projectId: number;
   /** `null` when it could not be loaded, which is not "no repository". */
   code: IssueGitHub | null;
-  connected: boolean;
+  /** `null` when it is not known: a failed request is not "disconnected". */
+  connected: boolean | null;
 }) {
   const t = useTranslations('github');
   const format = useFormatter();
 
-  if (!connected) {
+  if (connected === false) {
     return (
       <div className="p-4 border-b">
         <Link

@@ -406,29 +406,37 @@ impl GitHubService {
     }
 
     /// Up to three commits that touched `path` in the 30 days before
-    /// `before`, newest first.
+    /// `before`, newest first. `exact` when a code mapping placed `path`;
+    /// otherwise a path that ends the same way counts (see [`same_file`]).
     pub async fn suspect_commits(
         pool: &DbPool,
         repo_full_name: &str,
         path: &str,
+        exact: bool,
         before: DateTime<Utc>,
     ) -> AppResult<Vec<RepoCommit>> {
         // ponytail: a LIKE on the file name narrows the window in SQL, Rust
         // matches the path; a commit_files table if one name is everywhere.
-        // `%` and `_` in the name only widen the LIKE, never miss a match.
+        // `files` is JSON, so the name is looked for as JSON writes it, and
+        // `!` escapes what LIKE would read as a pattern.
         let name = path.rsplit('/').next().unwrap_or(path);
+        let encoded = serde_json::to_string(name).unwrap_or_default();
+        let pattern = encoded[1..encoded.len() - 1]
+            .replace('!', "!!")
+            .replace('%', "!%")
+            .replace('_', "!_");
         let commits = sqlx::query_as::<_, RepoCommit>(
             r#"SELECT repo_full_name, sha, message, author_name, author_login, url, files, committed_at
                FROM repo_commits
                WHERE LOWER(repo_full_name) = LOWER($1) AND committed_at <= $2 AND committed_at >= $3
-                 AND files LIKE $4
+                 AND files LIKE $4 ESCAPE '!'
                ORDER BY committed_at DESC
                LIMIT 1000"#,
         )
         .bind(repo_full_name)
         .bind(before)
         .bind(before - Duration::days(30))
-        .bind(format!("%{name}%"))
+        .bind(format!("%{pattern}%"))
         .fetch_all(pool)
         .await?;
         Ok(commits
@@ -437,7 +445,13 @@ impl GitHubService {
                 serde_json::from_str::<Vec<String>>(&commit.files)
                     .unwrap_or_default()
                     .iter()
-                    .any(|file| same_file(file, path))
+                    .any(|file| {
+                        if exact {
+                            file == path
+                        } else {
+                            same_file(file, path)
+                        }
+                    })
             })
             .take(3)
             .collect())
@@ -621,7 +635,7 @@ pub fn codeowners_matches(pattern: &str, path: &str) -> bool {
     let path_parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
     let directory = pattern.ends_with('/');
     let trimmed = pattern.trim_matches('/');
-    if trimmed.is_empty() || trimmed == "*" {
+    if trimmed.is_empty() || pattern == "*" {
         return true;
     }
     let anchored = pattern.starts_with('/') || trimmed.contains('/');
@@ -785,6 +799,10 @@ mod tests {
         // `dir/*/` is every folder in `dir`, and all of each one.
         assert!(codeowners_matches("/apps/*/", "apps/web/src/main.ts"));
         assert!(!codeowners_matches("/apps/*/", "apps/README.md"));
+        // `/*` is the root's own files; `*` is every file.
+        assert!(codeowners_matches("/*", "README.md"));
+        assert!(!codeowners_matches("/*", "src/api/users.ts"));
+        assert!(codeowners_matches("*", "src/api/users.ts"));
         assert!(codeowners_matches("**/logs", "a/b/logs"));
         assert!(codeowners_matches("Makefile", "build/Makefile"));
     }
