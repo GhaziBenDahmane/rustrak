@@ -273,8 +273,14 @@ pub async fn mirror_comment(
 
 /// Assigns the linked GitHub issues to the Rustrak assignee's GitHub login,
 /// or clears them when the issue is unassigned. An assignee without a GitHub
-/// login set leaves GitHub alone.
-pub async fn mirror_assignee(pool: DbPool, issue_id: Uuid, user_id: Option<i32>) -> AppResult<()> {
+/// login set leaves GitHub alone, and so does `except`, the GitHub issue the
+/// change came from.
+pub async fn mirror_assignee(
+    pool: DbPool,
+    issue_id: Uuid,
+    user_id: Option<i32>,
+    except: Option<(String, i64)>,
+) -> AppResult<()> {
     let logins = match user_id {
         Some(user_id) => match github_login(&pool, user_id).await? {
             Some(login) => vec![login],
@@ -286,7 +292,12 @@ pub async fn mirror_assignee(pool: DbPool, issue_id: Uuid, user_id: Option<i32>)
         return Ok(());
     };
     let client = GitHubClient::new(&app);
-    for link in &links {
+    let skipped = |link: &IssueLink| {
+        except
+            .as_ref()
+            .is_some_and(|(repo, number)| link.repo_full_name == *repo && link.number == *number)
+    };
+    for link in links.iter().filter(|l| !skipped(l)) {
         skip_failed(
             link,
             client
