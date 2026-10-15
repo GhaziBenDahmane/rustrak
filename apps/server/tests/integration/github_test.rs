@@ -1279,7 +1279,8 @@ async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.status, "unresolved");
 
-    // A push that fails halfway is redelivered and resolves the issue then.
+    // A push that fails halfway leaves nothing behind, so its redelivery
+    // resolves the issue and records why.
     let failing = push("main", "def456");
     sqlx::query("ALTER TABLE issue_activity RENAME TO issue_activity_gone")
         .execute(&db.pool)
@@ -1294,12 +1295,16 @@ async fn a_push_with_fixes_resolves_the_issue_and_keeps_the_commit() {
         .execute(&db.pool)
         .await
         .unwrap();
-    IssueService::set_status(&db.pool, issue.id, "unresolved", None)
-        .await
-        .unwrap();
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.status, "unresolved");
     test::call_service(&app, webhook("push", &failing, "whs").to_request()).await;
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.status, "resolved");
+    let activity = rustrak::services::IssueSocialService::list_activity(&db.pool, issue.id)
+        .await
+        .unwrap();
+    let data: Value = serde_json::from_str(&activity[0].data).unwrap();
+    assert_eq!(data["commit"]["sha"], "def456");
 }
 
 #[actix_web::test]
