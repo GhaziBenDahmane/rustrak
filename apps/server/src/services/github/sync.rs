@@ -293,9 +293,9 @@ pub async fn mirror_assignee(
     };
     let client = GitHubClient::new(&app);
     let skipped = |link: &IssueLink| {
-        except
-            .as_ref()
-            .is_some_and(|(repo, number)| link.repo_full_name == *repo && link.number == *number)
+        except.as_ref().is_some_and(|(repo, number)| {
+            link.repo_full_name.eq_ignore_ascii_case(repo) && link.number == *number
+        })
     };
     for link in links.iter().filter(|l| !skipped(l)) {
         skip_failed(
