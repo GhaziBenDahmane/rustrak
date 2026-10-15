@@ -1200,6 +1200,54 @@ async fn assigning_one_linked_github_issue_assigns_the_others() {
 }
 
 #[actix_web::test]
+async fn an_assignment_leaves_its_own_github_issue_alone_however_the_link_spells_it() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    GitHubService::add_link(
+        &db.pool,
+        issue.id,
+        "Acme/Web",
+        &rustrak::services::github::client::RemoteIssue {
+            number: 12,
+            title: "Login is broken".into(),
+            url: "https://github.com/acme/web/issues/12".into(),
+            state: "open".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let user = rustrak::services::UsersService::create_user_with_password_hash(
+        &db.pool,
+        "octo@acme.dev",
+        "unused",
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET github_login = 'octocat' WHERE id = $1")
+        .bind(user.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let app = app!(db);
+
+    let mut assigned = github_issue_event("assigned", "ana");
+    assigned["issue"]["assignees"] = json!([{ "login": "octocat" }, { "login": "hubot" }]);
+    test::call_service(&app, webhook("issues", &assigned, "whs").to_request()).await;
+
+    let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(stored.assigned_to, Some(user.id));
+    actix_web::rt::time::sleep(Duration::from_millis(300)).await;
+    assert!(!github
+        .calls()
+        .iter()
+        .any(|c| c.method == "PATCH" && c.path.ends_with("/issues/12")));
+}
+
+#[actix_web::test]
 async fn github_comments_and_assignees_come_back_into_rustrak() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;
@@ -1228,6 +1276,9 @@ async fn github_comments_and_assignees_come_back_into_rustrak() {
     test::call_service(&app, webhook("issue_comment", &comment, "whs").to_request()).await;
     // Rustrak's own comments come back as the app's bot and are not copied twice.
     comment["sender"]["login"] = json!("rustrak-test[bot]");
+    test::call_service(&app, webhook("issue_comment", &comment, "whs").to_request()).await;
+    // GitHub redelivers webhooks; the same comment is not copied twice.
+    comment["sender"]["login"] = json!("ana");
     test::call_service(&app, webhook("issue_comment", &comment, "whs").to_request()).await;
 
     let notes: Vec<_> = rustrak::services::IssueSocialService::list_activity(&db.pool, issue.id)
