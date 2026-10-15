@@ -121,8 +121,26 @@ async fn assignee(
             None => return Ok(()),
         }
     };
+    let remote = (
+        text(payload, "/repository/full_name").to_string(),
+        payload
+            .pointer("/issue/number")
+            .and_then(Value::as_i64)
+            .unwrap_or_default(),
+    );
     for link in links {
         IssueService::assign(pool, link.issue_id, user_id, user_id.map(|_| "user")).await?;
+        // Its other GitHub issues follow. Not this one: it may have more
+        // assignees than the one Rustrak keeps.
+        super::sync::spawn(
+            "assignee sync",
+            super::sync::mirror_assignee(
+                pool.clone(),
+                link.issue_id,
+                user_id,
+                Some(remote.clone()),
+            ),
+        );
     }
     Ok(())
 }

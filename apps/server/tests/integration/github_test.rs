@@ -1319,6 +1319,55 @@ async fn an_issue_that_comes_back_reopens_its_github_issue() {
 }
 
 #[actix_web::test]
+async fn assigning_one_linked_github_issue_assigns_the_others() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    GitHubService::add_link(
+        &db.pool,
+        issue.id,
+        "acme/web",
+        &rustrak::services::github::client::RemoteIssue {
+            number: 13,
+            title: "Login is broken, again".into(),
+            url: "https://github.com/acme/web/issues/13".into(),
+            state: "open".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let user = rustrak::services::UsersService::create_user_with_password_hash(
+        &db.pool,
+        "octo@acme.dev",
+        "unused",
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET github_login = 'octocat' WHERE id = $1")
+        .bind(user.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let app = app!(db);
+
+    let mut assigned = github_issue_event("assigned", "ana");
+    assigned["issue"]["assignees"] = json!([{ "login": "octocat" }, { "login": "hubot" }]);
+    test::call_service(&app, webhook("issues", &assigned, "whs").to_request()).await;
+
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/13").await;
+    assert_eq!(call.body["assignees"], json!(["octocat"]));
+    // The one assigned on GitHub keeps all of its assignees.
+    assert!(!github
+        .calls()
+        .iter()
+        .any(|c| c.method == "PATCH" && c.path == "/repos/acme/web/issues/12"));
+}
+
+#[actix_web::test]
 async fn github_comments_and_assignees_come_back_into_rustrak() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;

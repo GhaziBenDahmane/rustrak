@@ -260,7 +260,12 @@ pub async fn update_issue(
         .await?;
         github::sync::spawn(
             "assignee sync",
-            github::sync::mirror_assignee(pool.get_ref().clone(), issue_id, updated.assigned_to),
+            github::sync::mirror_assignee(
+                pool.get_ref().clone(),
+                issue_id,
+                updated.assigned_to,
+                None,
+            ),
         );
     }
 
