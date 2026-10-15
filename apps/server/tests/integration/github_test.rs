@@ -136,6 +136,22 @@ async fn answer(
             HttpResponse::Ok().json(json!({ "total_count": 1, "repositories": [repo] }))
         }
         ("GET", "/repos/acme/web") => HttpResponse::Ok().json(repo),
+        // Fails the first time it is asked, the way GitHub has a bad minute.
+        ("POST", "/repos/acme/flaky/issues")
+            if calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.path == path)
+                .count()
+                == 1 =>
+        {
+            HttpResponse::BadGateway().json(json!({ "message": "Server Error" }))
+        }
+        ("POST", "/repos/acme/flaky/issues") => HttpResponse::Created().json(json!({
+            "number": 8, "title": body["title"], "state": "open",
+            "html_url": "https://github.com/acme/flaky/issues/8",
+        })),
         ("POST", "/repos/acme/web/issues") => HttpResponse::Created().json(json!({
             "number": 7, "title": body["title"], "state": "open",
             "html_url": "https://github.com/acme/web/issues/7",
@@ -1493,6 +1509,37 @@ async fn a_new_issue_opens_a_github_issue_when_the_project_asks() {
 
     let sent = github.wait_for("POST", "/repos/acme/web/issues").await;
     assert_eq!(sent.body["title"], "TypeError: x is undefined");
+}
+
+#[actix_web::test]
+async fn an_automatic_github_issue_github_refused_is_tried_again() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    sqlx::query("UPDATE project_repositories SET repo_full_name = 'acme/flaky'")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    auto_create(&db, project.id, json!({})).await;
+
+    digest(&db, project.id, "production").await;
+
+    let issue: (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    for _ in 0..100 {
+        if !GitHubService::links(&db.pool, issue.0)
+            .await
+            .unwrap()
+            .is_empty()
+        {
+            return;
+        }
+        actix_web::rt::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("never linked: {:?}", github.calls());
 }
 
 #[actix_web::test]

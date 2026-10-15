@@ -321,10 +321,24 @@ pub async fn auto_create(
             environment.as_deref(),
             issue.digested_event_count,
         )
-        || !GitHubService::links(&pool, issue.id).await?.is_empty()
     {
         return Ok(());
     }
-    create_issue(&pool, &project, &issue, None, None, None, &dashboard_url).await?;
+    // Only this event reaches the count, so a refusal from GitHub is retried
+    // here rather than left for a later event.
+    // ponytail: retried in memory; a restart mid-retry still loses it.
+    for wait in [1, 2, 0] {
+        if !GitHubService::links(&pool, issue.id).await?.is_empty() {
+            return Ok(());
+        }
+        match create_issue(&pool, &project, &issue, None, None, None, &dashboard_url).await {
+            Ok(_) => return Ok(()),
+            Err(error) if wait > 0 => {
+                log::warn!("GitHub issue auto-create failed, retrying in {wait}s: {error}");
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
     Ok(())
 }

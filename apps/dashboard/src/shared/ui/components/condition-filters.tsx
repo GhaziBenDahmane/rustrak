@@ -75,8 +75,10 @@ export function ConditionFilters({
               onChange={(e) => {
                 // Hold what is typed, even an empty field, until it is a count.
                 setEventsDraft(e.target.value);
-                const count = parseInt(e.target.value, 10);
-                if (count >= 1) set({ min_events: count });
+                // `Number`, not `parseInt`: the field accepts `1e2` as 100.
+                const count = Number(e.target.value);
+                if (Number.isSafeInteger(count) && count >= 1)
+                  set({ min_events: count });
               }}
               onBlur={() => setEventsDraft(null)}
             />
