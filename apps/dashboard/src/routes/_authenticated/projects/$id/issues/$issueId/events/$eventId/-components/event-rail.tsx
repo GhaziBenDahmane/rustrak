@@ -11,7 +11,8 @@ interface EventRailProps {
   /** What GitHub says about the issue; `null` when it could not be loaded. */
   code: IssueGitHub | null;
   /** Whether the project has a GitHub repository. */
-  connected: boolean;
+  /** `null` when the repository could not be loaded. */
+  connected: boolean | null;
 }
 
 /**

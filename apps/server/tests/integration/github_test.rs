@@ -757,11 +757,23 @@ async fn suspect_commits_look_past_a_busy_window() {
             .await
             .unwrap();
     }
-    let found = GitHubService::suspect_commits(&db.pool, "acme/web", "lib/db.ts", Utc::now())
-        .await
-        .unwrap();
+    let found =
+        GitHubService::suspect_commits(&db.pool, "acme/web", "lib/db.ts", false, Utc::now())
+            .await
+            .unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].sha, "old");
+
+    // A name JSON escapes, or that LIKE would read as a pattern, still matches.
+    for name in [r#"lib/a"b.ts"#, r"lib/a\b.ts", "lib/100%_!.ts"] {
+        GitHubService::save_commit(&db.pool, &commit(name.into(), name, 5))
+            .await
+            .unwrap();
+        let found = GitHubService::suspect_commits(&db.pool, "acme/web", name, true, Utc::now())
+            .await
+            .unwrap();
+        assert_eq!(found.first().map(|c| c.sha.as_str()), Some(name));
+    }
 }
 
 // =============================================================================
@@ -1072,7 +1084,13 @@ async fn issue_code_block_names_suspect_commits_and_owners() {
     )
     .await
     .unwrap();
-    for (sha, file, hours_before) in [("aaa", "lib/db.ts", 2), ("bbb", "README.md", 1)] {
+    // The mapping says the frame is `lib/db.ts` at the root, so another
+    // package's `lib/db.ts` is a different file.
+    for (sha, file, hours_before) in [
+        ("aaa", "lib/db.ts", 2),
+        ("bbb", "README.md", 1),
+        ("ccc", "packages/server/lib/db.ts", 1),
+    ] {
         GitHubService::save_commit(
             &db.pool,
             &rustrak::models::github::RepoCommit {
@@ -1240,6 +1258,64 @@ async fn closing_and_reopening_on_github_follows_through() {
     test::call_service(&app, req).await;
     let stored = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
     assert_eq!(stored.status, "unresolved");
+}
+
+#[actix_web::test]
+async fn closing_one_linked_github_issue_closes_the_others() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    GitHubService::add_link(
+        &db.pool,
+        issue.id,
+        "acme/web",
+        &rustrak::services::github::client::RemoteIssue {
+            number: 13,
+            title: "Login is broken, again".into(),
+            url: "https://github.com/acme/web/issues/13".into(),
+            state: "open".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let app = app!(db);
+
+    let req = webhook("issues", &github_issue_event("closed", "ana"), "whs").to_request();
+    test::call_service(&app, req).await;
+
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/13").await;
+    assert_eq!(call.body["state"], "closed");
+    // The one GitHub closed itself needs no telling.
+    assert!(!github
+        .calls()
+        .iter()
+        .any(|c| c.method == "PATCH" && c.path == "/repos/acme/web/issues/12"));
+}
+
+#[actix_web::test]
+async fn an_issue_that_comes_back_reopens_its_github_issue() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    digest(&db, project.id, "production").await;
+    let (issue_id,): (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    link_12(&db, issue_id).await;
+    IssueService::resolve(&db.pool, issue_id).await.unwrap();
+    GitHubService::update_remote(&db.pool, "acme/web", 12, "Login is broken", "closed")
+        .await
+        .unwrap();
+
+    digest(&db, project.id, "production").await;
+
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/12").await;
+    assert_eq!(call.body["state"], "open");
 }
 
 #[actix_web::test]

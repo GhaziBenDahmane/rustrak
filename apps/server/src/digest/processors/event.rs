@@ -359,6 +359,13 @@ impl ErrorProcessor {
         if types.contains(&AlertType::NewIssue) {
             self.spawn_auto_create(pool, &project, &issue, facts);
         }
+        // A regression reopens the linked GitHub issues too.
+        if regressed {
+            crate::services::github::sync::spawn(
+                "status sync",
+                crate::services::github::sync::mirror_status(pool.clone(), issue.id),
+            );
+        }
 
         // 11. Delete after the event and alert writes complete; SQLite also
         // requires a successful durability checkpoint.

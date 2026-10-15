@@ -546,10 +546,16 @@ pub async fn issue_github(
         let mappings: Vec<CodeMapping> =
             serde_json::from_str(&repo.code_mappings).unwrap_or_default();
         if let Some(file) = repo_path(&issue.last_frame_filename, &mappings) {
+            // A mapping says exactly where the file is; without one, any path
+            // that ends the same way may be it.
+            let mapped = mappings
+                .iter()
+                .any(|m| issue.last_frame_filename.starts_with(m.stack_root.as_str()));
             answer.suspect_commits = GitHubService::suspect_commits(
                 pool.get_ref(),
                 &repo.repo_full_name,
                 &file,
+                mapped,
                 issue.first_seen,
             )
             .await?;
