@@ -223,32 +223,40 @@ impl<'a> GitHubClient<'a> {
     /// Every repository the installation was granted, up to 20,000 (Sentry's
     /// cap: 200 pages of 100).
     pub async fn repositories(&self, installation_id: i64) -> AppResult<Vec<GitHubRepository>> {
-        let mut repositories = Vec::new();
-        for page in 1..=200 {
-            let answer = self
-                .as_installation(
-                    installation_id,
-                    Method::GET,
-                    &format!("/installation/repositories?per_page=100&page={page}"),
-                    None,
-                )
-                .await?;
-            let batch = answer
-                .get("repositories")
-                .and_then(Value::as_array)
-                .cloned()
-                .unwrap_or_default();
-            let full_page = batch.len() == 100;
-            repositories.extend(
-                batch
-                    .iter()
-                    .map(|repo| repository_from_json(installation_id, repo)),
-            );
-            if !full_page {
-                break;
-            }
-        }
-        Ok(repositories)
+        use futures_util::{StreamExt, TryStreamExt};
+
+        let page = |page: u64| async move {
+            self.as_installation(
+                installation_id,
+                Method::GET,
+                &format!("/installation/repositories?per_page=100&page={page}"),
+                None,
+            )
+            .await
+        };
+        let first = page(1).await?;
+        let total = first
+            .get("total_count")
+            .and_then(Value::as_u64)
+            .unwrap_or_default();
+        // The first page says how many follow; fetching them one after
+        // another outlasts the dashboard's request timeout on a large org.
+        let rest: Vec<Value> = futures_util::stream::iter(2..=total.div_ceil(100).min(200))
+            .map(page)
+            .buffered(8)
+            .try_collect()
+            .await?;
+        Ok(std::iter::once(first)
+            .chain(rest)
+            .flat_map(|answer| {
+                answer
+                    .get("repositories")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .map(|repo| repository_from_json(installation_id, &repo))
+            .collect())
     }
 
     pub async fn repository(
