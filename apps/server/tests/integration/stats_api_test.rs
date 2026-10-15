@@ -680,7 +680,13 @@ async fn list_stats_splits_the_current_window_from_the_one_before_it() {
     assert_eq!(entry.events.previous, Some(1));
     // Only the issue active inside the current window reaches the sparkline:
     // the one 30h ago is in the comparison window, the one 60h ago in neither.
-    assert_eq!(entry.trend.iter().sum::<i64>(), 1);
+    // Hourly bars anchored to `now` put "2h ago" on a bar's edge, so its two
+    // events can straddle it when the clock ticks between their inserts:
+    // bars 21 and 22 of 24 are both "2h ago".
+    assert!(entry.trend.iter().sum::<i64>() >= 1);
+    for (bar, issues) in entry.trend.iter().enumerate() {
+        assert!(*issues == 0 || (21..=22).contains(&bar), "bar {bar}: {issues}");
+    }
 }
 
 /// Transactions and sessions share the `events` table; only errors belong in
