@@ -88,6 +88,11 @@ async fn issues(pool: &DbPool, payload: &Value) -> AppResult<()> {
         if issue.status != status {
             IssueService::set_status(pool, issue.id, status, None).await?;
             IssueSocialService::add_activity(pool, issue.id, None, "set_status", &data).await?;
+            // Its other GitHub issues follow; this one already has the state.
+            super::sync::spawn(
+                "status sync",
+                super::sync::mirror_status(pool.clone(), issue.id),
+            );
         }
     }
     Ok(())

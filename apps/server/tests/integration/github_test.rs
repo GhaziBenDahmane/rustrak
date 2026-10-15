@@ -1174,6 +1174,95 @@ async fn closing_and_reopening_on_github_follows_through() {
 }
 
 #[actix_web::test]
+async fn closing_one_linked_github_issue_closes_the_others() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    GitHubService::add_link(
+        &db.pool,
+        issue.id,
+        "acme/web",
+        &rustrak::services::github::client::RemoteIssue {
+            number: 13,
+            title: "Login is broken, again".into(),
+            url: "https://github.com/acme/web/issues/13".into(),
+            state: "open".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let app = app!(db);
+
+    let req = webhook("issues", &github_issue_event("closed", "ana"), "whs").to_request();
+    test::call_service(&app, req).await;
+
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/13").await;
+    assert_eq!(call.body["state"], "closed");
+    // The one GitHub closed itself needs no telling.
+    assert!(!github
+        .calls()
+        .iter()
+        .any(|c| c.method == "PATCH" && c.path == "/repos/acme/web/issues/12"));
+}
+
+#[actix_web::test]
+async fn an_issue_that_comes_back_reopens_its_github_issue() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    digest(&db, project.id).await;
+    let (issue_id,): (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    link_12(&db, issue_id).await;
+    IssueService::resolve(&db.pool, issue_id).await.unwrap();
+    GitHubService::update_remote(&db.pool, "acme/web", 12, "Login is broken", "closed")
+        .await
+        .unwrap();
+
+    digest(&db, project.id).await;
+
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/12").await;
+    assert_eq!(call.body["state"], "open");
+}
+
+/// Digests one event, the same error every time.
+async fn digest(db: &TestDb, project_id: i32) {
+    let ingest = tempfile::TempDir::new().unwrap();
+    let event_id = uuid::Uuid::new_v4().simple().to_string();
+    let event = crate::common::EventBuilder::new()
+        .with_event_id(&event_id)
+        .with_exception("TypeError", "x is undefined")
+        .build();
+    rustrak::ingest::store_event(
+        ingest.path(),
+        &event_id,
+        &serde_json::to_vec(&event).unwrap(),
+    )
+    .await
+    .unwrap();
+    crate::common::process_error_event(
+        &db.pool,
+        &rustrak::ingest::EventMetadata {
+            event_id,
+            project_id,
+            ingested_at: Utc::now(),
+            remote_addr: None,
+        },
+        ingest.path(),
+        &test_config().rate_limit,
+        crate::common::null_sourcemap_provider(),
+    )
+    .await
+    .unwrap();
+}
+
+#[actix_web::test]
 async fn github_comments_and_assignees_come_back_into_rustrak() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;
