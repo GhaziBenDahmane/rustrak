@@ -152,16 +152,34 @@ async fn issue_comment(pool: &DbPool, payload: &Value) -> AppResult<()> {
     let Some(number) = payload.pointer("/issue/number").and_then(Value::as_i64) else {
         return Ok(());
     };
+    let url = text(payload, "/comment/html_url");
     let data = json!({
         "text": text(payload, "/comment/body"),
         "source": "github",
         "author": text(payload, "/comment/user/login"),
-        "url": text(payload, "/comment/html_url"),
+        "url": url,
     })
     .to_string();
+    // GitHub redelivers webhooks, and a comment's URL is its own: one already
+    // copied is not copied again. Looked for as the stored JSON writes it,
+    // with `!` escaping what LIKE would read as a pattern.
+    let stored_url = format!(r#""url":{}"#, json!(url))
+        .replace('!', "!!")
+        .replace('%', "!%")
+        .replace('_', "!_");
     for link in
         GitHubService::links_to_remote(pool, text(payload, "/repository/full_name"), number).await?
     {
+        let copied: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM issue_activity WHERE issue_id = $1 AND type = 'note' AND data LIKE $2 ESCAPE '!')",
+        )
+        .bind(link.issue_id)
+        .bind(format!("%{stored_url}%"))
+        .fetch_one(pool)
+        .await?;
+        if !url.is_empty() && copied {
+            continue;
+        }
         IssueSocialService::add_activity(pool, link.issue_id, None, "note", &data).await?;
     }
     Ok(())
