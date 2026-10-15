@@ -193,9 +193,9 @@ impl ErrorProcessor {
                 let mut issue = IssueService::get_by_id(pool, issue_id).await?;
                 let facts = event_facts(&event_data);
                 // Rules match the count this event brought the issue to, not
-                // today's. A row from before that count was kept replays its
-                // lifecycle alert only, and a new issue's came from its first
-                // event.
+                // today's. A row without that count (from before it was kept,
+                // or digested while muted) replays its lifecycle alert only,
+                // and a new issue's came from its first event.
                 let types = match existing.issue_event_count {
                     Some(count) => {
                         issue.digested_event_count = count;
@@ -837,7 +837,9 @@ async fn write_digest_rows(
         write.denormalized,
         write.remote_addr,
         alert_type_for_lifecycle(created, regressed),
-        Some(issue.digested_event_count),
+        // Kept only when the event could fire new-issue rules: a muted one
+        // replays its lifecycle alert alone, whatever the issue is by then.
+        (!issue.is_muted()).then_some(issue.digested_event_count),
     )
     .await?;
 

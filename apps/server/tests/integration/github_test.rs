@@ -1761,6 +1761,30 @@ async fn a_replayed_event_that_reached_the_count_opens_the_github_issue() {
 }
 
 #[actix_web::test]
+async fn a_replayed_event_digested_while_muted_stays_quiet_after_unmuting() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    auto_create(&db, project.id, json!({ "min_events": 2 })).await;
+
+    digest(&db, project.id, "production").await;
+    let (issue_id,): (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    IssueService::mute(&db.pool, issue_id).await.unwrap();
+    // Reaches the count while muted, then the server stops before deleting it.
+    let second = uuid::Uuid::new_v4().simple().to_string();
+    digest_id(&db, project.id, "production", &second).await;
+    IssueService::unmute(&db.pool, issue_id).await.unwrap();
+
+    digest_id(&db, project.id, "production", &second).await;
+    actix_web::rt::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(issues_opened(&github), 0);
+}
+
+#[actix_web::test]
 async fn a_replayed_first_event_stored_before_counts_were_kept_opens_the_github_issue() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;

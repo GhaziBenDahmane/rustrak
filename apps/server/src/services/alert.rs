@@ -645,6 +645,22 @@ impl AlertService {
         ) {
             return Ok(());
         }
+        // A rule fires once per new issue. Retention lowers an issue's count,
+        // so a later event can bring it back to `min_events`; its history
+        // (never pruned) says the rule already fired.
+        if alert_type == AlertType::NewIssue {
+            let fired: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM alert_history WHERE alert_rule_id = $1 AND issue_id = $2 AND alert_type = $3)",
+            )
+            .bind(rule.id)
+            .bind(issue.id)
+            .bind(alert_type.to_string())
+            .fetch_one(pool)
+            .await?;
+            if fired {
+                return Ok(());
+            }
+        }
 
         // 2. Get associated rule channels (only enabled integrations — SCL-1)
         let rule_channels: Vec<AlertRuleChannel> = sqlx::query_as(
