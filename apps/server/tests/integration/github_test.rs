@@ -1528,6 +1528,26 @@ async fn a_replayed_event_that_reached_the_count_opens_the_github_issue() {
     github.wait_for("POST", "/repos/acme/web/issues").await;
 }
 
+#[actix_web::test]
+async fn a_replayed_first_event_stored_before_counts_were_kept_opens_the_github_issue() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+
+    let first = uuid::Uuid::new_v4().simple().to_string();
+    digest_id(&db, project.id, "production", &first).await;
+    digest(&db, project.id, "production").await;
+    sqlx::query("UPDATE events SET issue_event_count = NULL")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    auto_create(&db, project.id, json!({})).await;
+
+    digest_id(&db, project.id, "production", &first).await;
+    github.wait_for("POST", "/repos/acme/web/issues").await;
+}
+
 // =============================================================================
 // A person's GitHub login
 // =============================================================================

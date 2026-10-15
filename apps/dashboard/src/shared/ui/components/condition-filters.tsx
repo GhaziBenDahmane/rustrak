@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslations } from 'use-intl';
 import { type FilterFields, levels } from '@/shared/lib/rule-conditions';
 import { Input } from '@/shared/ui/components/shadcn/input';
@@ -27,6 +28,7 @@ export function ConditionFilters({
   disabled: boolean;
 }) {
   const t = useTranslations('conditions');
+  const [eventsDraft, setEventsDraft] = useState<string | null>(null);
   const set = (change: Partial<FilterFields>) =>
     onChange({ ...value, ...change });
 
@@ -68,11 +70,15 @@ export function ConditionFilters({
               id="condition-events"
               type="number"
               min={1}
-              value={value.min_events}
+              value={eventsDraft ?? value.min_events}
               disabled={disabled}
-              onChange={(e) =>
-                set({ min_events: parseInt(e.target.value, 10) || 1 })
-              }
+              onChange={(e) => {
+                // Hold what is typed, even an empty field, until it is a count.
+                setEventsDraft(e.target.value);
+                const count = parseInt(e.target.value, 10);
+                if (count >= 1) set({ min_events: count });
+              }}
+              onBlur={() => setEventsDraft(null)}
             />
           </div>
         )}

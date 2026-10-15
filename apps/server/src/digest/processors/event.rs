@@ -194,13 +194,19 @@ impl ErrorProcessor {
                 let facts = event_facts(&event_data);
                 // Rules match the count this event brought the issue to, not
                 // today's. A row from before that count was kept replays its
-                // lifecycle alert only.
+                // lifecycle alert only, and a new issue's came from its first
+                // event.
                 let types = match existing.issue_event_count {
                     Some(count) => {
                         issue.digested_event_count = count;
                         event_alert_types(existing.alert_type, issue.is_muted())
                     }
-                    None => existing.alert_type.into_iter().collect(),
+                    None => {
+                        if existing.alert_type == Some(AlertType::NewIssue) {
+                            issue.digested_event_count = 1;
+                        }
+                        existing.alert_type.into_iter().collect()
+                    }
                 };
                 for &alert_type in &types {
                     if !AlertService::event_alert_exists(
