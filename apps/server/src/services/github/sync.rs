@@ -342,38 +342,45 @@ pub async fn auto_create(
     };
     let client = GitHubClient::new(&app);
     let started = Utc::now() - chrono::Duration::minutes(1);
-    // The body links back to this issue, so its id finds it on GitHub.
-    let marker = issue.id.to_string();
+    // Hidden in the body and new to this run, so only the issue this run
+    // opened carries it; a pasted link to the Rustrak issue does not.
+    let marker = format!("<!-- rustrak:{} -->", Uuid::new_v4());
+    let body = format!(
+        "{}\n\n{marker}",
+        issue_body(&project, &issue, &dashboard_url)
+    );
     // Only this event reaches the count, so a failure is retried here rather
     // than left for a later event. GitHub has no idempotency key and a failed
-    // attempt may have opened the issue anyway (an answer lost, a link not
-    // saved), so a retry looks for it before opening another.
+    // attempt may have opened the issue anyway (an answer lost), so a retry
+    // looks for the marker before opening another; one GitHub did return is
+    // kept, and only its link is saved again.
     // ponytail: retried in memory; a restart mid-retry still loses it.
+    let mut remote: Option<super::client::RemoteIssue> = None;
     for (attempt, wait) in [1, 2, 0].into_iter().enumerate() {
         if !GitHubService::links(&pool, issue.id).await?.is_empty() {
             return Ok(());
         }
         let opened = async {
-            let found = if attempt == 0 {
-                None
-            } else {
-                client
+            let found = match remote.take() {
+                Some(known) => Some(known),
+                None if attempt > 0 => client
                     .issues_since(installation_id, &repo, started)
                     .await?
                     .into_iter()
-                    .find(|(body, _)| body.contains(&marker))
-                    .map(|(_, remote)| remote)
+                    .find(|(text, _)| text.contains(&marker))
+                    .map(|(_, found)| found),
+                None => None,
             };
-            let remote = match found {
-                Some(remote) => remote,
+            let opened = match found {
+                Some(opened) => opened,
                 None => {
-                    let body = issue_body(&project, &issue, &dashboard_url);
                     client
                         .create_issue(installation_id, &repo, &issue.title(), &body)
                         .await?
                 }
             };
-            let link = GitHubService::add_link(&pool, issue.id, &repo, &remote).await?;
+            remote = Some(opened.clone());
+            let link = GitHubService::add_link(&pool, issue.id, &repo, &opened).await?;
             record_link(&pool, issue.id, None, &link, "created").await;
             AppResult::Ok(())
         }

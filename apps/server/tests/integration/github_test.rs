@@ -154,17 +154,29 @@ async fn answer(
             HttpResponse::BadGateway().json(json!({ "message": "Server Error" }))
         }
         ("GET", "/repos/acme/lost/issues") => {
-            let opened: Vec<Value> = calls
-                .lock()
-                .unwrap()
-                .iter()
-                .filter(|c| c.method == "POST" && c.path == path)
-                .map(|c| json!({
-                    "number": 9, "title": c.body["title"], "body": c.body["body"], "state": "open",
+            let mut listed = Vec::new();
+            for c in calls.lock().unwrap().iter() {
+                if c.method != "POST" || c.path != path {
+                    continue;
+                }
+                let body = c.body["body"].as_str().unwrap_or_default();
+                // Someone pasted the Rustrak link into another issue since.
+                let link = body
+                    .split("](")
+                    .nth(1)
+                    .and_then(|rest| rest.split(')').next())
+                    .unwrap_or_default();
+                listed.push(json!({
+                    "number": 5, "title": "Seen in prod?", "state": "open",
+                    "body": format!("Looks like [this]({link})"),
+                    "html_url": "https://github.com/acme/lost/issues/5",
+                }));
+                listed.push(json!({
+                    "number": 9, "title": c.body["title"], "body": body, "state": "open",
                     "html_url": "https://github.com/acme/lost/issues/9",
-                }))
-                .collect();
-            HttpResponse::Ok().json(opened)
+                }));
+            }
+            HttpResponse::Ok().json(listed)
         }
         ("POST", "/repos/acme/flaky/issues") => HttpResponse::Created().json(json!({
             "number": 8, "title": body["title"], "state": "open",
