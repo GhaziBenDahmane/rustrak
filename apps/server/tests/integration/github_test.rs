@@ -1052,6 +1052,56 @@ async fn an_issue_assigned_to_something_other_than_a_person_leaves_github_alone(
 }
 
 #[actix_web::test]
+async fn clearing_an_assignee_of_any_type_clears_github() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+
+    // Cleared, with the type the API was sent alongside.
+    IssueService::assign(&db.pool, issue.id, None, Some("team"))
+        .await
+        .unwrap();
+    rustrak::services::github::sync::mirror_assignee(db.pool.clone(), issue.id, None)
+        .await
+        .unwrap();
+
+    let call = github.wait_for("PATCH", "/repos/acme/web/issues/12").await;
+    assert_eq!(call.body["assignees"], json!([]));
+}
+
+/// A rename on GitHub stored by its webhook while the state change was on
+/// its way out is not undone by the title that change started with.
+#[actix_web::test]
+async fn a_status_sync_keeps_a_title_renamed_meanwhile() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_slow(&db, issue.id).await;
+
+    IssueService::set_status(&db.pool, issue.id, "resolved", None)
+        .await
+        .unwrap();
+    let closing = actix_web::rt::spawn(rustrak::services::github::sync::mirror_status(
+        db.pool.clone(),
+        issue.id,
+    ));
+    github.wait_for("PATCH", "/repos/acme/slow/issues/6").await;
+    GitHubService::update_remote(&db.pool, "acme/slow", 6, "Renamed", "open")
+        .await
+        .unwrap();
+    closing.await.unwrap().unwrap();
+
+    let links = GitHubService::links(&db.pool, issue.id).await.unwrap();
+    assert_eq!(links[0].title, "Renamed");
+    assert_eq!(links[0].state, "closed");
+}
+
+#[actix_web::test]
 async fn creating_a_github_issue_links_it() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;

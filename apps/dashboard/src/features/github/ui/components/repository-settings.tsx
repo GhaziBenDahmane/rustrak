@@ -169,6 +169,9 @@ export function RepositorySettings({
               description={t('repository.mappingsDescription')}
             >
               <PathMappings
+                // A new key per saved value starts the draft again from it,
+                // so what the server kept (empty rows dropped) is what shows.
+                key={JSON.stringify(repository.code_mappings)}
                 saved={repository.code_mappings}
                 disabled={isPending}
                 onSave={(code_mappings) => save({ code_mappings })}
@@ -281,6 +284,9 @@ function PathMappings({
   onSave: (mappings: CodeMapping[]) => void;
 }) {
   const t = useTranslations('github');
+  // A draft of `saved`, not a copy to keep in step: the parent keys this
+  // component on `saved`, so a new saved value starts a new draft.
+  // react-doctor-disable-next-line react-doctor/no-derived-useState
   const [mappings, setMappings] = useState<CodeMapping[]>(saved);
   const changed = JSON.stringify(mappings) !== JSON.stringify(saved);
   const update = (index: number, change: Partial<CodeMapping>) =>

@@ -229,14 +229,8 @@ pub async fn mirror_status(pool: DbPool, issue_id: Uuid) -> AppResult<()> {
                 client
                     .set_issue_state(installation_id, &link.repo_full_name, link.number, state)
                     .await?;
-                GitHubService::update_remote(
-                    &pool,
-                    &link.repo_full_name,
-                    link.number,
-                    &link.title,
-                    state,
-                )
-                .await
+                GitHubService::set_remote_state(&pool, &link.repo_full_name, link.number, state)
+                    .await
             }
             .await;
             skip_failed(link, result);
@@ -315,10 +309,12 @@ pub async fn mirror_assignee(
     let assignee = |issue: &Issue| (issue.assigned_to, issue.assignee_type.clone());
     loop {
         let issue = crate::services::IssueService::get_by_id(&pool, issue_id).await?;
-        let user_id = match issue.assignee_type.as_deref() {
+        let user_id = match (issue.assigned_to, issue.assignee_type.as_deref()) {
+            // Cleared, whatever type came with it.
+            (None, _) => None,
             // No type is how the dashboard assigns a person.
-            None | Some("user") => issue.assigned_to,
-            Some(_) => return Ok(()),
+            (Some(user_id), None | Some("user")) => Some(user_id),
+            (Some(_), Some(_)) => return Ok(()),
         };
         let logins = match user_id {
             Some(user_id) => match github_login(&pool, user_id).await? {

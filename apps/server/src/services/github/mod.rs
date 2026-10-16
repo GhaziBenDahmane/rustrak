@@ -396,6 +396,26 @@ impl GitHubService {
         Ok(())
     }
 
+    /// Records a state Rustrak set on GitHub. The title is left alone: a
+    /// rename the webhook stored meanwhile is newer than any Rustrak holds.
+    pub async fn set_remote_state(
+        pool: &DbPool,
+        repo_full_name: &str,
+        number: i64,
+        state: &str,
+    ) -> AppResult<()> {
+        sqlx::query(
+            "UPDATE issue_external_links SET state = $3
+             WHERE LOWER(repo_full_name) = LOWER($1) AND number = $2",
+        )
+        .bind(repo_full_name)
+        .bind(number)
+        .bind(state)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
     // -------------------------------------------------------------- commits
 
     /// Keeps a commit; `false` when it was already here (a redelivered push).
