@@ -1,5 +1,11 @@
 # docs
 
+## 0.16.1
+
+### Patch Changes
+
+- [`c655616`](https://github.com/rustrak/rustrak/commit/c6556160a5ce0285b9d99ad46130840ae6a570eb) Thanks [@AbianS](https://github.com/AbianS)! - New GitHub configuration page, alert rule filters, and the GitHub telemetry fields.
+
 ## 0.16.0
 
 ### Minor Changes
