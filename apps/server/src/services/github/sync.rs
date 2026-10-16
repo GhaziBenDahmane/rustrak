@@ -4,7 +4,9 @@
 //! The mirroring runs off the request path: a slow or unreachable GitHub must
 //! never fail or delay the change a person made in Rustrak.
 
+use std::collections::HashSet;
 use std::future::Future;
+use std::sync::{LazyLock, Mutex};
 
 use chrono::Utc;
 
@@ -311,9 +313,37 @@ pub async fn mirror_assignee(
     Ok(())
 }
 
+/// The Rustrak issues an `auto_create` is opening a GitHub issue for right now.
+// ponytail: in memory, fine for one process per database (the only deployment).
+static OPENING: LazyLock<Mutex<HashSet<Uuid>>> = LazyLock::new(Default::default);
+
+/// Holds an issue in `OPENING` until the run that claimed it ends.
+struct Opening(Uuid);
+
+impl Opening {
+    fn claim(issue_id: Uuid) -> Option<Self> {
+        let claimed = OPENING
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(issue_id);
+        // Built only once the lock is released: a dropped `Opening` takes it.
+        claimed.then(|| Opening(issue_id))
+    }
+}
+
+impl Drop for Opening {
+    fn drop(&mut self) {
+        OPENING
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.0);
+    }
+}
+
 /// Opens a GitHub issue for a new Rustrak issue when the project asked for it
 /// and the event passes the project's filters. An issue that already has one
-/// keeps it: a replayed event must not open a second.
+/// keeps it: a replayed event must not open a second, nor one that arrives
+/// while the first run is still waiting for GitHub.
 pub async fn auto_create(
     pool: DbPool,
     project: Project,
@@ -337,6 +367,9 @@ pub async fn auto_create(
     {
         return Ok(());
     }
+    let Some(_opening) = Opening::claim(issue.id) else {
+        return Ok(());
+    };
     let Some((app, installation_id, repo)) = project_installation(&pool, project.id).await? else {
         return Ok(());
     };

@@ -178,6 +178,14 @@ async fn answer(
             }
             HttpResponse::Ok().json(listed)
         }
+        // Takes its time to answer, long enough for a replay to arrive meanwhile.
+        ("POST", "/repos/acme/slow/issues") => {
+            actix_web::rt::time::sleep(Duration::from_millis(300)).await;
+            HttpResponse::Created().json(json!({
+                "number": 6, "title": body["title"], "state": "open",
+                "html_url": "https://github.com/acme/slow/issues/6",
+            }))
+        }
         ("POST", "/repos/acme/flaky/issues") => HttpResponse::Created().json(json!({
             "number": 8, "title": body["title"], "state": "open",
             "html_url": "https://github.com/acme/flaky/issues/8",
@@ -1781,6 +1789,33 @@ async fn an_automatic_github_issue_whose_answer_was_lost_is_linked_not_opened_ag
         actix_web::rt::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("never linked: {:?}", github.calls());
+}
+
+#[actix_web::test]
+async fn an_event_replayed_while_its_github_issue_is_opening_does_not_open_another() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    sqlx::query("UPDATE project_repositories SET repo_full_name = 'acme/slow'")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    auto_create(&db, project.id, json!({})).await;
+
+    // The SDK sends the same event again before GitHub has answered the first.
+    let event_id = uuid::Uuid::new_v4().simple().to_string();
+    digest_id(&db, project.id, "production", &event_id).await;
+    digest_id(&db, project.id, "production", &event_id).await;
+
+    github.wait_for("POST", "/repos/acme/slow/issues").await;
+    actix_web::rt::time::sleep(Duration::from_millis(800)).await;
+    let opened = github
+        .calls()
+        .iter()
+        .filter(|c| c.method == "POST" && c.path == "/repos/acme/slow/issues")
+        .count();
+    assert_eq!(opened, 1);
 }
 
 #[actix_web::test]
