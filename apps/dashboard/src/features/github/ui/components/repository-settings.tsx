@@ -67,7 +67,9 @@ export function RepositorySettings({
         toast.error(failure, { description: result.error.message });
         return;
       }
-      router.refresh();
+      // Awaited, so the controls stay disabled until the saved values are on
+      // screen: a draft keyed on them would otherwise drop edits made between.
+      await router.refresh();
     });
   };
 
@@ -306,6 +308,7 @@ function PathMappings({
             placeholder="/app/"
             aria-label={t('repository.stackRoot')}
             className="font-mono text-xs"
+            disabled={disabled}
             onChange={(e) => update(index, { stack_root: e.target.value })}
           />
           <span className="text-muted-foreground">→</span>
@@ -314,12 +317,14 @@ function PathMappings({
             placeholder="src/"
             aria-label={t('repository.sourceRoot')}
             className="font-mono text-xs"
+            disabled={disabled}
             onChange={(e) => update(index, { source_root: e.target.value })}
           />
           <Button
             variant="ghost"
             size="icon-sm"
             aria-label={t('repository.removeMapping')}
+            disabled={disabled}
             onClick={() => setMappings(mappings.filter((_, i) => i !== index))}
           >
             <X />
@@ -330,6 +335,7 @@ function PathMappings({
         <Button
           variant="ghost"
           size="sm"
+          disabled={disabled}
           onClick={() =>
             setMappings([...mappings, { stack_root: '', source_root: '' }])
           }
