@@ -16,7 +16,11 @@ use crate::common::TestDb;
 
 // ── seed helpers ─────────────────────────────────────────────────────────────
 
-/// Insert one row into `events`, `hours_ago` old.
+/// Insert one row into `events`, `hours_ago` and a half old.
+///
+/// The half hour keeps a seed off the edge of the hourly sparkline bars,
+/// which are anchored to `now`: a whole number of hours lands on a bar's edge,
+/// and rows seeded either side of a clock tick split across two bars.
 async fn seed_event(
     pool: &DbPool,
     project_id: i32,
@@ -32,8 +36,8 @@ async fn seed_event(
             (event_id, project_id, issue_id, data, timestamp, ingested_at, level, event_type)
         VALUES (
             $1, $2, $3, '{}'::jsonb,
-            NOW() - ($4::text || ' hours')::interval,
-            NOW() - ($4::text || ' hours')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
             $5, $6
         )
         "#,
@@ -55,8 +59,8 @@ async fn seed_event(
             (event_id, project_id, issue_id, data, timestamp, ingested_at, level, event_type)
         VALUES (
             ?1, ?2, ?3, '{}',
-            datetime('now', '-' || ?4 || ' hours'),
-            datetime('now', '-' || ?4 || ' hours'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
             ?5, ?6
         )
         "#,
@@ -72,7 +76,8 @@ async fn seed_event(
     .expect("seed_event failed");
 }
 
-/// Insert one row into `issues`, first seen `hours_ago` ago.
+/// Insert one row into `issues`, first seen `hours_ago` and a half ago (see
+/// `seed_event` for the half hour).
 async fn seed_issue(pool: &DbPool, project_id: i32, digest_order: i32, hours_ago: i64) -> Uuid {
     let id = Uuid::new_v4();
 
@@ -82,8 +87,8 @@ async fn seed_issue(pool: &DbPool, project_id: i32, digest_order: i32, hours_ago
         INSERT INTO issues (id, project_id, digest_order, first_seen, last_seen, status)
         VALUES (
             $1, $2, $3,
-            NOW() - ($4::text || ' hours')::interval,
-            NOW() - ($4::text || ' hours')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
             $5
         )
         "#,
@@ -103,8 +108,8 @@ async fn seed_issue(pool: &DbPool, project_id: i32, digest_order: i32, hours_ago
         INSERT INTO issues (id, project_id, digest_order, first_seen, last_seen, status)
         VALUES (
             ?1, ?2, ?3,
-            datetime('now', '-' || ?4 || ' hours'),
-            datetime('now', '-' || ?4 || ' hours'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
             ?5
         )
         "#,
@@ -680,16 +685,7 @@ async fn list_stats_splits_the_current_window_from_the_one_before_it() {
     assert_eq!(entry.events.previous, Some(1));
     // Only the issue active inside the current window reaches the sparkline:
     // the one 30h ago is in the comparison window, the one 60h ago in neither.
-    // Hourly bars anchored to `now` put "2h ago" on a bar's edge, so its two
-    // events can straddle it when the clock ticks between their inserts:
-    // bars 21 and 22 of 24 are both "2h ago".
-    assert!(entry.trend.iter().sum::<i64>() >= 1);
-    for (bar, issues) in entry.trend.iter().enumerate() {
-        assert!(
-            *issues == 0 || (21..=22).contains(&bar),
-            "bar {bar}: {issues}"
-        );
-    }
+    assert_eq!(entry.trend.iter().sum::<i64>(), 1);
 }
 
 /// Transactions and sessions share the `events` table; only errors belong in
