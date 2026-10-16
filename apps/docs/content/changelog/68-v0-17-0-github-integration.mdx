@@ -1,0 +1,44 @@
+---
+version: v0.17.0
+title: GitHub Integration
+description: Link projects to GitHub repositories, sync issues both ways, resolve from commits and open GitHub issues automatically
+date: 2026-10-16
+tags: [server, dashboard, github, alerts]
+---
+
+## GitHub integration
+
+Rustrak creates its own **private GitHub App** for your server, so no shared
+app or token sits between you and GitHub, and it only sees the repositories
+you pick. Connect it from **Settings → Integrations**, then choose a
+repository in each project's **Settings → GitHub**.
+
+- Every stack frame of your app links to its line on GitHub. Path mappings
+  turn `/app/lib/db.ts` into `src/lib/db.ts` when the two differ
+- Issues create or link GitHub issues, and resolving, reopening, commenting
+  and assigning stay in sync both ways
+- A commit on the default branch that says `Fixes WEB-12` resolves `WEB-12`
+- Issues list suspect commits and the `CODEOWNERS` behind the file they broke in
+- New errors can open a GitHub issue automatically, filtered by level,
+  environment and number of events
+
+GitHub reaches Rustrak through webhooks at `$PUBLIC_URL/api/github/webhook`,
+so set `PUBLIC_URL` before connecting. Behind a firewall everything but the
+GitHub-to-Rustrak sync keeps working. See [GitHub](/configuration/github).
+
+## Alert rule filters
+
+Alert rules can now filter by **level**, **environments** and, for New Issue
+rules, **minimum events**. A New Issue rule fires once per issue, on the event
+that reaches the count, even if retention later lowers it.
+
+## Improvements
+
+- The access log shows the client's address behind a reverse proxy instead of
+  the proxy's, the same address ingest stores on events
+  ([@janatjak](https://github.com/janatjak))
+- An event digested while muted no longer sends an issue alert when it is replayed
+- `@rustrak/client` lists alert rules whose stored conditions predate filters
+  instead of failing the whole list
+- Telemetry reports whether GitHub is connected and how many projects use it.
+  Counts and a boolean only, never a repository or account
