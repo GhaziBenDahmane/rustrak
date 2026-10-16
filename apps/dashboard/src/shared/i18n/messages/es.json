@@ -280,7 +280,13 @@
       "statusChanged": "cambió el estado a {status}",
       "priorityChanged": "estableció la prioridad en {priority}",
       "regression": "detectó una regresión",
-      "firstSeen": "vio este problema por primera vez"
+      "firstSeen": "vio este problema por primera vez",
+      "resolvedByCommit": "resolvió este issue en el commit {sha}",
+      "closedOnGitHub": "cerró el issue enlazado en GitHub",
+      "reopenedOnGitHub": "reabrió el issue enlazado en GitHub",
+      "githubCreated": "creó {ref} en GitHub",
+      "githubLinked": "enlazó {ref}",
+      "githubUnlinked": "desenlazó {ref}"
     },
     "issueStatus": {
       "new": "Nuevo",
@@ -618,7 +624,8 @@
       "fieldAlertType": "ese tipo de alerta",
       "saveFailed": "No se pudo guardar la regla",
       "updated": "Regla de alerta actualizada",
-      "created": "Regla de alerta creada"
+      "created": "Regla de alerta creada",
+      "filters": "Filtros"
     },
     "integrationDialog": {
       "name": "Nombre",
@@ -940,7 +947,8 @@
       "crashed": "Falló",
       "current": "Actual",
       "main": "Principal"
-    }
+    },
+    "openInGitHub": "Abrir en GitHub"
   },
   "releases": {
     "all": "Todas",
@@ -1549,7 +1557,8 @@
       "openProjectSettingsMenu": "Abrir menú de configuración del proyecto",
       "projectSettingsTitle": "Configuración del proyecto",
       "openSettingsMenu": "Abrir menú de configuración",
-      "settingsTitle": "Configuración"
+      "settingsTitle": "Configuración",
+      "github": "GitHub"
     },
     "loadProjectFailed": "No se pudo cargar el proyecto",
     "loadProjectsFailed": "No se pudieron cargar los proyectos",
@@ -1610,7 +1619,8 @@
       "subtitle": "Conecta Rustrak con tus herramientas y servicios para automatizar flujos de trabajo y estar al tanto de los errores.",
       "backToAlerts": "Volver a la configuración de alertas",
       "backToProjects": "Volver a proyectos",
-      "loadFailed": "No se pudieron cargar las integraciones"
+      "loadFailed": "No se pudieron cargar las integraciones",
+      "githubLoadFailed": "No se pudo cargar la conexión con GitHub"
     },
     "storage": {
       "meta": {
@@ -1698,5 +1708,105 @@
       "reportAnIssue": "Informar de un problema",
       "sentryDocs": "Documentación de los SDK de Sentry"
     }
+  },
+  "github": {
+    "section": {
+      "title": "Desarrollo",
+      "description": "Repositorios, commits y gestores de issues, enlazados a tus errores."
+    },
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "connection": {
+      "description": "Issues, commits y responsables del código de tus repositorios",
+      "intro": "Rustrak crea una GitHub App privada para este servidor. GitHub te pide confirmarla y después eliges qué repositorios puede ver.",
+      "organizationLabel": "¿Dónde están tus repositorios? Déjalo vacío para tu cuenta personal o escribe el nombre de la organización. GitHub solo deja instalar la app ahí.",
+      "organizationPlaceholder": "Organización (opcional)",
+      "connect": "Conectar GitHub",
+      "connectFailed": "No se pudo iniciar la configuración de GitHub",
+      "app": "App",
+      "accounts": "Instalada en",
+      "suspended": "suspendida",
+      "install": "Elegir repositorios",
+      "webhooks": "Webhooks",
+      "lastWebhook": "Último recibido {when}",
+      "noWebhook": "Aún no ha llegado ninguno",
+      "unreachable": "GitHub no puede acceder a {url}, así que no llegarán cierres, comentarios ni commits. Configura PUBLIC_URL con una dirección accesible desde GitHub.",
+      "disconnect": "Desconectar GitHub",
+      "disconnectTitle": "¿Desconectar GitHub?",
+      "disconnectDescription": "Rustrak olvida la app y el repositorio de cada proyecto. Los issues enlazados conservan sus enlaces. Borra también la app en GitHub si ya no la necesitas.",
+      "disconnectFailed": "No se pudo desconectar GitHub",
+      "notInstalled": "Sin instalar"
+    },
+    "repository": {
+      "metaTitle": "GitHub",
+      "loadFailed": "No se pudieron cargar los ajustes de GitHub",
+      "subtitle": "Enlaza este proyecto con un repositorio para abrir su código desde el stack trace, encontrar el commit que lo rompió y mantener los issues sincronizados.",
+      "unavailable": "GitHub no está disponible para este proyecto",
+      "goToIntegrations": "Abrir integraciones",
+      "section": "Repositorio",
+      "repository": "Repositorio",
+      "repositoryDescription": "Dónde vive el código de este proyecto.",
+      "noRepositories": "No hay repositorios compartidos con la app",
+      "choose": "Elige un repositorio",
+      "openOnGitHub": "Abrir en GitHub · {branch}",
+      "stackTraces": "Stack traces",
+      "mappings": "Rutas del código",
+      "mappingsDescription": "Convierte una ruta del stack trace en un fichero del repositorio, p. ej. /app/ → src/. Sin ninguna, Rustrak lo deduce de la ruta.",
+      "stackRoot": "Ruta en el stack trace",
+      "sourceRoot": "Ruta en el repositorio",
+      "addMapping": "Añadir ruta",
+      "removeMapping": "Quitar ruta",
+      "issues": "Issues",
+      "autoCreate": "Abrir issues en GitHub automáticamente",
+      "autoCreateDescription": "Un error nuevo abre un issue en GitHub, una vez por issue, si pasa los filtros de abajo.",
+      "fixes": "Resolver desde commits",
+      "fixesDescription": "Un commit en la rama principal que diga esto resuelve el issue.",
+      "codeowners": "Responsables del código",
+      "codeownersDescription": "Se leen del fichero CODEOWNERS del repositorio y se muestran en cada issue.",
+      "codeownersSync": "Sincronizar",
+      "codeownersStatus": "{count, plural, one {# regla} other {# reglas}} · {when}",
+      "codeownersNever": "Aún no sincronizado",
+      "codeownersFailed": "No se pudo sincronizar CODEOWNERS",
+      "danger": "Zona de peligro",
+      "disconnect": "Desconectar repositorio",
+      "disconnectDescription": "Deja de enlazar los issues de este proyecto con GitHub. Los enlaces existentes se mantienen.",
+      "saveFailed": "No se pudo guardar el repositorio",
+      "autoCreateFilters": "Qué errores",
+      "autoCreateFiltersDescription": "Sin filtros, cada issue nuevo abre uno. \"Mínimo de eventos\" espera a que el issue haya ocurrido esas veces."
+    },
+    "issue": {
+      "menu": "Acciones de GitHub",
+      "open": "Abierto",
+      "closed": "Cerrado",
+      "create": "Crear issue en GitHub",
+      "link": "Enlazar issue existente…",
+      "unlink": "Desenlazar #{number}",
+      "createFailed": "No se pudo crear el issue en GitHub",
+      "linkFailed": "No se pudo enlazar el issue de GitHub",
+      "unlinkFailed": "No se pudo desenlazar el issue de GitHub",
+      "linkTitle": "Enlazar un issue de GitHub",
+      "linkDescription": "Pega la URL de un issue de GitHub, o su número con # delante (por ejemplo, #42) si está en el repositorio de este proyecto.",
+      "linkSubmit": "Enlazar"
+    },
+    "code": {
+      "connect": "Conecta este proyecto con GitHub",
+      "title": "Código",
+      "suspect": "Commits sospechosos",
+      "owners": "Responsables"
+    },
+    "account": {
+      "title": "Usuario de GitHub",
+      "description": "Asignarte un issue en Rustrak te asigna sus issues enlazados de GitHub, y al revés.",
+      "saved": "Usuario de GitHub guardado",
+      "saveFailed": "No se pudo guardar tu usuario de GitHub"
+    }
+  },
+  "conditions": {
+    "minLevel": "Nivel",
+    "anyLevel": "Cualquier nivel",
+    "levelOrAbove": "{level} o superior",
+    "minEvents": "Mínimo de eventos",
+    "environments": "Entornos",
+    "description": "Separados por comas. Vacío significa todos."
   }
 }

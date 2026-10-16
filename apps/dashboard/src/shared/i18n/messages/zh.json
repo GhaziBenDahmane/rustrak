@@ -280,7 +280,13 @@
       "statusChanged": "将状态改为 {status}",
       "priorityChanged": "将优先级设为 {priority}",
       "regression": "检测到回归",
-      "firstSeen": "首次发现此问题"
+      "firstSeen": "首次发现此问题",
+      "resolvedByCommit": "在提交 {sha} 中解决了此 Issue",
+      "closedOnGitHub": "在 GitHub 上关闭了关联的 Issue",
+      "reopenedOnGitHub": "在 GitHub 上重新打开了关联的 Issue",
+      "githubCreated": "在 GitHub 上创建了 {ref}",
+      "githubLinked": "关联了 {ref}",
+      "githubUnlinked": "取消关联了 {ref}"
     },
     "issueStatus": {
       "new": "新出现",
@@ -618,7 +624,8 @@
       "fieldAlertType": "该告警类型",
       "saveFailed": "保存规则失败",
       "updated": "告警规则已更新",
-      "created": "告警规则已创建"
+      "created": "告警规则已创建",
+      "filters": "筛选条件"
     },
     "integrationDialog": {
       "name": "名称",
@@ -940,7 +947,8 @@
       "crashed": "已崩溃",
       "current": "当前",
       "main": "主线程"
-    }
+    },
+    "openInGitHub": "在 GitHub 中打开"
   },
   "releases": {
     "all": "全部",
@@ -1549,7 +1557,8 @@
       "openProjectSettingsMenu": "打开项目设置菜单",
       "projectSettingsTitle": "项目设置",
       "openSettingsMenu": "打开设置菜单",
-      "settingsTitle": "设置"
+      "settingsTitle": "设置",
+      "github": "GitHub"
     },
     "loadProjectFailed": "无法加载项目",
     "loadProjectsFailed": "无法加载项目",
@@ -1610,7 +1619,8 @@
       "subtitle": "将 Rustrak 与您的工具和服务集成，以自动化工作流并及时掌握错误动态。",
       "backToAlerts": "返回告警设置",
       "backToProjects": "返回项目列表",
-      "loadFailed": "无法加载集成"
+      "loadFailed": "无法加载集成",
+      "githubLoadFailed": "无法加载 GitHub 连接"
     },
     "storage": {
       "meta": {
@@ -1698,5 +1708,105 @@
       "reportAnIssue": "报告问题",
       "sentryDocs": "Sentry SDK 文档"
     }
+  },
+  "github": {
+    "section": {
+      "title": "开发",
+      "description": "代码仓库、提交和问题跟踪工具，与你的错误关联。"
+    },
+    "save": "保存",
+    "cancel": "取消",
+    "connection": {
+      "description": "来自代码仓库的 Issue、提交和代码负责人",
+      "intro": "Rustrak 会为此服务器创建一个私有 GitHub App。GitHub 会请你确认，然后由你选择它能访问的仓库。",
+      "organizationLabel": "你的仓库在哪里？个人账户请留空，组织请填写组织名称。GitHub 只允许将应用安装在那里。",
+      "organizationPlaceholder": "组织（可选）",
+      "connect": "连接 GitHub",
+      "connectFailed": "无法开始 GitHub 设置",
+      "app": "应用",
+      "accounts": "已安装于",
+      "suspended": "已暂停",
+      "install": "选择仓库",
+      "webhooks": "Webhooks",
+      "lastWebhook": "最近接收于 {when}",
+      "noWebhook": "尚未收到",
+      "unreachable": "GitHub 无法访问 {url}，因此关闭、评论和提交不会同步过来。请将 PUBLIC_URL 设置为 GitHub 可以访问的地址。",
+      "disconnect": "断开 GitHub",
+      "disconnectTitle": "断开 GitHub？",
+      "disconnectDescription": "Rustrak 将忘记该应用及每个项目的仓库。已关联的 Issue 保留其链接。如不再需要，也请在 GitHub 上删除该应用。",
+      "disconnectFailed": "无法断开 GitHub",
+      "notInstalled": "未安装"
+    },
+    "repository": {
+      "metaTitle": "GitHub",
+      "loadFailed": "无法加载 GitHub 设置",
+      "subtitle": "将此项目关联到仓库，即可从堆栈跟踪打开代码、找到导致问题的提交并同步 Issue。",
+      "unavailable": "此项目无法使用 GitHub",
+      "goToIntegrations": "打开集成",
+      "section": "仓库",
+      "repository": "仓库",
+      "repositoryDescription": "此项目代码所在的位置。",
+      "noRepositories": "没有与该应用共享的仓库",
+      "choose": "选择仓库",
+      "openOnGitHub": "在 GitHub 上打开 · {branch}",
+      "stackTraces": "堆栈跟踪",
+      "mappings": "路径映射",
+      "mappingsDescription": "将堆栈跟踪中的路径转换为仓库中的文件，例如 /app/ → src/。未设置时，Rustrak 会根据路径推断。",
+      "stackRoot": "堆栈跟踪中的路径",
+      "sourceRoot": "仓库中的路径",
+      "addMapping": "添加映射",
+      "removeMapping": "移除映射",
+      "issues": "Issue",
+      "autoCreate": "自动创建 GitHub issue",
+      "autoCreateDescription": "通过下方筛选条件的新错误会创建一个 GitHub issue，每个问题一次。",
+      "fixes": "通过提交解决",
+      "fixesDescription": "默认分支上包含此内容的提交会解决该 Issue。",
+      "codeowners": "代码负责人",
+      "codeownersDescription": "从仓库的 CODEOWNERS 文件读取，并显示在每个 Issue 上。",
+      "codeownersSync": "同步",
+      "codeownersStatus": "{count} 条规则 · {when}",
+      "codeownersNever": "尚未同步",
+      "codeownersFailed": "无法同步 CODEOWNERS",
+      "danger": "危险区域",
+      "disconnect": "断开仓库",
+      "disconnectDescription": "停止将此项目的 Issue 关联到 GitHub。现有链接将保留。",
+      "saveFailed": "无法保存仓库",
+      "autoCreateFilters": "哪些错误",
+      "autoCreateFiltersDescription": "没有筛选条件时，每个新问题都会创建一个。“最少事件数”会等到问题发生这么多次。"
+    },
+    "issue": {
+      "menu": "GitHub 操作",
+      "open": "打开",
+      "closed": "已关闭",
+      "create": "创建 GitHub Issue",
+      "link": "关联现有 Issue…",
+      "unlink": "取消关联 #{number}",
+      "createFailed": "无法创建 GitHub Issue",
+      "linkFailed": "无法关联 GitHub Issue",
+      "unlinkFailed": "无法取消关联 GitHub Issue",
+      "linkTitle": "关联 GitHub Issue",
+      "linkDescription": "粘贴 GitHub Issue 的 URL，或输入前面加 # 的编号（例如 #42），用于此项目仓库中的 Issue。",
+      "linkSubmit": "关联"
+    },
+    "code": {
+      "connect": "将此项目连接到 GitHub",
+      "title": "代码",
+      "suspect": "可疑提交",
+      "owners": "负责人"
+    },
+    "account": {
+      "title": "GitHub 用户名",
+      "description": "在 Rustrak 中分配给你的 Issue，其关联的 GitHub Issue 也会分配给你，反之亦然。",
+      "saved": "已保存 GitHub 用户名",
+      "saveFailed": "无法保存你的 GitHub 用户名"
+    }
+  },
+  "conditions": {
+    "minLevel": "级别",
+    "anyLevel": "任意级别",
+    "levelOrAbove": "{level} 及以上",
+    "minEvents": "最少事件数",
+    "environments": "环境",
+    "description": "用逗号分隔。留空表示所有环境。"
   }
 }

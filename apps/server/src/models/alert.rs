@@ -388,6 +388,66 @@ impl AlertRule {
 }
 
 // =============================================================================
+// Rule Conditions
+// =============================================================================
+
+/// Levels from quietest to loudest, the order `min_level` compares in.
+const LEVELS: [&str; 5] = ["debug", "info", "warning", "error", "fatal"];
+
+/// The filters a rule's `conditions` hold. Every one is optional; a rule with
+/// none fires the way rules always did.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct RuleConditions {
+    /// The quietest level that still fires.
+    pub min_level: Option<String>,
+    /// When non-empty, the only environments that fire.
+    #[serde(default)]
+    pub environments: Vec<String>,
+    /// A new issue fires on the event that brings it to this count instead of
+    /// on its first one.
+    pub min_events: Option<i32>,
+}
+
+impl RuleConditions {
+    pub fn parse(value: &serde_json::Value) -> crate::error::AppResult<Self> {
+        let invalid = |e: String| crate::error::AppError::Validation(format!("conditions: {e}"));
+        let conditions: Self =
+            serde_json::from_value(value.clone()).map_err(|e| invalid(e.to_string()))?;
+        if let Some(level) = &conditions.min_level {
+            if !LEVELS.contains(&level.as_str()) {
+                return Err(invalid(format!("unknown level '{level}'")));
+            }
+        }
+        if conditions.min_events.is_some_and(|n| n < 1) {
+            return Err(invalid("min_events must be at least 1".into()));
+        }
+        Ok(conditions)
+    }
+
+    /// Whether an event with this level and environment, being the issue's
+    /// `event_count`th, fires a rule of `alert_type`.
+    pub fn matches(
+        &self,
+        alert_type: AlertType,
+        level: Option<&str>,
+        environment: Option<&str>,
+        event_count: i32,
+    ) -> bool {
+        let rank = |l: &str| LEVELS.iter().position(|x| *x == l);
+        // An event without a level is an error, as Sentry stores it.
+        let level_ok = self
+            .min_level
+            .as_deref()
+            .is_none_or(|min| rank(level.unwrap_or("error")) >= rank(min));
+        let environment_ok = self.environments.is_empty()
+            || environment.is_some_and(|e| self.environments.iter().any(|x| x == e));
+        let count_ok =
+            alert_type != AlertType::NewIssue || event_count == self.min_events.unwrap_or(1).max(1);
+        level_ok && environment_ok && count_ok
+    }
+}
+
+// =============================================================================
 // Alert History Model
 // =============================================================================
 
@@ -617,5 +677,55 @@ mod tests {
             }
             _ => panic!("expected Webhook"),
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // RuleConditions
+    // -------------------------------------------------------------------------
+
+    fn conditions(value: serde_json::Value) -> RuleConditions {
+        RuleConditions::parse(&value).expect("valid conditions")
+    }
+
+    #[test]
+    fn empty_conditions_fire_new_issues_on_their_first_event() {
+        let c = conditions(json!({}));
+        assert!(c.matches(AlertType::NewIssue, Some("info"), None, 1));
+        assert!(!c.matches(AlertType::NewIssue, Some("info"), None, 2));
+        assert!(c.matches(AlertType::Regression, None, None, 40));
+    }
+
+    #[test]
+    fn min_events_fires_a_new_issue_once_when_it_reaches_the_count() {
+        let c = conditions(json!({ "min_events": 10 }));
+        assert!(!c.matches(AlertType::NewIssue, None, None, 1));
+        assert!(c.matches(AlertType::NewIssue, None, None, 10));
+        assert!(!c.matches(AlertType::NewIssue, None, None, 11));
+        // A regression is already an issue that matters: the count is not its gate.
+        assert!(c.matches(AlertType::Regression, None, None, 3));
+    }
+
+    #[test]
+    fn min_level_drops_quieter_events_and_unlevelled_ones_count_as_error() {
+        let c = conditions(json!({ "min_level": "error" }));
+        assert!(c.matches(AlertType::NewIssue, Some("fatal"), None, 1));
+        assert!(c.matches(AlertType::NewIssue, Some("error"), None, 1));
+        assert!(c.matches(AlertType::NewIssue, None, None, 1));
+        assert!(!c.matches(AlertType::NewIssue, Some("warning"), None, 1));
+    }
+
+    #[test]
+    fn environments_keep_only_the_listed_ones() {
+        let c = conditions(json!({ "environments": ["production"] }));
+        assert!(c.matches(AlertType::NewIssue, None, Some("production"), 1));
+        assert!(!c.matches(AlertType::NewIssue, None, Some("staging"), 1));
+        assert!(!c.matches(AlertType::NewIssue, None, None, 1));
+    }
+
+    #[test]
+    fn invalid_conditions_are_rejected() {
+        assert!(RuleConditions::parse(&json!({ "min_level": "loud" })).is_err());
+        assert!(RuleConditions::parse(&json!({ "min_events": 0 })).is_err());
+        assert!(RuleConditions::parse(&json!({ "environments": "production" })).is_err());
     }
 }

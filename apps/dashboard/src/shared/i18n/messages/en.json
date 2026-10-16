@@ -280,7 +280,13 @@
       "statusChanged": "changed status to {status}",
       "priorityChanged": "set priority to {priority}",
       "regression": "detected a regression",
-      "firstSeen": "first saw this issue"
+      "firstSeen": "first saw this issue",
+      "resolvedByCommit": "resolved this issue in commit {sha}",
+      "closedOnGitHub": "closed the linked issue on GitHub",
+      "reopenedOnGitHub": "reopened the linked issue on GitHub",
+      "githubCreated": "created {ref} on GitHub",
+      "githubLinked": "linked {ref}",
+      "githubUnlinked": "unlinked {ref}"
     },
     "issueStatus": {
       "new": "New",
@@ -618,7 +624,8 @@
       "fieldAlertType": "That alert type",
       "saveFailed": "Failed to save rule",
       "updated": "Alert rule updated",
-      "created": "Alert rule created"
+      "created": "Alert rule created",
+      "filters": "Filters"
     },
     "integrationDialog": {
       "name": "Name",
@@ -940,7 +947,8 @@
       "crashed": "Crashed",
       "current": "Current",
       "main": "Main"
-    }
+    },
+    "openInGitHub": "Open in GitHub"
   },
   "releases": {
     "all": "All",
@@ -1549,7 +1557,8 @@
       "openProjectSettingsMenu": "Open project settings menu",
       "projectSettingsTitle": "Project Settings",
       "openSettingsMenu": "Open settings menu",
-      "settingsTitle": "Settings"
+      "settingsTitle": "Settings",
+      "github": "GitHub"
     },
     "loadProjectFailed": "Could not load project",
     "loadProjectsFailed": "Could not load projects",
@@ -1610,7 +1619,8 @@
       "subtitle": "Connect Rustrak with your tools and services to automate workflows and stay on top of errors.",
       "backToAlerts": "Back to alert settings",
       "backToProjects": "Back to projects",
-      "loadFailed": "Could not load integrations"
+      "loadFailed": "Could not load integrations",
+      "githubLoadFailed": "Could not load the GitHub connection"
     },
     "storage": {
       "meta": {
@@ -1698,5 +1708,105 @@
       "reportAnIssue": "Report an Issue",
       "sentryDocs": "Sentry SDK Documentation"
     }
+  },
+  "github": {
+    "section": {
+      "title": "Development",
+      "description": "Repositories, commits and issue trackers, linked to your errors."
+    },
+    "save": "Save",
+    "cancel": "Cancel",
+    "connection": {
+      "description": "Issues, commits and code owners from your repositories",
+      "intro": "Rustrak creates a private GitHub App for this server. GitHub asks you to confirm it, then you choose which repositories it can see.",
+      "organizationLabel": "Where are your repositories? Leave it empty for your personal account, or enter the organization's name. GitHub only lets the app be installed there.",
+      "organizationPlaceholder": "Organization (optional)",
+      "connect": "Connect GitHub",
+      "connectFailed": "Could not start the GitHub setup",
+      "app": "App",
+      "accounts": "Installed on",
+      "suspended": "suspended",
+      "install": "Choose repositories",
+      "webhooks": "Webhooks",
+      "lastWebhook": "Last received {when}",
+      "noWebhook": "None received yet",
+      "unreachable": "GitHub cannot reach {url}, so closed issues, comments and commits will not arrive. Set PUBLIC_URL to an address GitHub can reach.",
+      "disconnect": "Disconnect GitHub",
+      "disconnectTitle": "Disconnect GitHub?",
+      "disconnectDescription": "Rustrak forgets the app and every project's repository. Linked issues keep their links. Delete the app on GitHub too if you no longer need it.",
+      "disconnectFailed": "Could not disconnect GitHub",
+      "notInstalled": "Not installed"
+    },
+    "repository": {
+      "metaTitle": "GitHub",
+      "loadFailed": "Could not load the GitHub settings",
+      "subtitle": "Link this project to a repository to open its code from stack traces, find the commit that broke it and keep issues in sync.",
+      "unavailable": "GitHub is not available for this project",
+      "goToIntegrations": "Open integrations",
+      "section": "Repository",
+      "repository": "Repository",
+      "repositoryDescription": "Where this project's code lives.",
+      "noRepositories": "No repositories shared with the app",
+      "choose": "Choose a repository",
+      "openOnGitHub": "Open on GitHub · {branch}",
+      "stackTraces": "Stack traces",
+      "mappings": "Path mapping",
+      "mappingsDescription": "Turns a path in a stack trace into a file in the repository, e.g. /app/ → src/. Without one, Rustrak guesses from the path.",
+      "stackRoot": "Path in the stack trace",
+      "sourceRoot": "Path in the repository",
+      "addMapping": "Add mapping",
+      "removeMapping": "Remove mapping",
+      "issues": "Issues",
+      "autoCreate": "Open GitHub issues automatically",
+      "autoCreateDescription": "A new error opens a GitHub issue, once per issue, when it passes the filters below.",
+      "fixes": "Resolve from commits",
+      "fixesDescription": "A commit on the default branch that says this resolves the issue.",
+      "codeowners": "Code owners",
+      "codeownersDescription": "Read from the repository's CODEOWNERS file and shown on each issue.",
+      "codeownersSync": "Sync",
+      "codeownersStatus": "{count, plural, one {# rule} other {# rules}} · {when}",
+      "codeownersNever": "Not synced yet",
+      "codeownersFailed": "Could not sync CODEOWNERS",
+      "danger": "Danger zone",
+      "disconnect": "Disconnect repository",
+      "disconnectDescription": "Stops linking this project's issues to GitHub. Existing links stay.",
+      "saveFailed": "Could not save the repository",
+      "autoCreateFilters": "Which errors",
+      "autoCreateFiltersDescription": "Without filters, every new issue opens one. \"Minimum events\" waits until the issue has happened that many times."
+    },
+    "issue": {
+      "menu": "GitHub actions",
+      "open": "Open",
+      "closed": "Closed",
+      "create": "Create GitHub issue",
+      "link": "Link existing issue…",
+      "unlink": "Unlink #{number}",
+      "createFailed": "Could not create the GitHub issue",
+      "linkFailed": "Could not link the GitHub issue",
+      "unlinkFailed": "Could not unlink the GitHub issue",
+      "linkTitle": "Link a GitHub issue",
+      "linkDescription": "Paste a GitHub issue URL, or its number with a # in front (for example, #42) for an issue in this project's repository.",
+      "linkSubmit": "Link"
+    },
+    "code": {
+      "connect": "Connect this project to GitHub",
+      "title": "Code",
+      "suspect": "Suspect commits",
+      "owners": "Owners"
+    },
+    "account": {
+      "title": "GitHub username",
+      "description": "Assigning you an issue in Rustrak assigns you its linked GitHub issues, and the other way round.",
+      "saved": "GitHub username saved",
+      "saveFailed": "Could not save your GitHub username"
+    }
+  },
+  "conditions": {
+    "minLevel": "Level",
+    "anyLevel": "Any level",
+    "levelOrAbove": "{level} or above",
+    "minEvents": "Minimum events",
+    "environments": "Environments",
+    "description": "Comma-separated. Empty means every environment."
   }
 }

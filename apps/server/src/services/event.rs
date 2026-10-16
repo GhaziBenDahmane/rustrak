@@ -163,6 +163,7 @@ impl EventService {
         denormalized: &DenormalizedFields,
         remote_addr: Option<&str>,
         alert_type: Option<AlertType>,
+        issue_event_count: Option<i32>,
     ) -> AppResult<Uuid>
     where
         E: sqlx::Executor<'e, Database = crate::db::Db>,
@@ -202,9 +203,9 @@ impl EventService {
                 calculated_type, calculated_value, "transaction",
                 last_frame_filename, last_frame_module, last_frame_function,
                 level, platform, release, environment, server_name,
-                sdk_name, sdk_version, remote_addr, alert_type
+                sdk_name, sdk_version, remote_addr, alert_type, issue_event_count
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
             "#,
         )
         .bind(id)
@@ -230,6 +231,7 @@ impl EventService {
         .bind(sdk_version)
         .bind(remote_addr_str)
         .bind(alert_type)
+        .bind(issue_event_count)
         .execute(executor)
         .await?;
 

@@ -280,7 +280,13 @@
       "statusChanged": "a changé le statut en {status}",
       "priorityChanged": "a défini la priorité à {priority}",
       "regression": "a détecté une régression",
-      "firstSeen": "a vu ce problème pour la première fois"
+      "firstSeen": "a vu ce problème pour la première fois",
+      "resolvedByCommit": "a résolu ce ticket dans le commit {sha}",
+      "closedOnGitHub": "a fermé le ticket lié sur GitHub",
+      "reopenedOnGitHub": "a rouvert le ticket lié sur GitHub",
+      "githubCreated": "a créé {ref} sur GitHub",
+      "githubLinked": "a lié {ref}",
+      "githubUnlinked": "a délié {ref}"
     },
     "issueStatus": {
       "new": "Nouveau",
@@ -618,7 +624,8 @@
       "fieldAlertType": "Ce type d’alerte",
       "saveFailed": "Échec de l’enregistrement de la règle",
       "updated": "Règle d’alerte mise à jour",
-      "created": "Règle d’alerte créée"
+      "created": "Règle d’alerte créée",
+      "filters": "Filtres"
     },
     "integrationDialog": {
       "name": "Nom",
@@ -940,7 +947,8 @@
       "crashed": "Planté",
       "current": "Actuel",
       "main": "Principal"
-    }
+    },
+    "openInGitHub": "Ouvrir dans GitHub"
   },
   "releases": {
     "all": "Toutes",
@@ -1549,7 +1557,8 @@
       "openProjectSettingsMenu": "Ouvrir le menu des paramètres du projet",
       "projectSettingsTitle": "Paramètres du projet",
       "openSettingsMenu": "Ouvrir le menu des paramètres",
-      "settingsTitle": "Paramètres"
+      "settingsTitle": "Paramètres",
+      "github": "GitHub"
     },
     "loadProjectFailed": "Impossible de charger le projet",
     "loadProjectsFailed": "Impossible de charger les projets",
@@ -1610,7 +1619,8 @@
       "subtitle": "Connectez Rustrak à vos outils et services pour automatiser vos flux de travail et garder le contrôle des erreurs.",
       "backToAlerts": "Retour aux paramètres des alertes",
       "backToProjects": "Retour aux projets",
-      "loadFailed": "Impossible de charger les intégrations"
+      "loadFailed": "Impossible de charger les intégrations",
+      "githubLoadFailed": "Impossible de charger la connexion GitHub"
     },
     "storage": {
       "meta": {
@@ -1698,5 +1708,105 @@
       "reportAnIssue": "Signaler un problème",
       "sentryDocs": "Documentation des SDK Sentry"
     }
+  },
+  "github": {
+    "section": {
+      "title": "Développement",
+      "description": "Dépôts, commits et outils de suivi, reliés à vos erreurs."
+    },
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "connection": {
+      "description": "Tickets, commits et propriétaires du code de vos dépôts",
+      "intro": "Rustrak crée une GitHub App privée pour ce serveur. GitHub vous demande de la confirmer, puis vous choisissez les dépôts qu'elle peut voir.",
+      "organizationLabel": "Où sont vos dépôts ? Laissez vide pour votre compte personnel, ou saisissez le nom de l'organisation. GitHub ne permet d'installer l'app que là.",
+      "organizationPlaceholder": "Organisation (facultatif)",
+      "connect": "Connecter GitHub",
+      "connectFailed": "Impossible de démarrer la configuration GitHub",
+      "app": "Application",
+      "accounts": "Installée sur",
+      "suspended": "suspendue",
+      "install": "Choisir les dépôts",
+      "webhooks": "Webhooks",
+      "lastWebhook": "Dernier reçu {when}",
+      "noWebhook": "Aucun reçu pour l'instant",
+      "unreachable": "GitHub ne peut pas joindre {url} : les fermetures, commentaires et commits n'arriveront pas. Configurez PUBLIC_URL avec une adresse joignable par GitHub.",
+      "disconnect": "Déconnecter GitHub",
+      "disconnectTitle": "Déconnecter GitHub ?",
+      "disconnectDescription": "Rustrak oublie l'application et le dépôt de chaque projet. Les tickets liés gardent leurs liens. Supprimez aussi l'application sur GitHub si vous n'en avez plus besoin.",
+      "disconnectFailed": "Impossible de déconnecter GitHub",
+      "notInstalled": "Non installé"
+    },
+    "repository": {
+      "metaTitle": "GitHub",
+      "loadFailed": "Impossible de charger les paramètres GitHub",
+      "subtitle": "Liez ce projet à un dépôt pour ouvrir son code depuis la stack trace, trouver le commit fautif et garder les tickets synchronisés.",
+      "unavailable": "GitHub n'est pas disponible pour ce projet",
+      "goToIntegrations": "Ouvrir les intégrations",
+      "section": "Dépôt",
+      "repository": "Dépôt",
+      "repositoryDescription": "Où se trouve le code de ce projet.",
+      "noRepositories": "Aucun dépôt partagé avec l'application",
+      "choose": "Choisissez un dépôt",
+      "openOnGitHub": "Ouvrir sur GitHub · {branch}",
+      "stackTraces": "Stack traces",
+      "mappings": "Correspondance des chemins",
+      "mappingsDescription": "Transforme un chemin de la stack trace en fichier du dépôt, par ex. /app/ → src/. Sans correspondance, Rustrak devine à partir du chemin.",
+      "stackRoot": "Chemin dans la stack trace",
+      "sourceRoot": "Chemin dans le dépôt",
+      "addMapping": "Ajouter",
+      "removeMapping": "Supprimer",
+      "issues": "Tickets",
+      "autoCreate": "Ouvrir des tickets GitHub automatiquement",
+      "autoCreateDescription": "Une nouvelle erreur ouvre un ticket GitHub, une fois par problème, si elle passe les filtres ci-dessous.",
+      "fixes": "Résoudre depuis les commits",
+      "fixesDescription": "Un commit sur la branche par défaut qui contient ceci résout le ticket.",
+      "codeowners": "Propriétaires du code",
+      "codeownersDescription": "Lus depuis le fichier CODEOWNERS du dépôt et affichés sur chaque ticket.",
+      "codeownersSync": "Synchroniser",
+      "codeownersStatus": "{count, plural, one {# règle} other {# règles}} · {when}",
+      "codeownersNever": "Pas encore synchronisé",
+      "codeownersFailed": "Impossible de synchroniser CODEOWNERS",
+      "danger": "Zone de danger",
+      "disconnect": "Déconnecter le dépôt",
+      "disconnectDescription": "Arrête de lier les tickets de ce projet à GitHub. Les liens existants restent.",
+      "saveFailed": "Impossible d'enregistrer le dépôt",
+      "autoCreateFilters": "Quelles erreurs",
+      "autoCreateFiltersDescription": "Sans filtres, chaque nouveau problème en ouvre un. « Événements minimum » attend que le problème se soit produit autant de fois."
+    },
+    "issue": {
+      "menu": "Actions GitHub",
+      "open": "Ouvert",
+      "closed": "Fermé",
+      "create": "Créer un ticket GitHub",
+      "link": "Lier un ticket existant…",
+      "unlink": "Délier #{number}",
+      "createFailed": "Impossible de créer le ticket GitHub",
+      "linkFailed": "Impossible de lier le ticket GitHub",
+      "unlinkFailed": "Impossible de délier le ticket GitHub",
+      "linkTitle": "Lier un ticket GitHub",
+      "linkDescription": "Collez l'URL d'un ticket GitHub, ou son numéro précédé de # (par exemple #42) s'il est dans le dépôt de ce projet.",
+      "linkSubmit": "Lier"
+    },
+    "code": {
+      "connect": "Connecter ce projet à GitHub",
+      "title": "Code",
+      "suspect": "Commits suspects",
+      "owners": "Propriétaires"
+    },
+    "account": {
+      "title": "Nom d'utilisateur GitHub",
+      "description": "Vous assigner un ticket dans Rustrak vous assigne ses tickets GitHub liés, et inversement.",
+      "saved": "Nom d'utilisateur GitHub enregistré",
+      "saveFailed": "Impossible d'enregistrer votre nom d'utilisateur GitHub"
+    }
+  },
+  "conditions": {
+    "minLevel": "Niveau",
+    "anyLevel": "Tous niveaux",
+    "levelOrAbove": "{level} ou plus",
+    "minEvents": "Événements minimum",
+    "environments": "Environnements",
+    "description": "Séparés par des virgules. Vide signifie tous."
   }
 }

@@ -213,6 +213,69 @@ mod volume {
         assert_eq!(volume.events_24h, 0);
     }
 
+    /// How many projects use GitHub, as counts: never a repository's name.
+    #[tokio::test]
+    async fn counts_the_projects_connected_to_github() {
+        let db = TestDb::new().await;
+        sqlx::query("INSERT INTO github_installations (id, account_login) VALUES (1, 'acme')")
+            .execute(&db.pool)
+            .await
+            .expect("installation");
+        for (i, auto_create) in [true, false, false].into_iter().enumerate() {
+            let project = ProjectService::create(
+                &db.pool,
+                CreateProject {
+                    name: format!("p{i}"),
+                    slug: None,
+                    platform: None,
+                },
+            )
+            .await
+            .expect("project");
+            sqlx::query(
+                "INSERT INTO project_repositories (project_id, installation_id, repo_full_name, auto_create_issues)
+                 VALUES ($1, 1, 'acme/web', $2)",
+            )
+            .bind(project.id)
+            .bind(auto_create)
+            .execute(&db.pool)
+            .await
+            .expect("repository");
+        }
+        // One more project, not connected.
+        ProjectService::create(
+            &db.pool,
+            CreateProject {
+                name: "alone".to_string(),
+                slug: None,
+                platform: None,
+            },
+        )
+        .await
+        .expect("project");
+
+        let volume = Volume::collect(&db.pool).await.expect("collect");
+        assert_eq!(volume.github_projects, 3);
+        assert_eq!(volume.github_auto_create_projects, 1);
+    }
+
+    #[tokio::test]
+    async fn github_connected_is_whether_an_app_is() {
+        use rustrak::telemetry::github_connected;
+
+        let db = TestDb::new().await;
+        assert!(!github_connected(&db.pool).await.expect("none"));
+        sqlx::query(
+            "INSERT INTO github_app (id, app_id, slug, client_id, client_secret, webhook_secret,
+                                     private_key, html_url, web_url, api_url)
+             VALUES (1, 7, 'rustrak', 'c', 's', 'w', 'k', 'h', 'https://github.com', 'https://api.github.com')",
+        )
+        .execute(&db.pool)
+        .await
+        .expect("app");
+        assert!(github_connected(&db.pool).await.expect("one"));
+    }
+
     /// The kinds of alert channel in use, as kinds: never a name, never a URL.
     #[tokio::test]
     async fn alert_providers_are_the_enabled_kinds_deduplicated() {
@@ -309,6 +372,7 @@ mod reporter {
                 smtp_configured: false,
                 session_secret_set: true,
                 alert_providers: vec![],
+                github_connected: false,
                 quota_customized: false,
             },
             sqlite_path: None,

@@ -16,10 +16,11 @@ use crate::common::TestDb;
 
 // ── seed helpers ─────────────────────────────────────────────────────────────
 
-/// Insert one row into `events`, `hours_ago` plus half an hour old. The
-/// half hour keeps it mid-bucket: whole hours ago is exactly a sparkline
-/// bucket edge, so rows inserted either side of a second tick split across two
-/// buckets.
+/// Insert one row into `events`, `hours_ago` and a half old.
+///
+/// The half hour keeps a seed off the edge of the hourly sparkline bars,
+/// which are anchored to `now`: a whole number of hours lands on a bar's edge,
+/// and rows seeded either side of a clock tick split across two bars.
 async fn seed_event(
     pool: &DbPool,
     project_id: i32,
@@ -35,8 +36,8 @@ async fn seed_event(
             (event_id, project_id, issue_id, data, timestamp, ingested_at, level, event_type)
         VALUES (
             $1, $2, $3, '{}'::jsonb,
-            NOW() - ($4::text || ' hours')::interval - interval '30 minutes',
-            NOW() - ($4::text || ' hours')::interval - interval '30 minutes',
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
             $5, $6
         )
         "#,
@@ -75,7 +76,8 @@ async fn seed_event(
     .expect("seed_event failed");
 }
 
-/// Insert one row into `issues`, first seen `hours_ago` ago.
+/// Insert one row into `issues`, first seen `hours_ago` and a half ago (see
+/// `seed_event` for the half hour).
 async fn seed_issue(pool: &DbPool, project_id: i32, digest_order: i32, hours_ago: i64) -> Uuid {
     let id = Uuid::new_v4();
 
@@ -85,8 +87,8 @@ async fn seed_issue(pool: &DbPool, project_id: i32, digest_order: i32, hours_ago
         INSERT INTO issues (id, project_id, digest_order, first_seen, last_seen, status)
         VALUES (
             $1, $2, $3,
-            NOW() - ($4::text || ' hours')::interval,
-            NOW() - ($4::text || ' hours')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
+            NOW() - ($4::text || ' hours 30 minutes')::interval,
             $5
         )
         "#,
@@ -106,8 +108,8 @@ async fn seed_issue(pool: &DbPool, project_id: i32, digest_order: i32, hours_ago
         INSERT INTO issues (id, project_id, digest_order, first_seen, last_seen, status)
         VALUES (
             ?1, ?2, ?3,
-            datetime('now', '-' || ?4 || ' hours'),
-            datetime('now', '-' || ?4 || ' hours'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
+            datetime('now', '-' || ?4 || ' hours', '-30 minutes'),
             ?5
         )
         "#,

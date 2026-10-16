@@ -46,6 +46,7 @@ pub mod alert;
 pub mod auth_token;
 pub mod event;
 pub mod gen_ai;
+pub mod github;
 pub mod grouping;
 pub mod installation;
 pub mod invitation;

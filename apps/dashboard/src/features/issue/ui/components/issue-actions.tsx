@@ -54,11 +54,13 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 interface IssueActionsProps {
   issue: Issue;
   projectId: number;
+  /** Composed in by the page, e.g. the GitHub button, after the overflow menu. */
+  extra?: React.ReactNode;
 }
 
 const PRIORITIES: IssuePriority[] = ['high', 'medium', 'low'];
 
-export function IssueActions({ issue, projectId }: IssueActionsProps) {
+export function IssueActions({ issue, projectId, extra }: IssueActionsProps) {
   const t = useTranslations('issues');
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -258,6 +260,8 @@ export function IssueActions({ issue, projectId }: IssueActionsProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {extra}
       </div>
 
       {/* Right: priority */}

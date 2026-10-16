@@ -6,6 +6,7 @@ import {
   AlertRulesResource,
   AuthResource,
   EventsResource,
+  GitHubResource,
   HealthResource,
   InvitationsResource,
   IssuesResource,
@@ -148,6 +149,11 @@ export class RustrakClient {
   public readonly health: HealthResource;
 
   /**
+   * GitHub integration resource
+   */
+  public readonly github: GitHubResource;
+
+  /**
    * Create a new Rustrak API client
    *
    * @param config - Client configuration
@@ -161,6 +167,7 @@ export class RustrakClient {
     this.issues = new IssuesResource(this.http);
     this.events = new EventsResource(this.http);
     this.tokens = new TokensResource(this.http);
+    this.github = new GitHubResource(this.http);
     this.alertIntegrations = new AlertIntegrationsResource(this.http);
     this.alertRules = new AlertRulesResource(this.http);
     this.sourceMaps = new SourceMapsResource(this.http);

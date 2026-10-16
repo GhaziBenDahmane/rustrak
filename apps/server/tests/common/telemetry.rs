@@ -33,6 +33,8 @@ pub fn sample_report() -> Report {
             transactions_24h: 0,
             sessions_24h: 0,
             logs_24h: 0,
+            github_projects: 0,
+            github_auto_create_projects: 0,
         },
         health: Counters::new().snapshot_and_reset(),
         config: ConfigFacts {
@@ -41,6 +43,7 @@ pub fn sample_report() -> Report {
             smtp_configured: false,
             session_secret_set: true,
             alert_providers: vec!["slack".to_string()],
+            github_connected: false,
             quota_customized: true,
         },
     }

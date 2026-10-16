@@ -3,6 +3,8 @@ import { ArrowLeft } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { listIntegrations } from '@/features/alert/api/queries';
 import { IntegrationsList } from '@/features/alert/ui/components/integrations-list/integrations-list';
+import { getGitHubStatus } from '@/features/github/api/queries';
+import { CodeIntegrations } from '@/features/github/ui/components/code-integrations';
 import { translator } from '@/shared/i18n/intl';
 import { Link } from '@/shared/ui/components/link';
 import { LoadFailure } from '@/shared/ui/components/load-failure';
@@ -24,13 +26,19 @@ export const Route = createFileRoute('/_authenticated/settings/integrations')({
       ],
     };
   },
-  loader: () => listIntegrations(),
+  loader: async () => {
+    const [integrations, github] = await Promise.all([
+      listIntegrations(),
+      getGitHubStatus(),
+    ]);
+    return { integrations, github };
+  },
   component: IntegrationsPage,
 });
 
 function IntegrationsPage() {
   const t = useTranslations('settings');
-  const integrations = Route.useLoaderData();
+  const { integrations, github } = Route.useLoaderData();
   const { projectId } = Route.useSearch();
 
   return (
@@ -52,6 +60,18 @@ function IntegrationsPage() {
         <p className="text-muted-foreground mt-1 max-w-2xl">
           {t('integrations.subtitle')}
         </p>
+      </div>
+
+      <div className="mb-3">
+        {github.success ? (
+          <CodeIntegrations status={github.data} />
+        ) : (
+          <LoadFailure
+            error={github.error}
+            title={t('integrations.githubLoadFailed')}
+            notFoundOnMissing={false}
+          />
+        )}
       </div>
 
       {integrations.success ? (

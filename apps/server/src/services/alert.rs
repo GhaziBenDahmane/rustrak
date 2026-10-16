@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult, FieldErrorCode};
+use crate::models::alert::RuleConditions;
 use crate::models::{
     AlertHistory, AlertIntegration, AlertPayload, AlertRule, AlertRuleChannel,
     AlertRuleChannelInput, AlertType, CreateAlertIntegration, CreateAlertRule, Issue, IssueInfo,
@@ -19,6 +20,13 @@ use crate::services::notification::create_dispatcher;
 
 fn event_alert_id(project_id: i32, event_id: Uuid, alert_type: &AlertType) -> String {
     format!("event-{project_id}-{event_id}-{alert_type}")
+}
+
+/// What a rule's filters read from the event that triggered it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct EventFacts<'a> {
+    pub level: Option<&'a str>,
+    pub environment: Option<&'a str>,
 }
 
 pub struct AlertService;
@@ -270,6 +278,7 @@ impl AlertService {
         project_id: i32,
         input: CreateAlertRule,
     ) -> AppResult<AlertRule> {
+        RuleConditions::parse(&input.conditions)?;
         // Write-first (INSERT opens the tx) — deferred BEGIN deliberate, see db::begin_write.
         let mut tx = pool.begin().await?;
 
@@ -348,6 +357,9 @@ impl AlertService {
         id: i32,
         input: UpdateAlertRule,
     ) -> AppResult<AlertRule> {
+        if let Some(conditions) = &input.conditions {
+            RuleConditions::parse(conditions)?;
+        }
         // Write-first (UPDATE opens the tx) — deferred BEGIN deliberate, see db::begin_write.
         let mut tx = pool.begin().await?;
 
@@ -453,6 +465,7 @@ impl AlertService {
             AlertType::NewIssue,
             dashboard_url,
             None,
+            EventFacts::default(),
         )
         .await
     }
@@ -471,6 +484,7 @@ impl AlertService {
             AlertType::Regression,
             dashboard_url,
             None,
+            EventFacts::default(),
         )
         .await
     }
@@ -482,6 +496,7 @@ impl AlertService {
         issue: &Issue,
         alert_type: AlertType,
         event_id: Uuid,
+        facts: EventFacts<'_>,
         dashboard_url: &str,
     ) -> AppResult<()> {
         Self::trigger_alert(
@@ -491,6 +506,7 @@ impl AlertService {
             alert_type,
             dashboard_url,
             Some(event_alert_id(project.id, event_id, &alert_type)),
+            facts,
         )
         .await
     }
@@ -503,7 +519,16 @@ impl AlertService {
         issue: &Issue,
         dashboard_url: &str,
     ) -> AppResult<()> {
-        Self::trigger_alert(pool, project, issue, AlertType::Unmute, dashboard_url, None).await
+        Self::trigger_alert(
+            pool,
+            project,
+            issue,
+            AlertType::Unmute,
+            dashboard_url,
+            None,
+            EventFacts::default(),
+        )
+        .await
     }
 
     /// Builds the dashboard URL for viewing an issue.
@@ -581,6 +606,7 @@ impl AlertService {
         alert_type: AlertType,
         dashboard_url: &str,
         stable_alert_id: Option<String>,
+        facts: EventFacts<'_>,
     ) -> AppResult<()> {
         // 1. Find enabled rule for this project and alert type
         let rule: Option<AlertRule> = sqlx::query_as(
@@ -607,6 +633,34 @@ impl AlertService {
                 return Ok(());
             }
         };
+
+        // Stored conditions were validated on the way in; one that no longer
+        // parses filters nothing rather than silencing the rule.
+        let conditions = RuleConditions::parse(&rule.conditions).unwrap_or_default();
+        if !conditions.matches(
+            alert_type,
+            facts.level,
+            facts.environment,
+            issue.digested_event_count,
+        ) {
+            return Ok(());
+        }
+        // A rule fires once per new issue. Retention lowers an issue's count,
+        // so a later event can bring it back to `min_events`; its history
+        // (never pruned) says the rule already fired.
+        if alert_type == AlertType::NewIssue {
+            let fired: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM alert_history WHERE alert_rule_id = $1 AND issue_id = $2 AND alert_type = $3)",
+            )
+            .bind(rule.id)
+            .bind(issue.id)
+            .bind(alert_type.to_string())
+            .fetch_one(pool)
+            .await?;
+            if fired {
+                return Ok(());
+            }
+        }
 
         // 2. Get associated rule channels (only enabled integrations — SCL-1)
         let rule_channels: Vec<AlertRuleChannel> = sqlx::query_as(

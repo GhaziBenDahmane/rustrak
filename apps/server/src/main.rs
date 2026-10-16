@@ -225,6 +225,7 @@ async fn main() -> std::io::Result<()> {
                 smtp_configured: std::env::var("SMTP_HOST").is_ok_and(|h| !h.trim().is_empty()),
                 session_secret_set: config.security.session_secret_key.is_some(),
                 alert_providers: Vec::new(),
+                github_connected: false,
                 quota_customized: config.rate_limit.is_customized(),
             },
             sqlite_path: rustrak::telemetry::sqlite_path_from_url(&config.database.url),
@@ -358,6 +359,8 @@ async fn main() -> std::io::Result<()> {
             // API routes (auth required)
             // More specific routes first: events > issues > alert-rules > projects
             .configure(routes::events::configure)
+            // GitHub before issues and projects: its nested scopes would be shadowed.
+            .configure(routes::github::configure)
             .configure(routes::issues::configure)
             .configure(routes::alerts::configure_rules)
             .configure(routes::alerts::configure_history)

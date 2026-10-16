@@ -1,0 +1,101 @@
+# GitHub
+
+Connect Rustrak to GitHub and the code behind every error is one click away.
+For each project you choose a repository, and from then on:
+
+- **Every stack frame of your app links to its line on GitHub.**
+- **Issues link to GitHub issues.** Open one from Rustrak, or link one that
+  already exists. Resolving, reopening, commenting and assigning stay in sync
+  both ways.
+- **Commits resolve issues.** A commit on the default branch whose message
+  says `Fixes WEB-12` resolves Rustrak issue `WEB-12`.
+- **Suspect commits.** An issue lists the recent commits that touched the file
+  it broke in, shortly before it first appeared.
+- **Code owners.** The repository's `CODEOWNERS` file names who owns each issue.
+- **Automatic issues.** New errors can open a GitHub issue, filtered by level, environment and number of events.
+
+## How it connects
+
+Rustrak creates its own **private GitHub App** for your server. No shared app
+and no token sit between your Rustrak and GitHub: the app belongs to you, and
+it only sees the repositories you pick.
+
+1. In Rustrak, open **Settings → Integrations**, find GitHub under **Development**, press **Configure** and then **Connect GitHub**.
+   Type an organization name first to create the app there instead of under
+   your own account.
+2. GitHub shows its **Create GitHub App** page, already filled in. Confirm it.
+   You can rename the app there if the name is taken.
+3. Back in Rustrak, press **Choose repositories** and install the app on the
+   account or organization whose repositories you want.
+4. In each project, open **Settings → GitHub** and pick its repository.
+
+Only an instance admin can connect GitHub. Anyone who can edit a project can
+choose its repository.
+
+## What GitHub must be able to reach
+
+Rustrak calls GitHub to open issues, comment and read `CODEOWNERS`, so those
+work wherever Rustrak runs.
+
+The other direction, GitHub telling Rustrak that an issue was closed or that
+commits were pushed, uses **webhooks**, and GitHub has to be able to reach
+your server for them. Set `PUBLIC_URL` to the address people and GitHub use
+before connecting:
+
+```bash
+PUBLIC_URL=https://rustrak.example.com
+```
+
+The app is created with its webhook pointing at
+`$PUBLIC_URL/api/github/webhook`. **Settings → Integrations** shows when the
+last webhook arrived, so you can tell at a glance whether GitHub reaches you.
+Behind a firewall, everything but the GitHub-to-Rustrak sync keeps working.
+
+## Stack traces and path mapping
+
+The path in a stack frame is rarely the path in the repository: an app built
+into a container reports `/app/lib/db.ts` for the file the repository keeps at
+`src/lib/db.ts`. A **path mapping** in **Settings → GitHub** says how one
+becomes the other:
+
+| Path in the stack trace | Path in the repository |
+|---|---|
+| `/app/` | `src/` |
+
+The first mapping whose prefix matches a frame wins. Without any, Rustrak
+drops bundler prefixes such as `webpack:///` or `app:///` and a leading `/`,
+which is right for many projects. Links point at the default branch.
+
+## Resolving from commits
+
+Any of these words followed by an issue's short ID resolves it when the
+commit reaches the default branch: `fix`, `fixes`, `fixed`, `close`, `closes`,
+`closed`, `resolve`, `resolves`, `resolved`.
+
+```text
+Guard the session lookup
+
+Fixes WEB-12, closes WEB-14
+```
+
+The issue's activity names the commit that resolved it. A commit only
+resolves issues of projects connected to the repository it was pushed to.
+
+## Assignees
+
+Each person sets their GitHub username under **Settings → Account**. Assign
+them an issue in Rustrak and its linked GitHub issues are assigned to them;
+assign them on GitHub and the Rustrak issue follows.
+
+## Automatic issues
+
+**Project settings → GitHub → Open GitHub issues automatically** opens one GitHub issue per new Rustrak issue. Without filters that is every new error, so narrow it:
+
+| Filter | Opens the issue when |
+|--------|----------------------|
+| **Level** | The event is at least this level. An event with no level counts as `error`. |
+| **Environments** | The event's environment is one of these. Empty means every environment. |
+| **Minimum events** | The issue reaches this many events. It opens once, on the event that reaches the count. |
+
+`Minimum events: 10` with `Environments: production` keeps a one-off error on a laptop out of your repository. An issue that already has a GitHub issue linked never gets a second one.
+

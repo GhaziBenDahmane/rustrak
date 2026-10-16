@@ -1,6 +1,7 @@
 import { Bell, KeyRound, SlidersHorizontal, Users } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { cn } from '@/shared/lib/utils';
+import { GitHubMark } from '@/shared/ui/components/github-mark';
 import { Link } from '@/shared/ui/components/link';
 import { usePathname } from '@/shared/ui/hooks/use-pathname';
 
@@ -26,6 +27,7 @@ const navGroups: NavGroup[] = [
       { segment: 'general', labelKey: 'nav.general', icon: SlidersHorizontal },
       { segment: 'alerts', labelKey: 'nav.alerts', icon: Bell },
       { segment: 'members', labelKey: 'nav.members', icon: Users },
+      { segment: 'github', labelKey: 'nav.github', icon: GitHubMark },
     ],
   },
   {

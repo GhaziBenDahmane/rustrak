@@ -456,6 +456,504 @@
         ]
       }
     },
+    "/api/github": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "GitHub App and installations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "DELETE /api/github",
+        "operationId": "disconnect",
+        "responses": {
+          "204": {
+            "description": "GitHub App removed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/callback": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/callback: GitHub sends the browser here after creating the\napp; the code trades for its credentials.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Manifest code from GitHub",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "State issued by the manifest step",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Browser redirect to the integrations page"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/installed": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/installed: GitHub sends the browser here after the app is\ninstalled on an account.",
+        "operationId": "installed",
+        "parameters": [
+          {
+            "name": "installation_id",
+            "in": "query",
+            "description": "GitHub installation ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Browser redirect to the integrations page"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/manifest": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST /api/github/manifest: what the dashboard posts to GitHub so GitHub\ncreates an app already configured for this server.",
+        "operationId": "manifest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Form to post to GitHub",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManifestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/me": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/me: the GitHub username assignees sync through.",
+        "operationId": "get_my_login",
+        "responses": {
+          "200": {
+            "description": "Your GitHub username",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubLogin"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "PUT /api/github/me",
+        "operationId": "put_my_login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "GitHub username saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/repositories": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/github/repositories?project_id=: the repositories a project can\npoint at, for whoever may change that project's settings.",
+        "operationId": "repositories",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Repositories the installations reach",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GitHubRepository"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/github/webhook": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST /api/github/webhook: public, and trusted only through the signature\nGitHub computes with the app's webhook secret.",
+        "operationId": "webhook",
+        "requestBody": {
+          "description": "GitHub event payload, signed in X-Hub-Signature-256",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Event processed"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No GitHub App connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/integrations": {
       "get": {
         "tags": [
@@ -2894,6 +3392,294 @@
         ]
       }
     },
+    "/api/projects/{project_id}/github": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/projects/{project_id}/github",
+        "operationId": "get_project_repository",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project's repository, if any",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ProjectRepository"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "PUT /api/projects/{project_id}/github",
+        "operationId": "put_project_repository",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRepository"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Repository saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRepository"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "DELETE /api/projects/{project_id}/github",
+        "operationId": "delete_project_repository",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Repository removed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/github/codeowners": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST /api/projects/{project_id}/github/codeowners: copies the repository's\nCODEOWNERS so ownership can be answered without asking GitHub each time.",
+        "operationId": "sync_codeowners",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CODEOWNERS synced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRepository"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/projects/{project_id}/issues": {
       "get": {
         "tags": [
@@ -4004,6 +4790,361 @@
           },
           "401": {
             "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/issues/{issue_id}/github": {
+      "get": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "GET /api/projects/{project_id}/issues/{issue_id}/github: the issue's links,\nthe commits that may have caused it, and who owns its culprit file.",
+        "operationId": "issue_github",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Links, suspect commits and owners",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueGitHub"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/issues/{issue_id}/github/issues": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST .../github/issues: opens a GitHub issue and links it.",
+        "operationId": "create_github_issue",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGitHubIssue"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "GitHub issue created and linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/issues/{issue_id}/github/links": {
+      "post": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "POST .../github/links: links an existing GitHub issue or pull request.",
+        "operationId": "link_github_issue",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkGitHubIssue"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "GitHub issue linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/issues/{issue_id}/github/links/{link_id}": {
+      "delete": {
+        "tags": [
+          "GitHub"
+        ],
+        "summary": "DELETE .../github/links/{link_id}",
+        "operationId": "unlink_github_issue",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "link_id",
+            "in": "path",
+            "description": "Link ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Link removed"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -8895,6 +10036,24 @@
           }
         }
       },
+      "CodeMapping": {
+        "type": "object",
+        "description": "Maps a path as it appears in a stack trace to the path in the repository.",
+        "required": [
+          "stack_root",
+          "source_root"
+        ],
+        "properties": {
+          "source_root": {
+            "type": "string",
+            "description": "Prefix put in its place, e.g. `src/`. Empty for the repository root."
+          },
+          "stack_root": {
+            "type": "string",
+            "description": "Prefix stripped from the frame's path, e.g. `/app/` or `webpack:///./`."
+          }
+        }
+      },
       "CommentRequest": {
         "type": "object",
         "description": "Body for creating an issue comment (note).",
@@ -8979,6 +10138,25 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "CreateGitHubIssue": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Defaults to a summary with the culprit and a link back."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Defaults to the Rustrak issue's title."
           }
         }
       },
@@ -9316,6 +10494,147 @@
           }
         }
       },
+      "GitHubAppInfo": {
+        "type": "object",
+        "required": [
+          "app_id",
+          "slug",
+          "html_url",
+          "owner_login",
+          "install_url",
+          "created_at"
+        ],
+        "properties": {
+          "app_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "install_url": {
+            "type": "string",
+            "description": "Where people install the app on an account or organization."
+          },
+          "last_webhook_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "owner_login": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "GitHubInstallation": {
+        "type": "object",
+        "required": [
+          "id",
+          "account_login",
+          "account_type",
+          "suspended",
+          "created_at"
+        ],
+        "properties": {
+          "account_login": {
+            "type": "string"
+          },
+          "account_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "suspended": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GitHubLogin": {
+        "type": "object",
+        "properties": {
+          "login": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The person's GitHub username; `null` clears it."
+          }
+        }
+      },
+      "GitHubRepository": {
+        "type": "object",
+        "description": "A repository an installation can reach.",
+        "required": [
+          "installation_id",
+          "full_name",
+          "default_branch",
+          "private",
+          "html_url"
+        ],
+        "properties": {
+          "default_branch": {
+            "type": "string"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "private": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GitHubStatus": {
+        "type": "object",
+        "description": "`GET /api/github`: everything the integrations page needs in one answer.",
+        "required": [
+          "installations",
+          "webhook_url"
+        ],
+        "properties": {
+          "app": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GitHubAppInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "installations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GitHubInstallation"
+            }
+          },
+          "webhook_url": {
+            "type": "string",
+            "description": "The address GitHub delivers webhooks to."
+          }
+        }
+      },
       "Grouping": {
         "type": "object",
         "description": "Grouping model - maps a grouping key to an issue",
@@ -9440,6 +10759,81 @@
           "muted",
           "all"
         ]
+      },
+      "IssueGitHub": {
+        "type": "object",
+        "description": "`GET .../issues/{id}/github`: the issue's \"Code\" block in one answer.",
+        "required": [
+          "links",
+          "suspect_commits",
+          "owners"
+        ],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueLink"
+            }
+          },
+          "owners": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Owners of the culprit file according to CODEOWNERS."
+          },
+          "suspect_commits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepoCommit"
+            },
+            "description": "Commits that touched the issue's culprit file shortly before it first\nappeared, newest first."
+          }
+        }
+      },
+      "IssueLink": {
+        "type": "object",
+        "required": [
+          "id",
+          "issue_id",
+          "repo_full_name",
+          "number",
+          "title",
+          "url",
+          "state",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "issue_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "repo_full_name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "`open` or `closed`, as of the last webhook or sync."
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
       },
       "IssueResponse": {
         "type": "object",
@@ -9663,6 +11057,18 @@
           }
         }
       },
+      "LinkGitHubIssue": {
+        "type": "object",
+        "required": [
+          "reference"
+        ],
+        "properties": {
+          "reference": {
+            "type": "string",
+            "description": "A GitHub issue or pull request URL, or `#123` for the project's\nrepository."
+          }
+        }
+      },
       "LivenessResponse": {
         "type": "object",
         "required": [
@@ -9741,6 +11147,36 @@
           },
           "password": {
             "type": "string"
+          }
+        }
+      },
+      "ManifestRequest": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Create the app under this organization instead of the user's account."
+          }
+        }
+      },
+      "ManifestResponse": {
+        "type": "object",
+        "description": "What the dashboard posts to GitHub to create the app.",
+        "required": [
+          "action_url",
+          "manifest"
+        ],
+        "properties": {
+          "action_url": {
+            "type": "string",
+            "description": "The form's `action`."
+          },
+          "manifest": {
+            "type": "string",
+            "description": "The form's one field, `manifest`."
           }
         }
       },
@@ -9838,6 +11274,66 @@
           "user_id": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "ProjectRepository": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "installation_id",
+          "repo_full_name",
+          "default_branch",
+          "html_url",
+          "code_mappings",
+          "auto_create_issues",
+          "auto_create_conditions"
+        ],
+        "properties": {
+          "auto_create_conditions": {
+            "type": "object"
+          },
+          "auto_create_issues": {
+            "type": "boolean",
+            "description": "Open a GitHub issue for new issues that pass `auto_create_conditions`."
+          },
+          "code_mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CodeMapping"
+            }
+          },
+          "codeowners_rules": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "How many ownership rules the last CODEOWNERS sync found; `None` before\nthe first sync.",
+            "minimum": 0
+          },
+          "codeowners_synced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "default_branch": {
+            "type": "string"
+          },
+          "html_url": {
+            "type": "string"
+          },
+          "installation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "repo_full_name": {
+            "type": "string"
           }
         }
       },
@@ -10131,6 +11627,44 @@
             ]
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "RepoCommit": {
+        "type": "object",
+        "required": [
+          "repo_full_name",
+          "sha",
+          "message",
+          "author_name",
+          "url",
+          "committed_at"
+        ],
+        "properties": {
+          "author_login": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "author_name": {
+            "type": "string"
+          },
+          "committed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string"
+          },
+          "repo_full_name": {
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "url": {
             "type": "string"
           }
         }
@@ -11032,6 +12566,44 @@
               "null"
             ],
             "description": "New slug, slugified before storing.\n\nA slug already taken by another project returns a 409. It is not\nsilently de-duplicated the way a slug derived at creation time is,\nsince storing something other than what was requested would be wrong.\n\nSending `null` leaves the current value untouched."
+          }
+        }
+      },
+      "UpdateProjectRepository": {
+        "type": "object",
+        "required": [
+          "installation_id",
+          "repo_full_name"
+        ],
+        "properties": {
+          "auto_create_conditions": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The same filters an alert rule takes: `min_level`, `environments`,\n`min_events`."
+          },
+          "auto_create_issues": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "code_mappings": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CodeMapping"
+            }
+          },
+          "installation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "repo_full_name": {
+            "type": "string"
           }
         }
       },

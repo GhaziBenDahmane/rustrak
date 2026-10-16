@@ -3,7 +3,9 @@ import type {
   EventDetail,
   Issue,
   IssueAggregates,
+  IssueGitHub,
   IssueStats,
+  ProjectRepository,
 } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslations } from 'use-intl';
@@ -20,6 +22,11 @@ import {
   readEventPayload,
   splitIssueTitle,
 } from '@/features/event/lib/event-payload';
+import {
+  getIssueGitHub,
+  getProjectRepository,
+} from '@/features/github/api/queries';
+import { frameSourceUrl } from '@/features/github/lib/source-url';
 import {
   getIssue,
   getIssueActivity,
@@ -44,18 +51,39 @@ export const Route = createFileRoute(
     const projectId = Number.parseInt(params.id, 10);
     const { issueId, eventId } = params;
 
-    const [project, issue, event, navigation, aggregates, stats, activity] =
-      await Promise.all([
-        getProject(projectId),
-        getIssue(projectId, issueId),
-        getEventDetail(projectId, issueId, eventId),
-        getEventNavigation(projectId, issueId, eventId),
-        getIssueAggregates(projectId, issueId),
-        getIssueStats(projectId, issueId, '30d'),
-        getIssueActivity(projectId, issueId),
-      ]);
+    const [
+      project,
+      issue,
+      event,
+      navigation,
+      aggregates,
+      stats,
+      activity,
+      repository,
+      code,
+    ] = await Promise.all([
+      getProject(projectId),
+      getIssue(projectId, issueId),
+      getEventDetail(projectId, issueId, eventId),
+      getEventNavigation(projectId, issueId, eventId),
+      getIssueAggregates(projectId, issueId),
+      getIssueStats(projectId, issueId, '30d'),
+      getIssueActivity(projectId, issueId),
+      getProjectRepository(projectId),
+      getIssueGitHub(projectId, issueId),
+    ]);
 
-    return { project, issue, event, navigation, aggregates, stats, activity };
+    return {
+      project,
+      issue,
+      event,
+      navigation,
+      aggregates,
+      stats,
+      activity,
+      repository,
+      code,
+    };
   },
   head: ({ loaderData }) => {
     const t = translator('projectPages');
@@ -100,6 +128,8 @@ function EventPage() {
     aggregates: aggregatesResult,
     stats: statsResult,
     activity: activityResult,
+    repository: repositoryResult,
+    code: codeResult,
   } = Route.useLoaderData();
   const projectId = Number.parseInt(id, 10);
 
@@ -143,6 +173,8 @@ function EventPage() {
       aggregates={aggregatesResult.success ? aggregatesResult.data : null}
       stats30d={statsResult.success ? statsResult.data : null}
       activity={activityResult.success ? activityResult.data : []}
+      repository={repositoryResult.success ? repositoryResult.data : undefined}
+      code={codeResult.success ? codeResult.data : null}
     />
   );
 }
@@ -156,6 +188,8 @@ function EventView({
   aggregates,
   stats30d,
   activity,
+  repository,
+  code,
 }: {
   projectId: number;
   issueId: string;
@@ -165,6 +199,10 @@ function EventView({
   aggregates: IssueAggregates | null;
   stats30d: IssueStats | null;
   activity: ActivityEntry[];
+  /** The project's GitHub repository: `null` without one, `undefined` when
+   * it could not be loaded. */
+  repository: ProjectRepository | null | undefined;
+  code: IssueGitHub | null;
 }) {
   const t = useTranslations('projectPages');
   const eventData = event.data as Record<string, unknown>;
@@ -200,8 +238,14 @@ function EventView({
       issueId={issueId}
       issue={issue}
       activity={activity}
+      code={code}
+      connected={repository === undefined ? null : repository !== null}
     />
   );
+  const sourceUrl = repository
+    ? (frame: { filename?: string; lineno?: number | null }) =>
+        frameSourceUrl(repository, frame.filename, frame.lineno)
+    : undefined;
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-background">
@@ -212,6 +256,13 @@ function EventView({
         message={message}
         levelText={levelText}
         userCount={userCount}
+        // Links outlive a disconnected repository and can still be unlinked.
+        // Unloaded links are not "no links": offering Create then could
+        // open a second GitHub issue for one already linked.
+        githubLinks={
+          code && (repository || code.links.length > 0) ? code.links : null
+        }
+        githubConnected={repository != null}
       />
 
       {/* Body */}
@@ -232,6 +283,7 @@ function EventView({
               event={event}
               payload={payload}
               eventData={eventData}
+              sourceUrl={sourceUrl}
             />
 
             {/* Right rail (mobile) */}

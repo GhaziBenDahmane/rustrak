@@ -19,7 +19,7 @@ pub use identity::instance_id;
 pub use report::{ConfigFacts, Report, Sink, SinkError, Volume, SCHEMA};
 pub use reporter::{Context, Reporter, Schedule};
 pub use resources::{probe, Rss, Sampler};
-pub use volume::alert_providers;
+pub use volume::{alert_providers, github_connected};
 
 use crate::config::TelemetryConfig;
 

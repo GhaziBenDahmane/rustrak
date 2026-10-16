@@ -280,7 +280,13 @@
       "statusChanged": "a schimbat starea în {status}",
       "priorityChanged": "a setat prioritatea la {priority}",
       "regression": "a detectat o regresie",
-      "firstSeen": "a văzut prima dată această problemă"
+      "firstSeen": "a văzut prima dată această problemă",
+      "resolvedByCommit": "a rezolvat acest issue în commitul {sha}",
+      "closedOnGitHub": "a închis issue-ul legat pe GitHub",
+      "reopenedOnGitHub": "a redeschis issue-ul legat pe GitHub",
+      "githubCreated": "a creat {ref} pe GitHub",
+      "githubLinked": "a legat {ref}",
+      "githubUnlinked": "a dezlegat {ref}"
     },
     "issueStatus": {
       "new": "Nouă",
@@ -618,7 +624,8 @@
       "fieldAlertType": "Acest tip de alertă",
       "saveFailed": "Salvarea regulii a eșuat",
       "updated": "Regulă de alertă actualizată",
-      "created": "Regulă de alertă creată"
+      "created": "Regulă de alertă creată",
+      "filters": "Filtre"
     },
     "integrationDialog": {
       "name": "Nume",
@@ -940,7 +947,8 @@
       "crashed": "Prăbușit",
       "current": "Curent",
       "main": "Principal"
-    }
+    },
+    "openInGitHub": "Deschide în GitHub"
   },
   "releases": {
     "all": "Toate",
@@ -1549,7 +1557,8 @@
       "openProjectSettingsMenu": "Deschide meniul setărilor proiectului",
       "projectSettingsTitle": "Setări proiect",
       "openSettingsMenu": "Deschide meniul setărilor",
-      "settingsTitle": "Setări"
+      "settingsTitle": "Setări",
+      "github": "GitHub"
     },
     "loadProjectFailed": "Proiectul nu a putut fi încărcat",
     "loadProjectsFailed": "Proiectele nu au putut fi încărcate",
@@ -1610,7 +1619,8 @@
       "subtitle": "Conectează Rustrak cu uneltele și serviciile tale pentru a automatiza fluxurile de lucru și a fi la curent cu erorile.",
       "backToAlerts": "Înapoi la setările alertelor",
       "backToProjects": "Înapoi la proiecte",
-      "loadFailed": "Integrările nu au putut fi încărcate"
+      "loadFailed": "Integrările nu au putut fi încărcate",
+      "githubLoadFailed": "Conexiunea GitHub nu a putut fi încărcată"
     },
     "storage": {
       "meta": {
@@ -1698,5 +1708,105 @@
       "reportAnIssue": "Raportează o problemă",
       "sentryDocs": "Documentație SDK Sentry"
     }
+  },
+  "github": {
+    "section": {
+      "title": "Dezvoltare",
+      "description": "Depozite, commit-uri și instrumente de urmărire, legate de erorile tale."
+    },
+    "save": "Salvează",
+    "cancel": "Anulează",
+    "connection": {
+      "description": "Issues, commituri și responsabili de cod din depozitele tale",
+      "intro": "Rustrak creează o aplicație GitHub privată pentru acest server. GitHub îți cere să o confirmi, apoi alegi ce depozite poate vedea.",
+      "organizationLabel": "Unde sunt depozitele tale? Lasă gol pentru contul personal sau scrie numele organizației. GitHub permite instalarea aplicației doar acolo.",
+      "organizationPlaceholder": "Organizație (opțional)",
+      "connect": "Conectează GitHub",
+      "connectFailed": "Configurarea GitHub nu a putut porni",
+      "app": "Aplicație",
+      "accounts": "Instalată pe",
+      "suspended": "suspendată",
+      "install": "Alege depozitele",
+      "webhooks": "Webhooks",
+      "lastWebhook": "Ultimul primit {when}",
+      "noWebhook": "Niciunul primit încă",
+      "unreachable": "GitHub nu poate accesa {url}, deci închiderile, comentariile și commit-urile nu vor ajunge. Setează PUBLIC_URL la o adresă accesibilă din GitHub.",
+      "disconnect": "Deconectează GitHub",
+      "disconnectTitle": "Deconectezi GitHub?",
+      "disconnectDescription": "Rustrak uită aplicația și depozitul fiecărui proiect. Issue-urile legate își păstrează legăturile. Șterge aplicația și pe GitHub dacă nu mai ai nevoie de ea.",
+      "disconnectFailed": "GitHub nu a putut fi deconectat",
+      "notInstalled": "Neinstalat"
+    },
+    "repository": {
+      "metaTitle": "GitHub",
+      "loadFailed": "Setările GitHub nu au putut fi încărcate",
+      "subtitle": "Leagă acest proiect de un depozit ca să deschizi codul din stack trace, să găsești commitul care l-a stricat și să ții issue-urile sincronizate.",
+      "unavailable": "GitHub nu este disponibil pentru acest proiect",
+      "goToIntegrations": "Deschide integrările",
+      "section": "Depozit",
+      "repository": "Depozit",
+      "repositoryDescription": "Unde se află codul acestui proiect.",
+      "noRepositories": "Niciun depozit partajat cu aplicația",
+      "choose": "Alege un depozit",
+      "openOnGitHub": "Deschide pe GitHub · {branch}",
+      "stackTraces": "Stack traces",
+      "mappings": "Maparea căilor",
+      "mappingsDescription": "Transformă o cale din stack trace într-un fișier din depozit, de ex. /app/ → src/. Fără una, Rustrak o deduce din cale.",
+      "stackRoot": "Calea din stack trace",
+      "sourceRoot": "Calea din depozit",
+      "addMapping": "Adaugă",
+      "removeMapping": "Elimină",
+      "issues": "Issues",
+      "autoCreate": "Deschide automat issue-uri pe GitHub",
+      "autoCreateDescription": "O eroare nouă deschide un issue pe GitHub, o dată pe problemă, dacă trece filtrele de mai jos.",
+      "fixes": "Rezolvă din commituri",
+      "fixesDescription": "Un commit pe ramura implicită care conține asta rezolvă issue-ul.",
+      "codeowners": "Responsabili de cod",
+      "codeownersDescription": "Citiți din fișierul CODEOWNERS al depozitului și afișați la fiecare issue.",
+      "codeownersSync": "Sincronizează",
+      "codeownersStatus": "{count, plural, one {# regulă} few {# reguli} other {# de reguli}} · {when}",
+      "codeownersNever": "Nesincronizat încă",
+      "codeownersFailed": "CODEOWNERS nu a putut fi sincronizat",
+      "danger": "Zonă periculoasă",
+      "disconnect": "Deconectează depozitul",
+      "disconnectDescription": "Oprește legarea issue-urilor acestui proiect de GitHub. Legăturile existente rămân.",
+      "saveFailed": "Depozitul nu a putut fi salvat",
+      "autoCreateFilters": "Ce erori",
+      "autoCreateFiltersDescription": "Fără filtre, fiecare problemă nouă deschide unul. „Minim de evenimente” așteaptă până când problema a apărut de atâtea ori."
+    },
+    "issue": {
+      "menu": "Acțiuni GitHub",
+      "open": "Deschis",
+      "closed": "Închis",
+      "create": "Creează issue pe GitHub",
+      "link": "Leagă un issue existent…",
+      "unlink": "Dezleagă #{number}",
+      "createFailed": "Issue-ul GitHub nu a putut fi creat",
+      "linkFailed": "Issue-ul GitHub nu a putut fi legat",
+      "unlinkFailed": "Issue-ul GitHub nu a putut fi dezlegat",
+      "linkTitle": "Leagă un issue GitHub",
+      "linkDescription": "Lipește URL-ul unui issue GitHub, sau numărul lui precedat de # (de exemplu, #42) dacă este în depozitul acestui proiect.",
+      "linkSubmit": "Leagă"
+    },
+    "code": {
+      "connect": "Conectează acest proiect la GitHub",
+      "title": "Cod",
+      "suspect": "Commituri suspecte",
+      "owners": "Responsabili"
+    },
+    "account": {
+      "title": "Utilizator GitHub",
+      "description": "Când ți se atribuie un issue în Rustrak, ți se atribuie și issue-urile GitHub legate, și invers.",
+      "saved": "Utilizatorul GitHub a fost salvat",
+      "saveFailed": "Utilizatorul GitHub nu a putut fi salvat"
+    }
+  },
+  "conditions": {
+    "minLevel": "Nivel",
+    "anyLevel": "Orice nivel",
+    "levelOrAbove": "{level} sau mai sus",
+    "minEvents": "Minim de evenimente",
+    "environments": "Medii",
+    "description": "Separate prin virgulă. Gol înseamnă toate."
   }
 }

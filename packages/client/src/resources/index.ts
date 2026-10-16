@@ -4,6 +4,7 @@ export { AlertRulesResource } from './alert-rules.js';
 export { AuthResource } from './auth.js';
 export { BaseResource } from './base.js';
 export { EventsResource } from './events.js';
+export { GitHubResource } from './github.js';
 export { HealthResource } from './health.js';
 export { InvitationsResource } from './invitations.js';
 export { IssuesResource } from './issues.js';

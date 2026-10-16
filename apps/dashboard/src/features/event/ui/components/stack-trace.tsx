@@ -3,14 +3,19 @@ import {
   type ExceptionChain,
   orderFramesForDisplay,
 } from '@/features/event/lib/format-stack-trace';
-import { StackFrameItem } from './stack-frame-item';
+import { type FrameSourceUrl, StackFrameItem } from './stack-frame-item';
 
 interface StackTraceProps {
   exception?: ExceptionChain;
   platform?: string;
+  sourceUrl?: FrameSourceUrl;
 }
 
-export function StackTrace({ exception, platform }: StackTraceProps) {
+export function StackTrace({
+  exception,
+  platform,
+  sourceUrl,
+}: StackTraceProps) {
   const t = useTranslations('events');
   const exceptions = exception?.values ?? [];
 
@@ -50,6 +55,7 @@ export function StackTrace({ exception, platform }: StackTraceProps) {
                       key={originalIdx}
                       frame={frame}
                       index={originalIdx + 1}
+                      sourceUrl={sourceUrl}
                     />
                   );
                 })}
