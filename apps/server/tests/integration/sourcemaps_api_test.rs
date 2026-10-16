@@ -408,6 +408,40 @@ async fn test_chunk_capability_includes_artifact_bundles_v2() {
     assert!(chunks_per_req > 0, "chunksPerRequest must be positive");
 }
 
+#[actix_web::test]
+async fn test_chunk_capability_advertises_no_compression() {
+    let db = TestDb::new().await;
+    let token = create_test_token(&db.pool).await;
+    let config = create_test_config();
+    let (provider, config_data) = sourcemap_app_data(&db.pool, &config);
+
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(db.pool.clone()))
+            .app_data(config_data)
+            .app_data(web::Data::new(Arc::clone(&provider)))
+            .configure(routes::sourcemaps::configure),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri("/api/0/organizations/my-org/chunk-upload/")
+        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200);
+
+    let body: Value = test::read_body_json(resp).await;
+
+    // The `sentry` npm uploader (Sentry SDK v11) requires this array and
+    // rejects the response without it; empty means uncompressed chunks.
+    let compression = body["compression"]
+        .as_array()
+        .expect("compression must be an array");
+    assert!(compression.is_empty(), "chunks are read uncompressed");
+}
+
 // =============================================================================
 // Group 3: Chunk upload — needs BearerAuth + multipart
 // =============================================================================
@@ -2197,6 +2231,91 @@ async fn test_assemble_bundle_tilde_prefix_with_debug_id_stores_source_file() {
         count, 1,
         "source_file_metadata row must be stored after assembly; got count={}",
         count
+    );
+}
+
+fn build_bundle(debug_id: &str, source_map: &[u8]) -> Vec<u8> {
+    use std::io::Write as _;
+    use zip::write::SimpleFileOptions;
+
+    let manifest = format!(
+        r#"{{"files":{{"~/app.min.js.map":{{"url":"~/app.min.js.map","type":"source_map","headers":{{"debug-id":"{debug_id}"}}}}}},"debugIdMap":{{}}}}"#
+    );
+
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut zip = zip::ZipWriter::new(&mut buf);
+        let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("~/app.min.js.map", opts).unwrap();
+        zip.write_all(source_map).unwrap();
+        zip.start_file("manifest.json", opts).unwrap();
+        zip.write_all(manifest.as_bytes()).unwrap();
+        zip.finish().unwrap();
+    }
+    buf.into_inner()
+}
+
+#[actix_web::test]
+async fn test_assemble_bundle_reupload_same_debug_id_replaces_map() {
+    // Sentry resolves a debug_id to the newest bundle that contains it
+    // (debug_files/artifact_bundles.py, order_by("-date_last_modified")), so
+    // re-uploading a corrected map for an unchanged chunk takes effect.
+    let db = TestDb::new().await;
+    let project = ProjectService::create(
+        &db.pool,
+        CreateProject {
+            name: "reupload-test".to_string(),
+            slug: Some("reupload-test".to_string()),
+            platform: None,
+        },
+    )
+    .await
+    .expect("project creation must succeed");
+
+    let config = create_test_config();
+    let store: std::sync::Arc<dyn rustrak::services::SourceMapStore> = std::sync::Arc::new(
+        rustrak::services::LocalSourceMapStore::new(&config.sourcemap_storage_path),
+    );
+
+    let debug_id = "11112222-3333-4444-5555-666677778888";
+    let first = br#"{"version":3,"sources":["src/old.ts"],"sourcesContent":["old"],"mappings":"AAAA","names":[]}"#;
+    let second = br#"{"version":3,"sources":["src/new.ts"],"sourcesContent":["new"],"mappings":"AAAA","names":[]}"#;
+
+    for map in [&first[..], &second[..]] {
+        let bundle = build_bundle(debug_id, map);
+        let bundle_checksum = sha1_hex(&bundle);
+        rustrak::services::sourcemap::store_chunks(
+            &db.pool,
+            vec![(bundle_checksum.clone(), bundle)],
+            20 * 1024 * 1024,
+        )
+        .await
+        .expect("store_chunks must succeed");
+        rustrak::services::sourcemap::assemble_bundle(
+            &db.pool,
+            store.as_ref(),
+            project.id,
+            &bundle_checksum,
+            std::slice::from_ref(&bundle_checksum),
+            100 * 1024 * 1024,
+        )
+        .await
+        .expect("assembly must succeed");
+    }
+
+    let stored: Vec<String> = sqlx::query_scalar(
+        "SELECT sf.checksum FROM source_file_metadata sfm \
+         JOIN source_file sf ON sf.id = sfm.file_id WHERE sfm.project_id = $1",
+    )
+    .bind(project.id)
+    .fetch_all(&db.pool)
+    .await
+    .expect("metadata query must succeed");
+
+    assert_eq!(
+        stored,
+        vec![sha1_hex(second)],
+        "the re-uploaded map must replace the first one for the same debug_id"
     );
 }
 

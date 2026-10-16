@@ -1,6 +1,6 @@
 {
   "name": "@rustrak/client",
-  "version": "0.16.3",
+  "version": "0.16.4",
   "description": "Type-safe TypeScript client for the Rustrak self-hosted error tracking API",
   "homepage": "https://rustrak.github.io/rustrak/sdks/client",
   "repository": {
@@ -55,15 +55,15 @@
     "node": ">=20"
   },
   "dependencies": {
-    "ky": "2.1.0",
-    "zod": "4.6.5"
+    "ky": "2.2.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@types/node": "26.6.4",
-    "@vitest/coverage-v8": "5.0.3",
-    "msw": "3.0.2",
+    "@types/node": "26.6.5",
+    "@vitest/coverage-v8": "5.0.4",
+    "msw": "3.0.3",
     "tsup": "8.5.1",
     "typescript": "6.0.3",
-    "vitest": "5.0.3"
+    "vitest": "5.0.4"
   }
 }
