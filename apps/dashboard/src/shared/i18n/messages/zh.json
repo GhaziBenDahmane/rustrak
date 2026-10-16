@@ -624,7 +624,8 @@
       "fieldAlertType": "该告警类型",
       "saveFailed": "保存规则失败",
       "updated": "告警规则已更新",
-      "created": "告警规则已创建"
+      "created": "告警规则已创建",
+      "filters": "筛选条件"
     },
     "integrationDialog": {
       "name": "名称",
@@ -1755,10 +1756,23 @@
       "sourceRoot": "仓库中的路径",
       "addMapping": "添加映射",
       "removeMapping": "移除映射",
+      "issues": "Issue",
+      "autoCreate": "自动创建 GitHub issue",
+      "autoCreateDescription": "通过下方筛选条件的新错误会创建一个 GitHub issue，每个问题一次。",
+      "fixes": "通过提交解决",
+      "fixesDescription": "默认分支上包含此内容的提交会解决该 Issue。",
+      "codeowners": "代码负责人",
+      "codeownersDescription": "从仓库的 CODEOWNERS 文件读取，并显示在每个 Issue 上。",
+      "codeownersSync": "同步",
+      "codeownersStatus": "{count} 条规则 · {when}",
+      "codeownersNever": "尚未同步",
+      "codeownersFailed": "无法同步 CODEOWNERS",
       "danger": "危险区域",
       "disconnect": "断开仓库",
       "disconnectDescription": "停止将此项目的 Issue 关联到 GitHub。现有链接将保留。",
-      "saveFailed": "无法保存仓库"
+      "saveFailed": "无法保存仓库",
+      "autoCreateFilters": "哪些错误",
+      "autoCreateFiltersDescription": "没有筛选条件时，每个新问题都会创建一个。“最少事件数”会等到问题发生这么多次。"
     },
     "issue": {
       "menu": "GitHub 操作",
@@ -1774,11 +1788,25 @@
       "linkDescription": "粘贴 Issue 或 Pull Request 的 URL，或输入 #123 表示此项目仓库中的 Issue。",
       "linkSubmit": "关联"
     },
+    "code": {
+      "connect": "将此项目连接到 GitHub",
+      "title": "代码",
+      "suspect": "可疑提交",
+      "owners": "负责人"
+    },
     "account": {
       "title": "GitHub 用户名",
       "description": "在 Rustrak 中分配给你的 Issue，其关联的 GitHub Issue 也会分配给你，反之亦然。",
       "saved": "已保存 GitHub 用户名",
       "saveFailed": "无法保存你的 GitHub 用户名"
     }
+  },
+  "conditions": {
+    "minLevel": "级别",
+    "anyLevel": "任意级别",
+    "levelOrAbove": "{level} 及以上",
+    "minEvents": "最少事件数",
+    "environments": "环境",
+    "description": "用逗号分隔。留空表示所有环境。"
   }
 }

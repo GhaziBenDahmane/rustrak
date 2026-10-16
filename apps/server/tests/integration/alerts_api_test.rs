@@ -235,6 +235,7 @@ async fn test_event_alert_cooldown_is_a_durable_replay_barrier() {
         &issue,
         AlertType::NewIssue,
         event_id,
+        Default::default(),
         "https://dashboard.example.com",
     )
     .await
@@ -252,6 +253,94 @@ async fn test_event_alert_cooldown_is_a_durable_replay_barrier() {
             .await
             .expect("replay barrier lookup must succeed")
     );
+}
+
+/// Retention lowers an issue's count, so a later event can bring it back to a
+/// rule's `min_events`; the rule has already fired for that issue and must not
+/// fire again.
+#[tokio::test]
+async fn test_new_issue_threshold_fires_once_per_issue() {
+    let db = TestDb::new().await;
+    let project_id = create_test_project(&db.pool).await;
+    let project = ProjectService::get_by_id(&db.pool, project_id)
+        .await
+        .expect("project lookup must succeed");
+    let channel = AlertService::create_channel(
+        &db.pool,
+        CreateNotificationChannel {
+            name: "Threshold Webhook".to_string(),
+            provider_type: ChannelType::Webhook,
+            credentials: json!({ "url": "https://example.com/webhook" }),
+            is_enabled: true,
+        },
+    )
+    .await
+    .expect("channel creation must succeed");
+    let rule = AlertService::create_rule(
+        &db.pool,
+        project_id,
+        CreateAlertRule {
+            name: "Threshold Rule".to_string(),
+            alert_type: AlertType::NewIssue,
+            channels: vec![AlertRuleChannelInput {
+                integration_id: channel.id,
+                routing_override: json!({}),
+            }],
+            conditions: json!({ "min_events": 3 }),
+            cooldown_minutes: 60,
+        },
+    )
+    .await
+    .expect("rule creation must succeed");
+    // In cooldown, so nothing is sent; the history row is written all the same.
+    sqlx::query("UPDATE alert_rules SET last_triggered_at = $1 WHERE id = $2")
+        .bind(Utc::now())
+        .bind(rule.id)
+        .execute(&db.pool)
+        .await
+        .expect("cooldown setup must succeed");
+    let mut issue = IssueService::create(
+        &db.pool,
+        project_id,
+        Utc::now(),
+        &DenormalizedFields {
+            calculated_type: "Error".to_string(),
+            calculated_value: "threshold".to_string(),
+            transaction: "/test".to_string(),
+            last_frame_filename: "test.rs".to_string(),
+            last_frame_module: "test".to_string(),
+            last_frame_function: "test".to_string(),
+            culprit: "test".to_string(),
+            logger: String::new(),
+            release: String::new(),
+        },
+        Some("error"),
+        Some("rust"),
+    )
+    .await
+    .expect("issue creation must succeed");
+    issue.digested_event_count = 3;
+
+    for _ in 0..2 {
+        AlertService::trigger_event_alert(
+            &db.pool,
+            &project,
+            &issue,
+            AlertType::NewIssue,
+            Uuid::new_v4(),
+            Default::default(),
+            "https://dashboard.example.com",
+        )
+        .await
+        .expect("trigger must succeed");
+    }
+
+    let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM alert_history WHERE issue_id = $1")
+        .bind(issue.id)
+        .fetch_one(&db.pool)
+        .await
+        .expect("history count must succeed");
+    assert_eq!(rows, 1);
 }
 
 // =============================================================================
@@ -1234,4 +1323,27 @@ async fn test_trigger_alert_does_not_block_on_slow_webhook_delivery() {
         leased,
         "in-flight delivery must hold a future next_retry_at lease"
     );
+}
+
+#[tokio::test]
+async fn test_rule_conditions_are_validated() {
+    let db = TestDb::new().await;
+    let project_id = create_test_project(&db.pool).await;
+    let input = |conditions: serde_json::Value| CreateAlertRule {
+        name: "Filtered".to_string(),
+        alert_type: AlertType::NewIssue,
+        channels: vec![],
+        conditions,
+        cooldown_minutes: 0,
+    };
+
+    let refused =
+        AlertService::create_rule(&db.pool, project_id, input(json!({ "min_level": "loud" })))
+            .await;
+    assert!(refused.is_err(), "an unknown level is refused");
+
+    let rule = AlertService::create_rule(&db.pool, project_id, input(json!({ "min_events": 5 })))
+        .await
+        .expect("valid conditions are stored");
+    assert_eq!(rule.conditions["min_events"], 5);
 }

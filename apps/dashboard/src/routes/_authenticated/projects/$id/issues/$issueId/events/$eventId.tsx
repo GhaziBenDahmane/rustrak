@@ -173,7 +173,7 @@ function EventPage() {
       aggregates={aggregatesResult.success ? aggregatesResult.data : null}
       stats30d={statsResult.success ? statsResult.data : null}
       activity={activityResult.success ? activityResult.data : []}
-      repository={repositoryResult.success ? repositoryResult.data : null}
+      repository={repositoryResult.success ? repositoryResult.data : undefined}
       code={codeResult.success ? codeResult.data : null}
     />
   );
@@ -199,8 +199,9 @@ function EventView({
   aggregates: IssueAggregates | null;
   stats30d: IssueStats | null;
   activity: ActivityEntry[];
-  /** The project's GitHub repository; `null` without one or on failure. */
-  repository: ProjectRepository | null;
+  /** The project's GitHub repository: `null` without one, `undefined` when
+   * it could not be loaded. */
+  repository: ProjectRepository | null | undefined;
   code: IssueGitHub | null;
 }) {
   const t = useTranslations('projectPages');
@@ -237,6 +238,8 @@ function EventView({
       issueId={issueId}
       issue={issue}
       activity={activity}
+      code={code}
+      connected={repository === undefined ? null : repository !== null}
     />
   );
   const sourceUrl = repository

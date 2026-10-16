@@ -624,7 +624,8 @@
       "fieldAlertType": "Acest tip de alertă",
       "saveFailed": "Salvarea regulii a eșuat",
       "updated": "Regulă de alertă actualizată",
-      "created": "Regulă de alertă creată"
+      "created": "Regulă de alertă creată",
+      "filters": "Filtre"
     },
     "integrationDialog": {
       "name": "Nume",
@@ -1755,10 +1756,23 @@
       "sourceRoot": "Calea din depozit",
       "addMapping": "Adaugă",
       "removeMapping": "Elimină",
+      "issues": "Issues",
+      "autoCreate": "Deschide automat issue-uri pe GitHub",
+      "autoCreateDescription": "O eroare nouă deschide un issue pe GitHub, o dată pe problemă, dacă trece filtrele de mai jos.",
+      "fixes": "Rezolvă din commituri",
+      "fixesDescription": "Un commit pe ramura implicită care conține asta rezolvă issue-ul.",
+      "codeowners": "Responsabili de cod",
+      "codeownersDescription": "Citiți din fișierul CODEOWNERS al depozitului și afișați la fiecare issue.",
+      "codeownersSync": "Sincronizează",
+      "codeownersStatus": "{count, plural, one {# regulă} few {# reguli} other {# de reguli}} · {when}",
+      "codeownersNever": "Nesincronizat încă",
+      "codeownersFailed": "CODEOWNERS nu a putut fi sincronizat",
       "danger": "Zonă periculoasă",
       "disconnect": "Deconectează depozitul",
       "disconnectDescription": "Oprește legarea issue-urilor acestui proiect de GitHub. Legăturile existente rămân.",
-      "saveFailed": "Depozitul nu a putut fi salvat"
+      "saveFailed": "Depozitul nu a putut fi salvat",
+      "autoCreateFilters": "Ce erori",
+      "autoCreateFiltersDescription": "Fără filtre, fiecare problemă nouă deschide unul. „Minim de evenimente” așteaptă până când problema a apărut de atâtea ori."
     },
     "issue": {
       "menu": "Acțiuni GitHub",
@@ -1774,11 +1788,25 @@
       "linkDescription": "Lipește URL-ul unui issue sau pull request, sau scrie #123 pentru depozitul acestui proiect.",
       "linkSubmit": "Leagă"
     },
+    "code": {
+      "connect": "Conectează acest proiect la GitHub",
+      "title": "Cod",
+      "suspect": "Commituri suspecte",
+      "owners": "Responsabili"
+    },
     "account": {
       "title": "Utilizator GitHub",
       "description": "Când ți se atribuie un issue în Rustrak, ți se atribuie și issue-urile GitHub legate, și invers.",
       "saved": "Utilizatorul GitHub a fost salvat",
       "saveFailed": "Utilizatorul GitHub nu a putut fi salvat"
     }
+  },
+  "conditions": {
+    "minLevel": "Nivel",
+    "anyLevel": "Orice nivel",
+    "levelOrAbove": "{level} sau mai sus",
+    "minEvents": "Minim de evenimente",
+    "environments": "Medii",
+    "description": "Separate prin virgulă. Gol înseamnă toate."
   }
 }

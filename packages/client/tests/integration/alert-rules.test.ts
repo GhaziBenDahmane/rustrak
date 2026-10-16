@@ -2,7 +2,10 @@ import { HttpResponse, http } from 'msw/http';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RustrakClient } from '../../src/client.js';
 import { expectErr, expectOk } from '../helpers/result.js';
+import { mockAlertRules } from '../mocks/handlers.js';
 import { server } from '../setup.js';
+
+const mockRule = mockAlertRules[0];
 
 describe('AlertRulesResource Integration', () => {
   let client: RustrakClient;
@@ -119,6 +122,52 @@ describe('AlertRulesResource Integration', () => {
   });
 
   describe('create()', () => {
+    it('should create a rule with filters', async () => {
+      const rule = expectOk(
+        await client.alertRules.create(projectId, {
+          name: 'Filtered',
+          alert_type: 'new_issue',
+          channels: [{ integration_id: 1 }],
+          conditions: {
+            min_level: 'error',
+            environments: ['production'],
+            min_events: 10,
+          },
+        }),
+      );
+
+      expect(rule.conditions.min_events).toBe(10);
+      expect(rule.conditions.environments).toEqual(['production']);
+    });
+
+    it('should load a rule whose conditions the server kept as null', async () => {
+      server.use(
+        http.get('http://localhost:8080/api/projects/1/alert-rules', () =>
+          HttpResponse.json([
+            {
+              ...mockRule,
+              conditions: { min_level: null, min_events: null },
+            },
+          ]),
+        ),
+      );
+
+      expectOk(await client.alertRules.list(projectId));
+    });
+
+    it('should reject a rule whose conditions name an unknown level', async () => {
+      server.use(
+        http.get('http://localhost:8080/api/projects/1/alert-rules', () =>
+          HttpResponse.json([
+            { ...mockRule, conditions: { min_level: 'loud' } },
+          ]),
+        ),
+      );
+
+      const result = await client.alertRules.list(projectId);
+      expect(expectErr(result).kind).toBe('invalid_response');
+    });
+
     it('should create new_issue rule with channels', async () => {
       const rule = expectOk(
         await client.alertRules.create(projectId, {

@@ -1317,6 +1317,7 @@ async fn test_bulk_delete_issues_by_filter_updates_project_counts() {
                 &create_denormalized_fields("TypeError", "bulk delete", "/api/test"),
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();

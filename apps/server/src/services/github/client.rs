@@ -294,6 +294,39 @@ impl<'a> GitHubClient<'a> {
         Ok(RemoteIssue::from_json(&answer))
     }
 
+    /// The issues opened in `repo` since `since`, newest first, each with
+    /// its body.
+    pub async fn issues_since(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        since: DateTime<Utc>,
+    ) -> AppResult<Vec<(String, RemoteIssue)>> {
+        let answer = self
+            .as_installation(
+                installation_id,
+                Method::GET,
+                &format!(
+                    "/repos/{repo}/issues?state=all&sort=created&direction=desc&per_page=100&since={}",
+                    since.format("%Y-%m-%dT%H:%M:%SZ")
+                ),
+                None,
+            )
+            .await?;
+        Ok(answer
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|issue| {
+                let body = issue
+                    .get("body")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                (body.to_string(), RemoteIssue::from_json(issue))
+            })
+            .collect())
+    }
+
     pub async fn issue(
         &self,
         installation_id: i64,
@@ -361,6 +394,29 @@ impl<'a> GitHubClient<'a> {
         )
         .await?;
         Ok(())
+    }
+
+    /// A file's text on the default branch, or `None` when it does not exist.
+    pub async fn file(
+        &self,
+        installation_id: i64,
+        repo: &str,
+        path: &str,
+    ) -> AppResult<Option<String>> {
+        let token = self.installation_token(installation_id).await?;
+        let (status, text) = send(
+            Method::GET,
+            &self.url(&format!("/repos/{repo}/contents/{path}")),
+            &format!("token {token}"),
+            None,
+            "application/vnd.github.raw+json",
+        )
+        .await?;
+        match status {
+            200 => Ok(Some(text)),
+            404 => Ok(None),
+            _ => parse(status, &text).map(|_| None),
+        }
     }
 }
 
