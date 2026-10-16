@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslations } from 'use-intl';
+import { getMyGitHubLogin } from '@/features/github/api/queries';
+import { GitHubLoginCard } from '@/features/github/ui/components/github-login-card';
 import { ChangePasswordDialog } from '@/features/user/ui/components/change-password-dialog';
 import { LanguageSelector } from '@/features/user/ui/components/language-selector';
 import { TimeZoneSelector } from '@/features/user/ui/components/time-zone-selector';
@@ -24,6 +26,7 @@ export const Route = createFileRoute('/_authenticated/settings/account')({
       ],
     };
   },
+  loader: () => getMyGitHubLogin(),
   component: AccountPage,
 });
 
@@ -33,6 +36,7 @@ function AccountPage() {
   // already made it. Both failure branches it used to carry — redirect on
   // `anonymous`, render the outage on `unavailable` — are that gate's now.
   const user = useSessionUser();
+  const githubLogin = Route.useLoaderData();
 
   return (
     <>
@@ -92,6 +96,10 @@ function AccountPage() {
             <TimeZoneSelector />
           </CardContent>
         </Card>
+
+        {githubLogin.success && (
+          <GitHubLoginCard login={githubLogin.data.login} />
+        )}
       </div>
     </>
   );

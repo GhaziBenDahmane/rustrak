@@ -4,6 +4,15 @@ Connect Rustrak to GitHub and the code behind every error is one click away.
 For each project you choose a repository, and from then on:
 
 - **Every stack frame of your app links to its line on GitHub.**
+- **Issues link to GitHub issues.** Open one from Rustrak, or link one that
+  already exists. Resolving, reopening, commenting and assigning stay in sync
+  both ways.
+- **Commits resolve issues.** A commit on the default branch whose message
+  says `Fixes WEB-12` resolves Rustrak issue `WEB-12`.
+- **Suspect commits.** An issue lists the recent commits that touched the file
+  it broke in, shortly before it first appeared.
+- **Code owners.** The repository's `CODEOWNERS` file names who owns each issue.
+- **Automatic issues.** New errors can open a GitHub issue, filtered by level, environment and number of events.
 
 ## How it connects
 
@@ -25,12 +34,12 @@ choose its repository.
 
 ## What GitHub must be able to reach
 
-Rustrak calls GitHub to read your repositories, so that works wherever
-Rustrak runs.
+Rustrak calls GitHub to open issues, comment and read `CODEOWNERS`, so those
+work wherever Rustrak runs.
 
-The other direction, GitHub telling Rustrak about installations and, as the
-integration grows, about issues and commits, uses **webhooks**, and GitHub has
-to be able to reach your server for them. Set `PUBLIC_URL` to the address people and GitHub use
+The other direction, GitHub telling Rustrak that an issue was closed or that
+commits were pushed, uses **webhooks**, and GitHub has to be able to reach
+your server for them. Set `PUBLIC_URL` to the address people and GitHub use
 before connecting:
 
 ```bash
@@ -56,3 +65,37 @@ becomes the other:
 The first mapping whose prefix matches a frame wins. Without any, Rustrak
 drops bundler prefixes such as `webpack:///` or `app:///` and a leading `/`,
 which is right for many projects. Links point at the default branch.
+
+## Resolving from commits
+
+Any of these words followed by an issue's short ID resolves it when the
+commit reaches the default branch: `fix`, `fixes`, `fixed`, `close`, `closes`,
+`closed`, `resolve`, `resolves`, `resolved`.
+
+```text
+Guard the session lookup
+
+Fixes WEB-12, closes WEB-14
+```
+
+The issue's activity names the commit that resolved it. A commit only
+resolves issues of projects connected to the repository it was pushed to.
+
+## Assignees
+
+Each person sets their GitHub username under **Settings → Account**. Assign
+them an issue in Rustrak and its linked GitHub issues are assigned to them;
+assign them on GitHub and the Rustrak issue follows.
+
+## Automatic issues
+
+**Project settings → GitHub → Open GitHub issues automatically** opens one GitHub issue per new Rustrak issue. Without filters that is every new error, so narrow it:
+
+| Filter | Opens the issue when |
+|--------|----------------------|
+| **Level** | The event is at least this level. An event with no level counts as `error`. |
+| **Environments** | The event's environment is one of these. Empty means every environment. |
+| **Minimum events** | The issue reaches this many events. It opens once, on the event that reaches the count. |
+
+`Minimum events: 10` with `Environments: production` keeps a one-off error on a laptop out of your repository. An issue that already has a GitHub issue linked never gets a second one.
+

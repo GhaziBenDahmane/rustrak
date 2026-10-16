@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { alertRuleConditionsSchema } from './alert.js';
 import { dateTimeSchema } from './common.js';
 
 export const gitHubAppSchema = z.object({
@@ -50,10 +51,48 @@ export const projectRepositorySchema = z.object({
   default_branch: z.string(),
   html_url: z.string(),
   code_mappings: z.array(codeMappingSchema),
+  /** Open a GitHub issue for new issues that pass `auto_create_conditions`. */
+  auto_create_issues: z.boolean(),
+  auto_create_conditions: alertRuleConditionsSchema,
+  codeowners_rules: z.number().int().nullable(),
+  codeowners_synced_at: dateTimeSchema.nullable(),
 });
 
 export const updateProjectRepositorySchema = z.object({
   installation_id: z.number().int(),
   repo_full_name: z.string().min(1),
   code_mappings: z.array(codeMappingSchema).optional(),
+  auto_create_issues: z.boolean().optional(),
+  auto_create_conditions: alertRuleConditionsSchema.optional(),
+});
+
+export const issueLinkSchema = z.object({
+  id: z.number().int(),
+  issue_id: z.string(),
+  repo_full_name: z.string(),
+  number: z.number().int(),
+  title: z.string(),
+  url: z.string(),
+  state: z.string(),
+  created_at: dateTimeSchema,
+});
+
+export const repoCommitSchema = z.object({
+  repo_full_name: z.string(),
+  sha: z.string(),
+  message: z.string(),
+  author_name: z.string(),
+  author_login: z.string().nullable(),
+  url: z.string(),
+  committed_at: dateTimeSchema,
+});
+
+export const issueGitHubSchema = z.object({
+  links: z.array(issueLinkSchema),
+  suspect_commits: z.array(repoCommitSchema),
+  owners: z.array(z.string()),
+});
+
+export const gitHubLoginSchema = z.object({
+  login: z.string().nullable(),
 });

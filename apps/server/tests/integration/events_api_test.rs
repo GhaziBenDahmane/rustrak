@@ -172,6 +172,7 @@ async fn create_test_event(
         &denormalized,
         None,
         None,
+        None,
     )
     .await
     .expect("Failed to create test event");

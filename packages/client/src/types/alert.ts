@@ -3,6 +3,7 @@ import type {
   alertHistorySchema,
   alertIntegrationSchema,
   alertRuleChannelInputSchema,
+  alertRuleConditionsSchema,
   alertRuleSchema,
   alertStatusSchema,
   alertTypeSchema,
@@ -63,6 +64,7 @@ export type RoutingOverride = Record<string, unknown>;
 /**
  * Alert rule (per-project trigger configuration)
  */
+export type AlertRuleConditions = z.infer<typeof alertRuleConditionsSchema>;
 export type AlertRule = z.infer<typeof alertRuleSchema>;
 
 /**

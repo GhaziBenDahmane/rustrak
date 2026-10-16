@@ -280,7 +280,13 @@
       "statusChanged": "changed status to {status}",
       "priorityChanged": "set priority to {priority}",
       "regression": "detected a regression",
-      "firstSeen": "first saw this issue"
+      "firstSeen": "first saw this issue",
+      "resolvedByCommit": "resolved this issue in commit {sha}",
+      "closedOnGitHub": "closed the linked issue on GitHub",
+      "reopenedOnGitHub": "reopened the linked issue on GitHub",
+      "githubCreated": "created {ref} on GitHub",
+      "githubLinked": "linked {ref}",
+      "githubUnlinked": "unlinked {ref}"
     },
     "issueStatus": {
       "new": "New",
@@ -618,7 +624,8 @@
       "fieldAlertType": "That alert type",
       "saveFailed": "Failed to save rule",
       "updated": "Alert rule updated",
-      "created": "Alert rule created"
+      "created": "Alert rule created",
+      "filters": "Filters"
     },
     "integrationDialog": {
       "name": "Name",
@@ -1749,10 +1756,57 @@
       "sourceRoot": "Path in the repository",
       "addMapping": "Add mapping",
       "removeMapping": "Remove mapping",
+      "issues": "Issues",
+      "autoCreate": "Open GitHub issues automatically",
+      "autoCreateDescription": "A new error opens a GitHub issue, once per issue, when it passes the filters below.",
+      "fixes": "Resolve from commits",
+      "fixesDescription": "A commit on the default branch that says this resolves the issue.",
+      "codeowners": "Code owners",
+      "codeownersDescription": "Read from the repository's CODEOWNERS file and shown on each issue.",
+      "codeownersSync": "Sync",
+      "codeownersStatus": "{count, plural, one {# rule} other {# rules}} · {when}",
+      "codeownersNever": "Not synced yet",
+      "codeownersFailed": "Could not sync CODEOWNERS",
       "danger": "Danger zone",
       "disconnect": "Disconnect repository",
       "disconnectDescription": "Stops linking this project's issues to GitHub. Existing links stay.",
-      "saveFailed": "Could not save the repository"
+      "saveFailed": "Could not save the repository",
+      "autoCreateFilters": "Which errors",
+      "autoCreateFiltersDescription": "Without filters, every new issue opens one. \"Minimum events\" waits until the issue has happened that many times."
+    },
+    "issue": {
+      "menu": "GitHub actions",
+      "open": "Open",
+      "closed": "Closed",
+      "create": "Create GitHub issue",
+      "link": "Link existing issue…",
+      "unlink": "Unlink #{number}",
+      "createFailed": "Could not create the GitHub issue",
+      "linkFailed": "Could not link the GitHub issue",
+      "unlinkFailed": "Could not unlink the GitHub issue",
+      "linkTitle": "Link a GitHub issue",
+      "linkDescription": "Paste an issue or pull request URL, or type #123 for this project's repository.",
+      "linkSubmit": "Link"
+    },
+    "code": {
+      "connect": "Connect this project to GitHub",
+      "title": "Code",
+      "suspect": "Suspect commits",
+      "owners": "Owners"
+    },
+    "account": {
+      "title": "GitHub username",
+      "description": "Assigning you an issue in Rustrak assigns you its linked GitHub issues, and the other way round.",
+      "saved": "GitHub username saved",
+      "saveFailed": "Could not save your GitHub username"
     }
+  },
+  "conditions": {
+    "minLevel": "Level",
+    "anyLevel": "Any level",
+    "levelOrAbove": "{level} or above",
+    "minEvents": "Minimum events",
+    "environments": "Environments",
+    "description": "Comma-separated. Empty means every environment."
   }
 }

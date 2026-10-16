@@ -12,11 +12,16 @@ use crate::config::Config;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::models::github::{
-    GitHubApp, GitHubAppInfo, GitHubStatus, ManifestRequest, ManifestResponse,
-    UpdateProjectRepository,
+    CodeMapping, CreateGitHubIssue, GitHubApp, GitHubAppInfo, GitHubStatus, IssueGitHub,
+    LinkGitHubIssue, ManifestRequest, ManifestResponse, UpdateProjectRepository,
 };
+use crate::models::{Issue, Project};
 use crate::services::access::{self, Action};
-use crate::services::github::{client, GitHubClient, GitHubService};
+use crate::services::github::{
+    client, codeowners_for, repo_path, sync, GitHubClient, GitHubService, CODEOWNERS_PATHS,
+};
+use crate::services::{IssueService, ProjectService};
+use uuid::Uuid;
 
 const WEB_URL: &str = "https://github.com";
 const STATE_KEY: &str = "github_manifest_state";
@@ -379,20 +384,14 @@ pub async fn put_project_repository(
 ) -> AppResult<HttpResponse> {
     let project_id = path.into_inner();
     require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
-    // The name goes into a GitHub API path; anything but `owner/repo` would
-    // point the installation token at another endpoint.
-    let valid = |part: &str| {
-        !part.is_empty()
-            && part != "."
-            && part != ".."
-            && part
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-    };
-    match body.repo_full_name.split_once('/') {
-        Some((owner, name)) if valid(owner) && valid(name) => {}
-        _ => return Err(AppError::Validation("Invalid repository name".into())),
+    if !crate::services::github::is_repo_full_name(&body.repo_full_name) {
+        return Err(AppError::Validation("Invalid repository name".into()));
     }
+    let conditions = body
+        .auto_create_conditions
+        .clone()
+        .unwrap_or_else(|| serde_json::json!({}));
+    crate::models::alert::RuleConditions::parse(&conditions)?;
     let app = GitHubService::require_app(pool.get_ref()).await?;
     // Asking GitHub proves the installation reaches the repository.
     let repo = GitHubClient::new(&app)
@@ -405,6 +404,8 @@ pub async fn put_project_repository(
         &repo.full_name,
         &repo.default_branch,
         body.code_mappings.as_deref().unwrap_or_default(),
+        body.auto_create_issues.unwrap_or(false),
+        &conditions,
     )
     .await?;
     Ok(HttpResponse::Ok()
@@ -436,6 +437,343 @@ pub async fn delete_project_repository(
     require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
     GitHubService::delete_project_repository(pool.get_ref(), project_id).await?;
     Ok(HttpResponse::NoContent().finish())
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/github/codeowners",
+    tag = "GitHub",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+    ),
+    responses(
+        (status = 200, description = "CODEOWNERS synced", body = crate::models::github::ProjectRepository),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST /api/projects/{project_id}/github/codeowners: copies the repository's
+/// CODEOWNERS so ownership can be answered without asking GitHub each time.
+pub async fn sync_codeowners(
+    pool: web::Data<DbPool>,
+    path: web::Path<i32>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let project_id = path.into_inner();
+    require_project(pool.get_ref(), &actor, project_id, Action::UpdateProject).await?;
+    let app = GitHubService::require_app(pool.get_ref()).await?;
+    let repo = GitHubService::project_repository_row(pool.get_ref(), project_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound("This project has no GitHub repository".into()))?;
+    let client = GitHubClient::new(&app);
+    let mut content = None;
+    for path in CODEOWNERS_PATHS {
+        content = client
+            .file(repo.installation_id, &repo.repo_full_name, path)
+            .await?;
+        if content.is_some() {
+            break;
+        }
+    }
+    GitHubService::save_codeowners(
+        pool.get_ref(),
+        project_id,
+        &repo.repo_full_name,
+        content.as_deref(),
+    )
+    .await?;
+    Ok(HttpResponse::Ok()
+        .json(GitHubService::project_repository(pool.get_ref(), project_id).await?))
+}
+
+/// Loads an issue after checking the actor may do `action` in its project.
+async fn require_issue(
+    pool: &DbPool,
+    actor: &ApiActor,
+    project_id: i32,
+    issue_id: Uuid,
+    action: Action,
+) -> AppResult<(Project, Issue)> {
+    access::require(pool, actor.is_admin(), actor.user_id(), project_id, action).await?;
+    let project = ProjectService::get_by_id(pool, project_id).await?;
+    let issue = IssueService::get_by_id(pool, issue_id).await?;
+    if issue.project_id != project_id {
+        return Err(AppError::NotFound(format!("Issue {issue_id} not found")));
+    }
+    Ok((project, issue))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/issues/{issue_id}/github",
+    tag = "GitHub",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
+    ),
+    responses(
+        (status = 200, description = "Links, suspect commits and owners", body = IssueGitHub),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/projects/{project_id}/issues/{issue_id}/github: the issue's links,
+/// the commits that may have caused it, and who owns its culprit file.
+pub async fn issue_github(
+    pool: web::Data<DbPool>,
+    path: web::Path<(i32, Uuid)>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let (project_id, issue_id) = path.into_inner();
+    let (_, issue) = require_issue(
+        pool.get_ref(),
+        &actor,
+        project_id,
+        issue_id,
+        Action::ViewProject,
+    )
+    .await?;
+    let mut answer = IssueGitHub {
+        links: GitHubService::links(pool.get_ref(), issue_id).await?,
+        suspect_commits: Vec::new(),
+        owners: Vec::new(),
+    };
+    if let Some(repo) = GitHubService::project_repository_row(pool.get_ref(), project_id).await? {
+        let mappings: Vec<CodeMapping> =
+            serde_json::from_str(&repo.code_mappings).unwrap_or_default();
+        if let Some(file) = repo_path(&issue.last_frame_filename, &mappings) {
+            // A mapping says exactly where the file is; without one, any path
+            // that ends the same way may be it.
+            let mapped = mappings
+                .iter()
+                .any(|m| issue.last_frame_filename.starts_with(m.stack_root.as_str()));
+            answer.suspect_commits = GitHubService::suspect_commits(
+                pool.get_ref(),
+                &repo.repo_full_name,
+                &file,
+                mapped,
+                issue.first_seen,
+            )
+            .await?;
+            answer.owners = repo
+                .codeowners
+                .as_deref()
+                .map(|c| codeowners_for(c, &file))
+                .unwrap_or_default();
+        }
+    }
+    Ok(HttpResponse::Ok().json(answer))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/issues/{issue_id}/github/issues",
+    tag = "GitHub",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
+    ),
+    request_body = CreateGitHubIssue,
+    responses(
+        (status = 201, description = "GitHub issue created and linked", body = crate::models::github::IssueLink),
+        (status = 400, description = "Invalid request", body = crate::error::ErrorResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST .../github/issues: opens a GitHub issue and links it.
+pub async fn create_github_issue(
+    pool: web::Data<DbPool>,
+    config: web::Data<Config>,
+    path: web::Path<(i32, Uuid)>,
+    body: web::Json<CreateGitHubIssue>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let (project_id, issue_id) = path.into_inner();
+    let (project, issue) = require_issue(
+        pool.get_ref(),
+        &actor,
+        project_id,
+        issue_id,
+        Action::MutateIssue,
+    )
+    .await?;
+    let body = body.into_inner();
+    let link = sync::create_issue(
+        pool.get_ref(),
+        &project,
+        &issue,
+        body.title,
+        body.body,
+        actor.user_id(),
+        &config.dashboard_url(),
+    )
+    .await?;
+    Ok(HttpResponse::Created().json(link))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/projects/{project_id}/issues/{issue_id}/github/links",
+    tag = "GitHub",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
+    ),
+    request_body = LinkGitHubIssue,
+    responses(
+        (status = 201, description = "GitHub issue linked", body = crate::models::github::IssueLink),
+        (status = 400, description = "Invalid request", body = crate::error::ErrorResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST .../github/links: links an existing GitHub issue or pull request.
+pub async fn link_github_issue(
+    pool: web::Data<DbPool>,
+    config: web::Data<Config>,
+    path: web::Path<(i32, Uuid)>,
+    body: web::Json<LinkGitHubIssue>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let (project_id, issue_id) = path.into_inner();
+    let (project, issue) = require_issue(
+        pool.get_ref(),
+        &actor,
+        project_id,
+        issue_id,
+        Action::MutateIssue,
+    )
+    .await?;
+    let link = sync::link_issue(
+        pool.get_ref(),
+        &project,
+        &issue,
+        &body.reference,
+        actor.user_id(),
+        &config.dashboard_url(),
+    )
+    .await?;
+    Ok(HttpResponse::Created().json(link))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    delete,
+    path = "/api/projects/{project_id}/issues/{issue_id}/github/links/{link_id}",
+    tag = "GitHub",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
+        ("link_id" = i32, Path, description = "Link ID"),
+    ),
+    responses(
+        (status = 204, description = "Link removed"),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// DELETE .../github/links/{link_id}
+pub async fn unlink_github_issue(
+    pool: web::Data<DbPool>,
+    path: web::Path<(i32, Uuid, i32)>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let (project_id, issue_id, link_id) = path.into_inner();
+    require_issue(
+        pool.get_ref(),
+        &actor,
+        project_id,
+        issue_id,
+        Action::MutateIssue,
+    )
+    .await?;
+    sync::unlink_issue(pool.get_ref(), issue_id, link_id, actor.user_id()).await?;
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct GitHubLogin {
+    /// The person's GitHub username; `null` clears it.
+    login: Option<String>,
+}
+
+async fn my_login(pool: &DbPool, user_id: i32) -> AppResult<HttpResponse> {
+    let (login,): (Option<String>,) =
+        sqlx::query_as("SELECT github_login FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await?;
+    Ok(HttpResponse::Ok().json(json!({ "login": login })))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/github/me",
+    tag = "GitHub",
+    responses(
+        (status = 200, description = "Your GitHub username", body = GitHubLogin),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/github/me: the GitHub username assignees sync through.
+pub async fn get_my_login(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+    my_login(pool.get_ref(), actor.require_user()?.id).await
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    put,
+    path = "/api/github/me",
+    tag = "GitHub",
+    request_body = GitHubLogin,
+    responses(
+        (status = 200, description = "GitHub username saved", body = GitHubLogin),
+        (status = 400, description = "Invalid request", body = crate::error::ErrorResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// PUT /api/github/me
+pub async fn put_my_login(
+    pool: web::Data<DbPool>,
+    body: web::Json<GitHubLogin>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let user_id = actor.require_user()?.id;
+    let login = body
+        .login
+        .as_deref()
+        .map(|l| l.trim().trim_start_matches('@'))
+        .filter(|l| !l.is_empty());
+    if login.is_some_and(|l| !l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
+        return Err(AppError::Validation("Invalid GitHub username".into()));
+    }
+    // Inbound assignments find people by login, so the unique index on it
+    // answers whether someone else has it, race included.
+    sqlx::query("UPDATE users SET github_login = $2 WHERE id = $1")
+        .bind(user_id)
+        .bind(login)
+        .execute(pool.get_ref())
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(db) if db.is_unique_violation() => AppError::Conflict(format!(
+                "GitHub user {} is already someone else's",
+                login.unwrap_or_default()
+            )),
+            e => e.into(),
+        })?;
+    my_login(pool.get_ref(), user_id).await
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -486,6 +824,14 @@ pub async fn webhook(
 }
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
+    // Before `issues::configure`: its `/issues` scope would claim these paths.
+    cfg.service(
+        web::scope("/api/projects/{project_id}/issues/{issue_id}/github")
+            .route("", web::get().to(issue_github))
+            .route("/issues", web::post().to(create_github_issue))
+            .route("/links", web::post().to(link_github_issue))
+            .route("/links/{link_id}", web::delete().to(unlink_github_issue)),
+    );
     cfg.service(
         web::scope("/api/github")
             .route("", web::get().to(status))
@@ -500,12 +846,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 web::resource("/webhook")
                     .app_data(web::PayloadConfig::new(25 * 1024 * 1024))
                     .route(web::post().to(webhook)),
-            ),
+            )
+            .route("/me", web::get().to(get_my_login))
+            .route("/me", web::put().to(put_my_login)),
     )
     .service(
         web::scope("/api/projects/{project_id}/github")
             .route("", web::get().to(get_project_repository))
             .route("", web::put().to(put_project_repository))
-            .route("", web::delete().to(delete_project_repository)),
+            .route("", web::delete().to(delete_project_repository))
+            .route("/codeowners", web::post().to(sync_codeowners)),
     );
 }

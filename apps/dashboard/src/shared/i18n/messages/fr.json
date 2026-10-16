@@ -280,7 +280,13 @@
       "statusChanged": "a changé le statut en {status}",
       "priorityChanged": "a défini la priorité à {priority}",
       "regression": "a détecté une régression",
-      "firstSeen": "a vu ce problème pour la première fois"
+      "firstSeen": "a vu ce problème pour la première fois",
+      "resolvedByCommit": "a résolu ce ticket dans le commit {sha}",
+      "closedOnGitHub": "a fermé le ticket lié sur GitHub",
+      "reopenedOnGitHub": "a rouvert le ticket lié sur GitHub",
+      "githubCreated": "a créé {ref} sur GitHub",
+      "githubLinked": "a lié {ref}",
+      "githubUnlinked": "a délié {ref}"
     },
     "issueStatus": {
       "new": "Nouveau",
@@ -618,7 +624,8 @@
       "fieldAlertType": "Ce type d’alerte",
       "saveFailed": "Échec de l’enregistrement de la règle",
       "updated": "Règle d’alerte mise à jour",
-      "created": "Règle d’alerte créée"
+      "created": "Règle d’alerte créée",
+      "filters": "Filtres"
     },
     "integrationDialog": {
       "name": "Nom",
@@ -1749,10 +1756,57 @@
       "sourceRoot": "Chemin dans le dépôt",
       "addMapping": "Ajouter",
       "removeMapping": "Supprimer",
+      "issues": "Tickets",
+      "autoCreate": "Ouvrir des tickets GitHub automatiquement",
+      "autoCreateDescription": "Une nouvelle erreur ouvre un ticket GitHub, une fois par problème, si elle passe les filtres ci-dessous.",
+      "fixes": "Résoudre depuis les commits",
+      "fixesDescription": "Un commit sur la branche par défaut qui contient ceci résout le ticket.",
+      "codeowners": "Propriétaires du code",
+      "codeownersDescription": "Lus depuis le fichier CODEOWNERS du dépôt et affichés sur chaque ticket.",
+      "codeownersSync": "Synchroniser",
+      "codeownersStatus": "{count, plural, one {# règle} other {# règles}} · {when}",
+      "codeownersNever": "Pas encore synchronisé",
+      "codeownersFailed": "Impossible de synchroniser CODEOWNERS",
       "danger": "Zone de danger",
       "disconnect": "Déconnecter le dépôt",
       "disconnectDescription": "Arrête de lier les tickets de ce projet à GitHub. Les liens existants restent.",
-      "saveFailed": "Impossible d'enregistrer le dépôt"
+      "saveFailed": "Impossible d'enregistrer le dépôt",
+      "autoCreateFilters": "Quelles erreurs",
+      "autoCreateFiltersDescription": "Sans filtres, chaque nouveau problème en ouvre un. « Événements minimum » attend que le problème se soit produit autant de fois."
+    },
+    "issue": {
+      "menu": "Actions GitHub",
+      "open": "Ouvert",
+      "closed": "Fermé",
+      "create": "Créer un ticket GitHub",
+      "link": "Lier un ticket existant…",
+      "unlink": "Délier #{number}",
+      "createFailed": "Impossible de créer le ticket GitHub",
+      "linkFailed": "Impossible de lier le ticket GitHub",
+      "unlinkFailed": "Impossible de délier le ticket GitHub",
+      "linkTitle": "Lier un ticket GitHub",
+      "linkDescription": "Collez l'URL d'un ticket ou d'une pull request, ou tapez #123 pour le dépôt de ce projet.",
+      "linkSubmit": "Lier"
+    },
+    "code": {
+      "connect": "Connecter ce projet à GitHub",
+      "title": "Code",
+      "suspect": "Commits suspects",
+      "owners": "Propriétaires"
+    },
+    "account": {
+      "title": "Nom d'utilisateur GitHub",
+      "description": "Vous assigner un ticket dans Rustrak vous assigne ses tickets GitHub liés, et inversement.",
+      "saved": "Nom d'utilisateur GitHub enregistré",
+      "saveFailed": "Impossible d'enregistrer votre nom d'utilisateur GitHub"
     }
+  },
+  "conditions": {
+    "minLevel": "Niveau",
+    "anyLevel": "Tous niveaux",
+    "levelOrAbove": "{level} ou plus",
+    "minEvents": "Événements minimum",
+    "environments": "Environnements",
+    "description": "Séparés par des virgules. Vide signifie tous."
   }
 }

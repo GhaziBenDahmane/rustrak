@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useFormatter, useTranslations } from 'use-intl';
 import { addIssueComment } from '@/features/issue/api/mutations';
+import { GitHubMark } from '@/shared/ui/components/github-mark';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import { Textarea } from '@/shared/ui/components/shadcn/textarea';
 import { useRouter } from '@/shared/ui/hooks/use-router';
@@ -29,22 +30,59 @@ function noteText(entry: ActivityEntry): string {
   return typeof text === 'string' ? text : entry.data;
 }
 
-/** A human-readable description of a non-note activity entry. */
-function describe(
+/** What GitHub has to do with an entry: who did it there, and where. */
+function githubSource(
   entry: ActivityEntry,
-  t: (key: string, values?: Record<string, string | number>) => string,
-): string {
+): { author: string; url: string } | null {
+  const d = parseData(entry.data);
+  const commit = d.commit as Record<string, unknown> | undefined;
+  if (d.source !== 'github') return null;
+  return {
+    author: String(commit?.author ?? d.author ?? ''),
+    url: String(commit?.url ?? d.url ?? ''),
+  };
+}
+
+type Translate = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
+
+/** A status change, made in Rustrak, on GitHub, or by a commit. */
+function describeStatus(d: Record<string, unknown>, t: Translate): string {
+  const status = typeof d.status === 'string' ? d.status : '';
+  const commit = d.commit as Record<string, unknown> | undefined;
+  if (commit) {
+    return t('activity.resolvedByCommit', {
+      sha: String(commit.sha ?? '').slice(0, 7),
+    });
+  }
+  if (d.source === 'github') {
+    return status === 'resolved'
+      ? t('activity.closedOnGitHub')
+      : t('activity.reopenedOnGitHub');
+  }
+  if (status === 'resolved') return t('activity.statusResolved');
+  if (status === 'unresolved') return t('activity.statusReopened');
+  if (status === 'ignored') return t('activity.statusMuted');
+  return t('activity.statusChanged', { status });
+}
+
+function describeGitHubLink(d: Record<string, unknown>, t: Translate): string {
+  const ref = `${String(d.repo ?? '')}#${String(d.number ?? '')}`;
+  if (d.action === 'created') return t('activity.githubCreated', { ref });
+  if (d.action === 'unlinked') return t('activity.githubUnlinked', { ref });
+  return t('activity.githubLinked', { ref });
+}
+
+/** A human-readable description of a non-note activity entry. */
+function describe(entry: ActivityEntry, t: Translate): string {
   const d = parseData(entry.data);
   switch (entry.type) {
-    case 'set_status': {
-      const status = typeof d.status === 'string' ? d.status : '';
-      const keys: Record<string, string> = {
-        resolved: 'activity.statusResolved',
-        unresolved: 'activity.statusReopened',
-        ignored: 'activity.statusMuted',
-      };
-      return keys[status] ?? t('activity.statusChanged', { status });
-    }
+    case 'set_status':
+      return describeStatus(d, t);
+    case 'github_link':
+      return describeGitHubLink(d, t);
     case 'set_priority':
       return t('activity.priorityChanged', {
         priority: String(d.priority ?? '—'),
@@ -134,10 +172,22 @@ export function IssueActivity({
           <ol className="space-y-4">
             {entries.map((entry) => {
               const isNote = entry.type === 'note' || entry.type === 'comment';
+              const github = githubSource(entry);
               return (
                 <li key={entry.id} className="flex gap-3 text-sm">
                   <div className="mt-1.5 size-1.5 rounded-full bg-muted-foreground/50 shrink-0" />
                   <div className="min-w-0 flex-1">
+                    {github && (
+                      <a
+                        href={github.url || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mb-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <GitHubMark className="size-3" />
+                        {github.author || 'GitHub'}
+                      </a>
+                    )}
                     {isNote ? (
                       <p className="whitespace-pre-wrap break-words">
                         {noteText(entry)}

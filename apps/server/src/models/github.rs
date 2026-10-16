@@ -4,6 +4,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use uuid::Uuid;
 
 /// The instance's one GitHub App, as GitHub returned it from the manifest flow.
 /// Secrets never leave the server: [`GitHubAppInfo`] is what the API answers.
@@ -89,6 +90,10 @@ pub struct ProjectRepositoryRow {
     pub repo_full_name: String,
     pub default_branch: String,
     pub code_mappings: String,
+    pub auto_create_issues: bool,
+    pub auto_create_conditions: String,
+    pub codeowners: Option<String>,
+    pub codeowners_synced_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,6 +105,14 @@ pub struct ProjectRepository {
     pub default_branch: String,
     pub html_url: String,
     pub code_mappings: Vec<CodeMapping>,
+    /// Open a GitHub issue for new issues that pass `auto_create_conditions`.
+    pub auto_create_issues: bool,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
+    pub auto_create_conditions: serde_json::Value,
+    /// How many ownership rules the last CODEOWNERS sync found; `None` before
+    /// the first sync.
+    pub codeowners_rules: Option<usize>,
+    pub codeowners_synced_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,6 +122,13 @@ pub struct UpdateProjectRepository {
     pub repo_full_name: String,
     #[serde(default)]
     pub code_mappings: Option<Vec<CodeMapping>>,
+    #[serde(default)]
+    pub auto_create_issues: Option<bool>,
+    /// The same filters an alert rule takes: `min_level`, `environments`,
+    /// `min_events`.
+    #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Object>))]
+    pub auto_create_conditions: Option<serde_json::Value>,
 }
 
 /// A repository an installation can reach.
@@ -120,6 +140,65 @@ pub struct GitHubRepository {
     pub default_branch: String,
     pub private: bool,
     pub html_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct IssueLink {
+    pub id: i32,
+    pub issue_id: Uuid,
+    pub repo_full_name: String,
+    pub number: i64,
+    pub title: String,
+    pub url: String,
+    /// `open` or `closed`, as of the last webhook or sync.
+    pub state: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct RepoCommit {
+    pub repo_full_name: String,
+    pub sha: String,
+    pub message: String,
+    pub author_name: String,
+    pub author_login: Option<String>,
+    pub url: String,
+    #[serde(skip)]
+    pub files: String,
+    pub committed_at: DateTime<Utc>,
+}
+
+/// `GET .../issues/{id}/github`: the issue's "Code" block in one answer.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct IssueGitHub {
+    pub links: Vec<IssueLink>,
+    /// Commits that touched the issue's culprit file shortly before it first
+    /// appeared, newest first.
+    pub suspect_commits: Vec<RepoCommit>,
+    /// Owners of the culprit file according to CODEOWNERS.
+    pub owners: Vec<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct CreateGitHubIssue {
+    /// Defaults to the Rustrak issue's title.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Defaults to a summary with the culprit and a link back.
+    #[serde(default)]
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct LinkGitHubIssue {
+    /// A GitHub issue or pull request URL, or `#123` for the project's
+    /// repository.
+    pub reference: String,
 }
 
 #[derive(Debug, Deserialize)]

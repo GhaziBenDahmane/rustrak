@@ -5,6 +5,7 @@
 import type {
   GitHubRepository,
   GitHubStatus,
+  IssueGitHub,
   ProjectRepository,
   Result,
   RustrakError,
@@ -30,4 +31,19 @@ export async function getProjectRepository(
 ): Promise<Result<ProjectRepository | null, RustrakError>> {
   const client = await createClient();
   return client.github.projectRepository(projectId);
+}
+
+export async function getIssueGitHub(
+  projectId: number,
+  issueId: string,
+): Promise<Result<IssueGitHub, RustrakError>> {
+  const client = await createClient();
+  return client.github.issue(projectId, issueId);
+}
+
+export async function getMyGitHubLogin(): Promise<
+  Result<{ login: string | null }, RustrakError>
+> {
+  const client = await createClient();
+  return client.github.myLogin();
 }

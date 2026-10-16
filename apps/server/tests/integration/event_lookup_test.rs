@@ -83,6 +83,7 @@ async fn sdk_event_lookup_preserves_project_scope_and_viewer_authorization() {
             &fields,
             None,
             None,
+            None,
         )
         .await
         .unwrap();

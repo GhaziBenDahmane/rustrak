@@ -3,6 +3,7 @@ import type {
   EventDetail,
   Issue,
   IssueAggregates,
+  IssueGitHub,
   IssueStats,
   ProjectRepository,
 } from '@rustrak/client';
@@ -21,7 +22,10 @@ import {
   readEventPayload,
   splitIssueTitle,
 } from '@/features/event/lib/event-payload';
-import { getProjectRepository } from '@/features/github/api/queries';
+import {
+  getIssueGitHub,
+  getProjectRepository,
+} from '@/features/github/api/queries';
 import { frameSourceUrl } from '@/features/github/lib/source-url';
 import {
   getIssue,
@@ -56,6 +60,7 @@ export const Route = createFileRoute(
       stats,
       activity,
       repository,
+      code,
     ] = await Promise.all([
       getProject(projectId),
       getIssue(projectId, issueId),
@@ -65,6 +70,7 @@ export const Route = createFileRoute(
       getIssueStats(projectId, issueId, '30d'),
       getIssueActivity(projectId, issueId),
       getProjectRepository(projectId),
+      getIssueGitHub(projectId, issueId),
     ]);
 
     return {
@@ -76,6 +82,7 @@ export const Route = createFileRoute(
       stats,
       activity,
       repository,
+      code,
     };
   },
   head: ({ loaderData }) => {
@@ -122,6 +129,7 @@ function EventPage() {
     stats: statsResult,
     activity: activityResult,
     repository: repositoryResult,
+    code: codeResult,
   } = Route.useLoaderData();
   const projectId = Number.parseInt(id, 10);
 
@@ -165,7 +173,8 @@ function EventPage() {
       aggregates={aggregatesResult.success ? aggregatesResult.data : null}
       stats30d={statsResult.success ? statsResult.data : null}
       activity={activityResult.success ? activityResult.data : []}
-      repository={repositoryResult.success ? repositoryResult.data : null}
+      repository={repositoryResult.success ? repositoryResult.data : undefined}
+      code={codeResult.success ? codeResult.data : null}
     />
   );
 }
@@ -180,6 +189,7 @@ function EventView({
   stats30d,
   activity,
   repository,
+  code,
 }: {
   projectId: number;
   issueId: string;
@@ -189,8 +199,10 @@ function EventView({
   aggregates: IssueAggregates | null;
   stats30d: IssueStats | null;
   activity: ActivityEntry[];
-  /** The project's GitHub repository; `null` without one or on failure. */
-  repository: ProjectRepository | null;
+  /** The project's GitHub repository: `null` without one, `undefined` when
+   * it could not be loaded. */
+  repository: ProjectRepository | null | undefined;
+  code: IssueGitHub | null;
 }) {
   const t = useTranslations('projectPages');
   const eventData = event.data as Record<string, unknown>;
@@ -226,6 +238,8 @@ function EventView({
       issueId={issueId}
       issue={issue}
       activity={activity}
+      code={code}
+      connected={repository === undefined ? null : repository !== null}
     />
   );
   const sourceUrl = repository
@@ -242,6 +256,13 @@ function EventView({
         message={message}
         levelText={levelText}
         userCount={userCount}
+        // Links outlive a disconnected repository and can still be unlinked.
+        // Unloaded links are not "no links": offering Create then could
+        // open a second GitHub issue for one already linked.
+        githubLinks={
+          code && (repository || code.links.length > 0) ? code.links : null
+        }
+        githubConnected={repository != null}
       />
 
       {/* Body */}

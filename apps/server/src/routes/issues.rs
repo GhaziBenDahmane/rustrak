@@ -9,6 +9,7 @@ use crate::models::IssueResponse;
 use crate::models::{BulkDeleteIssues, BulkUpdateIssues, UpdateIssueState};
 use crate::pagination::{ListIssuesQuery, OffsetPaginatedResponse};
 use crate::services::access::{self, Action};
+use crate::services::github;
 use crate::services::{EventService, IssueService, IssueSocialService, ProjectService};
 use serde::Deserialize;
 use serde_json::json;
@@ -238,11 +239,13 @@ pub async fn update_issue(
             "resolvedInNextRelease",
         )
         .await?;
+        mirror_status(pool.get_ref(), issue_id);
     } else if let Some(status) = body.resolved_status(&updated.status)? {
         let substatus = body.validated_substatus()?;
         updated = IssueService::set_status(pool.get_ref(), issue_id, status, substatus).await?;
         IssueSocialService::record_status_change(pool.get_ref(), issue_id, actor.user_id(), status)
             .await?;
+        mirror_status(pool.get_ref(), issue_id);
     }
     if let Some(priority) = body.priority.as_deref() {
         updated = IssueService::set_priority(pool.get_ref(), issue_id, priority).await?;
@@ -255,6 +258,15 @@ pub async fn update_issue(
             body.assignee_type.as_ref().and_then(|t| t.as_deref()),
         )
         .await?;
+        github::sync::spawn(
+            "assignee sync",
+            github::sync::mirror_assignee(
+                pool.get_ref().clone(),
+                issue_id,
+                updated.assigned_to,
+                None,
+            ),
+        );
     }
 
     Ok(HttpResponse::Ok().json(updated.to_response(&project.slug)))
@@ -479,6 +491,19 @@ pub async fn bulk_update_issues(
 
     tx.commit().await?;
 
+    if body.status.is_some() {
+        for &issue_id in &body.ids {
+            let pool = pool.get_ref().clone();
+            // The UPDATE skipped other projects' issues; so does the sync.
+            github::sync::spawn("status sync", async move {
+                if IssueService::get_by_id(&pool, issue_id).await?.project_id == project_id {
+                    github::sync::mirror_status(pool, issue_id).await?;
+                }
+                Ok(())
+            });
+        }
+    }
+
     Ok(HttpResponse::Ok().json(json!({ "updated": updated })))
 }
 
@@ -533,6 +558,14 @@ pub async fn bulk_delete_issues(
         }
     };
     Ok(HttpResponse::Ok().json(json!({ "deleted": deleted })))
+}
+
+/// Closes or reopens the GitHub issues linked to this one, in the background.
+fn mirror_status(pool: &DbPool, issue_id: Uuid) {
+    github::sync::spawn(
+        "status sync",
+        github::sync::mirror_status(pool.clone(), issue_id),
+    );
 }
 
 /// Loads an issue and verifies it belongs to the project (helper for sub-routes).
@@ -665,6 +698,15 @@ pub async fn create_issue_comment(
     let entry =
         IssueSocialService::add_comment(pool.get_ref(), issue_id, actor.user_id(), &body.text)
             .await?;
+    github::sync::spawn(
+        "comment sync",
+        github::sync::mirror_comment(
+            pool.get_ref().clone(),
+            issue_id,
+            actor.user_id(),
+            body.text.clone(),
+        ),
+    );
     Ok(HttpResponse::Created().json(entry))
 }
 
