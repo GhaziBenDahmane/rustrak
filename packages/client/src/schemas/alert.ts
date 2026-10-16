@@ -78,6 +78,19 @@ export const alertRuleChannelInputSchema = z.object({
 });
 
 /**
+ * A rule's filters. Every one is optional; a rule with none fires on every
+ * issue its trigger sees.
+ */
+export const alertRuleConditionsSchema = z.object({
+  /** The quietest level that still fires. The server takes `null` as absent. */
+  min_level: z.enum(['debug', 'info', 'warning', 'error', 'fatal']).nullish(),
+  /** When non-empty, the only environments that fire. */
+  environments: z.array(z.string()).optional(),
+  /** A new issue fires when it reaches this many events, not on its first. */
+  min_events: z.number().int().min(1).nullish(),
+});
+
+/**
  * Alert rule response schema
  */
 export const alertRuleSchema = z.object({
@@ -86,7 +99,7 @@ export const alertRuleSchema = z.object({
   name: z.string(),
   alert_type: alertTypeSchema,
   is_enabled: z.boolean(),
-  conditions: z.record(z.string(), z.unknown()),
+  conditions: alertRuleConditionsSchema,
   cooldown_minutes: z.number().int(),
   last_triggered_at: dateTimeSchema.nullable(),
   created_at: dateTimeSchema,
@@ -103,7 +116,7 @@ export const createAlertRuleSchema = z.object({
   alert_type: alertTypeSchema,
   channels: z.array(alertRuleChannelInputSchema).default([]),
   is_enabled: z.boolean().optional(),
-  conditions: z.record(z.string(), z.unknown()).optional(),
+  conditions: alertRuleConditionsSchema.optional(),
   cooldown_minutes: z.number().int().min(0).optional(),
 });
 
@@ -113,7 +126,7 @@ export const createAlertRuleSchema = z.object({
 export const updateAlertRuleSchema = z.object({
   name: z.string().min(1).optional(),
   is_enabled: z.boolean().optional(),
-  conditions: z.record(z.string(), z.unknown()).optional(),
+  conditions: alertRuleConditionsSchema.optional(),
   cooldown_minutes: z.number().int().min(0).optional(),
   channels: z.array(alertRuleChannelInputSchema).optional(),
 });

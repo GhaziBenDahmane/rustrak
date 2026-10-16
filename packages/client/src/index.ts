@@ -49,6 +49,7 @@ export type {
   AlertIntegration,
   AlertRule,
   AlertRuleChannelInput,
+  AlertRuleConditions,
   AlertStatus,
   AlertType,
   ApiError,

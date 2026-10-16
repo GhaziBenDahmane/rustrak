@@ -168,7 +168,7 @@ impl GitHubService {
     ) -> AppResult<Option<ProjectRepositoryRow>> {
         Ok(sqlx::query_as::<_, ProjectRepositoryRow>(
             r#"SELECT project_id, installation_id, repo_full_name, default_branch, code_mappings,
-                      codeowners, codeowners_synced_at
+                      auto_create_issues, auto_create_conditions, codeowners, codeowners_synced_at
                FROM project_repositories WHERE project_id = $1"#,
         )
         .bind(project_id)
@@ -195,12 +195,16 @@ impl GitHubService {
             codeowners_rules: row.codeowners.as_deref().map(|c| parse_codeowners(c).len()),
             repo_full_name: row.repo_full_name,
             default_branch: row.default_branch,
+            auto_create_issues: row.auto_create_issues,
+            auto_create_conditions: serde_json::from_str(&row.auto_create_conditions)
+                .unwrap_or_else(|_| serde_json::json!({})),
             codeowners_synced_at: row.codeowners_synced_at,
         }))
     }
 
     /// Points a project at a repository. Changing the repository clears the
     /// CODEOWNERS copy, which belonged to the old one.
+    #[allow(clippy::too_many_arguments)]
     pub async fn save_project_repository(
         pool: &DbPool,
         project_id: i32,
@@ -208,18 +212,22 @@ impl GitHubService {
         repo_full_name: &str,
         default_branch: &str,
         code_mappings: &[CodeMapping],
+        auto_create_issues: bool,
+        auto_create_conditions: &serde_json::Value,
     ) -> AppResult<()> {
         let mappings =
             serde_json::to_string(code_mappings).map_err(|e| AppError::Internal(e.to_string()))?;
         sqlx::query(
             r#"INSERT INTO project_repositories
                    (project_id, installation_id, repo_full_name, default_branch, code_mappings,
-                    created_at)
-               VALUES ($1, $2, $3, $4, $5, $6)
+                    auto_create_issues, auto_create_conditions, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT (project_id) DO UPDATE SET
                    installation_id = EXCLUDED.installation_id,
                    default_branch = EXCLUDED.default_branch,
                    code_mappings = EXCLUDED.code_mappings,
+                   auto_create_issues = EXCLUDED.auto_create_issues,
+                   auto_create_conditions = EXCLUDED.auto_create_conditions,
                    codeowners = CASE WHEN LOWER(project_repositories.repo_full_name) = LOWER(EXCLUDED.repo_full_name)
                                      THEN project_repositories.codeowners END,
                    codeowners_synced_at = CASE WHEN LOWER(project_repositories.repo_full_name) = LOWER(EXCLUDED.repo_full_name)
@@ -231,6 +239,8 @@ impl GitHubService {
         .bind(repo_full_name)
         .bind(default_branch)
         .bind(mappings)
+        .bind(auto_create_issues)
+        .bind(auto_create_conditions.to_string())
         .bind(Utc::now())
         .execute(pool)
         .await?;

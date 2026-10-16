@@ -4,7 +4,11 @@
 //! The mirroring runs off the request path: a slow or unreachable GitHub must
 //! never fail or delay the change a person made in Rustrak.
 
+use std::collections::HashSet;
 use std::future::Future;
+use std::sync::{LazyLock, Mutex};
+
+use chrono::Utc;
 
 use serde_json::json;
 use uuid::Uuid;
@@ -13,8 +17,9 @@ use super::client::GitHubClient;
 use super::{parse_issue_reference, GitHubService};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
+use crate::models::alert::RuleConditions;
 use crate::models::github::{GitHubApp, IssueLink};
-use crate::models::{Issue, Project};
+use crate::models::{AlertType, Issue, Project};
 use crate::services::{AlertService, IssueSocialService};
 
 /// Runs a sync in the background and logs, rather than surfaces, a failure.
@@ -304,6 +309,123 @@ pub async fn mirror_assignee(
                 .set_assignees(installation_id, &link.repo_full_name, link.number, &logins)
                 .await,
         );
+    }
+    Ok(())
+}
+
+/// The Rustrak issues an `auto_create` is opening a GitHub issue for right now.
+// ponytail: in memory, fine for one process per database (the only deployment).
+static OPENING: LazyLock<Mutex<HashSet<Uuid>>> = LazyLock::new(Default::default);
+
+/// Holds an issue in `OPENING` until the run that claimed it ends.
+struct Opening(Uuid);
+
+impl Opening {
+    fn claim(issue_id: Uuid) -> Option<Self> {
+        let claimed = OPENING
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(issue_id);
+        // Built only once the lock is released: a dropped `Opening` takes it.
+        claimed.then(|| Opening(issue_id))
+    }
+}
+
+impl Drop for Opening {
+    fn drop(&mut self) {
+        OPENING
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.0);
+    }
+}
+
+/// Opens a GitHub issue for a new Rustrak issue when the project asked for it
+/// and the event passes the project's filters. An issue that already has one
+/// keeps it: a replayed event must not open a second, nor one that arrives
+/// while the first run is still waiting for GitHub.
+pub async fn auto_create(
+    pool: DbPool,
+    project: Project,
+    issue: Issue,
+    level: Option<String>,
+    environment: Option<String>,
+    dashboard_url: String,
+) -> AppResult<()> {
+    let Some(repo) = GitHubService::project_repository_row(&pool, project.id).await? else {
+        return Ok(());
+    };
+    let conditions =
+        serde_json::from_str::<RuleConditions>(&repo.auto_create_conditions).unwrap_or_default();
+    if !repo.auto_create_issues
+        || !conditions.matches(
+            AlertType::NewIssue,
+            level.as_deref(),
+            environment.as_deref(),
+            issue.digested_event_count,
+        )
+    {
+        return Ok(());
+    }
+    let Some(_opening) = Opening::claim(issue.id) else {
+        return Ok(());
+    };
+    let Some((app, installation_id, repo)) = project_installation(&pool, project.id).await? else {
+        return Ok(());
+    };
+    let client = GitHubClient::new(&app);
+    let started = Utc::now() - chrono::Duration::minutes(1);
+    // Hidden in the body and new to this run, so only the issue this run
+    // opened carries it; a pasted link to the Rustrak issue does not.
+    let marker = format!("<!-- rustrak:{} -->", Uuid::new_v4());
+    let body = format!(
+        "{}\n\n{marker}",
+        issue_body(&project, &issue, &dashboard_url)
+    );
+    // Only this event reaches the count, so a failure is retried here rather
+    // than left for a later event. GitHub has no idempotency key and a failed
+    // attempt may have opened the issue anyway (an answer lost), so a retry
+    // looks for the marker before opening another; one GitHub did return is
+    // kept, and only its link is saved again.
+    // ponytail: retried in memory; a restart mid-retry still loses it.
+    let mut remote: Option<super::client::RemoteIssue> = None;
+    for (attempt, wait) in [1, 2, 0].into_iter().enumerate() {
+        if !GitHubService::links(&pool, issue.id).await?.is_empty() {
+            return Ok(());
+        }
+        let opened = async {
+            let found = match remote.take() {
+                Some(known) => Some(known),
+                None if attempt > 0 => client
+                    .issues_since(installation_id, &repo, started)
+                    .await?
+                    .into_iter()
+                    .find(|(text, _)| text.contains(&marker))
+                    .map(|(_, found)| found),
+                None => None,
+            };
+            let opened = match found {
+                Some(opened) => opened,
+                None => {
+                    client
+                        .create_issue(installation_id, &repo, &issue.title(), &body)
+                        .await?
+                }
+            };
+            remote = Some(opened.clone());
+            let link = GitHubService::add_link(&pool, issue.id, &repo, &opened).await?;
+            record_link(&pool, issue.id, None, &link, "created").await;
+            AppResult::Ok(())
+        }
+        .await;
+        match opened {
+            Ok(()) => return Ok(()),
+            Err(error) if wait > 0 => {
+                log::warn!("GitHub issue auto-create failed, retrying in {wait}s: {error}");
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            }
+            Err(error) => return Err(error),
+        }
     }
     Ok(())
 }

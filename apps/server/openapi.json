@@ -11285,9 +11285,18 @@
           "repo_full_name",
           "default_branch",
           "html_url",
-          "code_mappings"
+          "code_mappings",
+          "auto_create_issues",
+          "auto_create_conditions"
         ],
         "properties": {
+          "auto_create_conditions": {
+            "type": "object"
+          },
+          "auto_create_issues": {
+            "type": "boolean",
+            "description": "Open a GitHub issue for new issues that pass `auto_create_conditions`."
+          },
           "code_mappings": {
             "type": "array",
             "items": {
@@ -12567,6 +12576,19 @@
           "repo_full_name"
         ],
         "properties": {
+          "auto_create_conditions": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The same filters an alert rule takes: `min_level`, `environments`,\n`min_events`."
+          },
+          "auto_create_issues": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "code_mappings": {
             "type": [
               "array",

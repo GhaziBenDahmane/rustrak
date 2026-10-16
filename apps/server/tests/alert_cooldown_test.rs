@@ -91,6 +91,7 @@ async fn exercise_cooldown(
                 &issue,
                 AlertType::NewIssue,
                 event,
+                Default::default(),
                 "https://dashboard.example.invalid",
             )
             .await

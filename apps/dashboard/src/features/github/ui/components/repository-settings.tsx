@@ -1,4 +1,5 @@
 import type {
+  AlertRuleConditions,
   CodeMapping,
   GitHubRepository,
   ProjectRepository,
@@ -14,6 +15,11 @@ import {
   setProjectRepository,
   syncCodeowners,
 } from '@/features/github/api/mutations';
+import {
+  conditionsFromForm,
+  formFromConditions,
+} from '@/shared/lib/rule-conditions';
+import { ConditionFilters } from '@/shared/ui/components/condition-filters';
 import { Link } from '@/shared/ui/components/link';
 import { SettingRow, SettingSection } from '@/shared/ui/components/setting-row';
 import { Button } from '@/shared/ui/components/shadcn/button';
@@ -25,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/ui/components/shadcn/select';
+import { Switch } from '@/shared/ui/components/shadcn/switch';
 import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface RepositorySettingsProps {
@@ -66,6 +73,8 @@ export function RepositorySettings({
   const save = (changes: {
     repo?: GitHubRepository;
     code_mappings?: CodeMapping[];
+    auto_create_issues?: boolean;
+    auto_create_conditions?: AlertRuleConditions;
   }) =>
     run(t('repository.saveFailed'), () =>
       setProjectRepository(projectId, {
@@ -74,6 +83,10 @@ export function RepositorySettings({
         repo_full_name:
           changes.repo?.full_name ?? repository?.repo_full_name ?? '',
         code_mappings: changes.code_mappings ?? repository?.code_mappings,
+        auto_create_issues:
+          changes.auto_create_issues ?? repository?.auto_create_issues,
+        auto_create_conditions:
+          changes.auto_create_conditions ?? repository?.auto_create_conditions,
       }),
     );
 
@@ -163,6 +176,34 @@ export function RepositorySettings({
           </SettingSection>
 
           <SettingSection title={t('repository.issues')}>
+            <SettingRow
+              title={t('repository.autoCreate')}
+              description={t('repository.autoCreateDescription')}
+              htmlFor="github-auto-create"
+            >
+              <Switch
+                id="github-auto-create"
+                checked={repository.auto_create_issues}
+                disabled={isPending}
+                onCheckedChange={(checked) =>
+                  save({ auto_create_issues: checked })
+                }
+              />
+            </SettingRow>
+            {repository.auto_create_issues && (
+              <SettingRow
+                title={t('repository.autoCreateFilters')}
+                description={t('repository.autoCreateFiltersDescription')}
+              >
+                <AutoCreateFilters
+                  saved={repository.auto_create_conditions}
+                  disabled={isPending}
+                  onSave={(auto_create_conditions) =>
+                    save({ auto_create_conditions })
+                  }
+                />
+              </SettingRow>
+            )}
             <SettingRow
               title={t('repository.fixes')}
               description={t('repository.fixesDescription')}
@@ -299,6 +340,54 @@ function PathMappings({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** The automatic issues' filters, edited locally and saved together. */
+function AutoCreateFilters({
+  saved,
+  disabled,
+  onSave,
+}: {
+  saved: AlertRuleConditions;
+  disabled: boolean;
+  onSave: (conditions: AlertRuleConditions) => void;
+}) {
+  const t = useTranslations('github');
+  const [filters, setFilters] = useState(() => formFromConditions(saved));
+  const conditions = conditionsFromForm({
+    alert_type: 'new_issue',
+    ...filters,
+  });
+  const changed =
+    JSON.stringify(conditions) !==
+    JSON.stringify(
+      conditionsFromForm({
+        alert_type: 'new_issue',
+        ...formFromConditions(saved),
+      }),
+    );
+
+  return (
+    <div className="space-y-3">
+      <ConditionFilters
+        value={filters}
+        onChange={setFilters}
+        showMinEvents
+        disabled={disabled}
+      />
+      {changed && (
+        <div className="flex justify-end">
+          <Button
+            size="sm"
+            disabled={disabled}
+            onClick={() => onSave(conditions)}
+          >
+            {t('save')}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

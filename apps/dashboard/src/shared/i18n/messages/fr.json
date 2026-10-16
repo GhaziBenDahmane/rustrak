@@ -624,7 +624,8 @@
       "fieldAlertType": "Ce type d’alerte",
       "saveFailed": "Échec de l’enregistrement de la règle",
       "updated": "Règle d’alerte mise à jour",
-      "created": "Règle d’alerte créée"
+      "created": "Règle d’alerte créée",
+      "filters": "Filtres"
     },
     "integrationDialog": {
       "name": "Nom",
@@ -1756,6 +1757,8 @@
       "addMapping": "Ajouter",
       "removeMapping": "Supprimer",
       "issues": "Tickets",
+      "autoCreate": "Ouvrir des tickets GitHub automatiquement",
+      "autoCreateDescription": "Une nouvelle erreur ouvre un ticket GitHub, une fois par problème, si elle passe les filtres ci-dessous.",
       "fixes": "Résoudre depuis les commits",
       "fixesDescription": "Un commit sur la branche par défaut qui contient ceci résout le ticket.",
       "codeowners": "Propriétaires du code",
@@ -1767,7 +1770,9 @@
       "danger": "Zone de danger",
       "disconnect": "Déconnecter le dépôt",
       "disconnectDescription": "Arrête de lier les tickets de ce projet à GitHub. Les liens existants restent.",
-      "saveFailed": "Impossible d'enregistrer le dépôt"
+      "saveFailed": "Impossible d'enregistrer le dépôt",
+      "autoCreateFilters": "Quelles erreurs",
+      "autoCreateFiltersDescription": "Sans filtres, chaque nouveau problème en ouvre un. « Événements minimum » attend que le problème se soit produit autant de fois."
     },
     "issue": {
       "menu": "Actions GitHub",
@@ -1795,5 +1800,13 @@
       "saved": "Nom d'utilisateur GitHub enregistré",
       "saveFailed": "Impossible d'enregistrer votre nom d'utilisateur GitHub"
     }
+  },
+  "conditions": {
+    "minLevel": "Niveau",
+    "anyLevel": "Tous niveaux",
+    "levelOrAbove": "{level} ou plus",
+    "minEvents": "Événements minimum",
+    "environments": "Environnements",
+    "description": "Séparés par des virgules. Vide signifie tous."
   }
 }

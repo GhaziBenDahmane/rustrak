@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Translate } from '@/shared/lib/error-copy';
+import { levels } from '@/shared/lib/rule-conditions';
 
 /**
  * What the alert rule dialog collects.
@@ -20,6 +21,9 @@ export function alertRuleFormSchema(t: Translate) {
       .optional(),
     is_enabled: z.boolean(),
     cooldown_minutes: z.number().int().min(0),
+    min_level: z.enum([...levels, 'any']),
+    environments: z.string(),
+    min_events: z.number().int().min(1),
   });
 }
 

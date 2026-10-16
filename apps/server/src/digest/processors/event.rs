@@ -189,25 +189,49 @@ impl ErrorProcessor {
             log::warn!("Duplicate event_id: {}", metadata.event_id);
             let existing =
                 EventService::get_by_event_id(pool, metadata.project_id, event_id).await?;
-            if let (Some(alert_type), Some(issue_id)) = (existing.alert_type, existing.issue_id) {
-                if !AlertService::event_alert_exists(
-                    pool,
-                    metadata.project_id,
-                    event_id,
-                    alert_type,
-                )
-                .await?
-                {
-                    let issue = IssueService::get_by_id(pool, issue_id).await?;
-                    AlertService::trigger_event_alert(
+            if let Some(issue_id) = existing.issue_id {
+                let mut issue = IssueService::get_by_id(pool, issue_id).await?;
+                let facts = event_facts(&event_data);
+                // Rules match the count this event brought the issue to, not
+                // today's. A row without that count (from before it was kept,
+                // or digested while muted) replays its lifecycle alert only,
+                // and a new issue's came from its first event.
+                let types = match existing.issue_event_count {
+                    Some(count) => {
+                        issue.digested_event_count = count;
+                        event_alert_types(existing.alert_type, issue.is_muted())
+                    }
+                    None => {
+                        if existing.alert_type == Some(AlertType::NewIssue) {
+                            issue.digested_event_count = 1;
+                        }
+                        existing.alert_type.into_iter().collect()
+                    }
+                };
+                for &alert_type in &types {
+                    if !AlertService::event_alert_exists(
                         pool,
-                        &project,
-                        &issue,
-                        alert_type,
+                        metadata.project_id,
                         event_id,
-                        &self.dashboard_url,
+                        alert_type,
                     )
-                    .await?;
+                    .await?
+                    {
+                        AlertService::trigger_event_alert(
+                            pool,
+                            &project,
+                            &issue,
+                            alert_type,
+                            event_id,
+                            facts,
+                            &self.dashboard_url,
+                        )
+                        .await?;
+                    }
+                }
+                // Opens nothing when the first run already linked one.
+                if types.contains(&AlertType::NewIssue) {
+                    self.spawn_auto_create(pool, &project, &issue, facts);
                 }
             }
             self.delete_after_success(
@@ -250,6 +274,7 @@ impl ErrorProcessor {
                 .and_then(|v| v.as_str())
                 .map(|s| clamp(s, max_chars))
         };
+        let facts = event_facts(&event_data);
         let level = event_data
             .get("level")
             .and_then(|v| v.as_str())
@@ -317,21 +342,22 @@ impl ErrorProcessor {
         }
 
         // 10. Persist alert history before deleting the only durable source.
-        if issue_created || regressed {
-            let alert_type = if issue_created {
-                AlertType::NewIssue
-            } else {
-                AlertType::Regression
-            };
+        let lifecycle = alert_type_for_lifecycle(issue_created, regressed);
+        let types = event_alert_types(lifecycle, issue.is_muted());
+        for &alert_type in &types {
             AlertService::trigger_event_alert(
                 pool,
                 &project,
                 &issue,
                 alert_type,
                 event_id,
+                facts,
                 &self.dashboard_url,
             )
             .await?;
+        }
+        if types.contains(&AlertType::NewIssue) {
+            self.spawn_auto_create(pool, &project, &issue, facts);
         }
         // A regression reopens the linked GitHub issues too.
         if regressed {
@@ -360,6 +386,28 @@ impl ErrorProcessor {
         );
 
         Ok(Digested::Stored)
+    }
+
+    /// Opens the GitHub issue for a new-issue event, when the project's
+    /// filters let it.
+    fn spawn_auto_create(
+        &self,
+        pool: &DbPool,
+        project: &crate::models::Project,
+        issue: &crate::models::Issue,
+        facts: crate::services::alert::EventFacts<'_>,
+    ) {
+        crate::services::github::sync::spawn(
+            "issue auto-create",
+            crate::services::github::sync::auto_create(
+                pool.clone(),
+                project.clone(),
+                issue.clone(),
+                facts.level.map(str::to_string),
+                facts.environment.map(str::to_string),
+                self.dashboard_url.clone(),
+            ),
+        );
     }
 
     /// Drops an accepted event the quota has no room for: counted on its
@@ -789,6 +837,9 @@ async fn write_digest_rows(
         write.denormalized,
         write.remote_addr,
         alert_type_for_lifecycle(created, regressed),
+        // Kept only when the event could fire new-issue rules: a muted one
+        // replays its lifecycle alert alone, whatever the issue is by then.
+        (!issue.is_muted()).then_some(issue.digested_event_count),
     )
     .await?;
 
@@ -1071,6 +1122,17 @@ async fn find_or_create_issue_and_grouping_inner(
     Ok((issue, grouping, true, false))
 }
 
+/// The alerts an event fires: its lifecycle's, and a new-issue rule's, since
+/// any unmuted event, a regression too, can be the one that brings the issue
+/// to the rule's `min_events`; the rule decides.
+fn event_alert_types(lifecycle: Option<AlertType>, muted: bool) -> Vec<AlertType> {
+    let mut types: Vec<AlertType> = lifecycle.into_iter().collect();
+    if lifecycle != Some(AlertType::NewIssue) && !muted {
+        types.push(AlertType::NewIssue);
+    }
+    types
+}
+
 fn alert_type_for_lifecycle(created: bool, regressed: bool) -> Option<AlertType> {
     if created {
         Some(AlertType::NewIssue)
@@ -1264,4 +1326,15 @@ struct PrevIssue {
     last_frame_module: String,
     last_frame_function: String,
     level: Option<String>,
+}
+
+/// The fields an alert rule's filters read, straight from the event.
+fn event_facts(event_data: &serde_json::Value) -> crate::services::alert::EventFacts<'_> {
+    crate::services::alert::EventFacts {
+        level: event_data
+            .get("level")
+            .and_then(|v| v.as_str())
+            .and_then(relay_level),
+        environment: event_data.get("environment").and_then(|v| v.as_str()),
+    }
 }

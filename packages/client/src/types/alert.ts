@@ -3,13 +3,14 @@ import type {
   alertHistorySchema,
   alertIntegrationSchema,
   alertRuleChannelInputSchema,
+  alertRuleConditionsSchema,
   alertRuleSchema,
   alertStatusSchema,
   alertTypeSchema,
   createAlertIntegrationSchema,
   createAlertRuleSchema,
-  providerTypeSchema,
   previewTemplateResponseSchema,
+  providerTypeSchema,
   testChannelResponseSchema,
   testIntegrationBodySchema,
   updateAlertIntegrationSchema,
@@ -63,6 +64,7 @@ export type RoutingOverride = Record<string, unknown>;
 /**
  * Alert rule (per-project trigger configuration)
  */
+export type AlertRuleConditions = z.infer<typeof alertRuleConditionsSchema>;
 export type AlertRule = z.infer<typeof alertRuleSchema>;
 
 /**

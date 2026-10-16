@@ -17,6 +17,11 @@ import {
 import { alertTypes } from '@/features/alert/model/alert-types';
 import { useChannelRouting } from '@/features/alert/ui/hooks/use-channel-routing';
 import { applyServerFieldErrors } from '@/shared/lib/form-errors';
+import {
+  conditionsFromForm,
+  formFromConditions,
+} from '@/shared/lib/rule-conditions';
+import { ConditionFilters } from '@/shared/ui/components/condition-filters';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import {
   Dialog,
@@ -97,6 +102,7 @@ function AlertRuleForm({
           selected_integration_ids: existingRule.integration_ids,
           is_enabled: existingRule.is_enabled,
           cooldown_minutes: existingRule.cooldown_minutes,
+          ...formFromConditions(existingRule.conditions),
         }
       : {
           name: '',
@@ -104,6 +110,7 @@ function AlertRuleForm({
           selected_integration_ids: [],
           is_enabled: true,
           cooldown_minutes: 0,
+          ...formFromConditions({}),
         },
   });
 
@@ -123,6 +130,7 @@ function AlertRuleForm({
         routing.routingMap,
         integrations,
       );
+      const conditions = conditionsFromForm(data);
 
       const result = existingRule
         ? await updateAlertRule(projectId, existingRule.id, {
@@ -130,6 +138,7 @@ function AlertRuleForm({
             is_enabled: data.is_enabled,
             channels,
             cooldown_minutes: data.cooldown_minutes,
+            conditions,
           })
         : await createAlertRule(projectId, {
             name: data.name,
@@ -137,6 +146,7 @@ function AlertRuleForm({
             channels,
             is_enabled: data.is_enabled,
             cooldown_minutes: data.cooldown_minutes,
+            conditions,
           });
 
       if (!result.success) {
@@ -190,6 +200,25 @@ function AlertRuleForm({
             routing={routing}
             disabled={isPending}
           />
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              {t('ruleDialog.filters')}
+            </p>
+            <ConditionFilters
+              value={{
+                min_level: form.watch('min_level'),
+                environments: form.watch('environments'),
+                min_events: form.watch('min_events'),
+              }}
+              onChange={(filters) => {
+                form.setValue('min_level', filters.min_level);
+                form.setValue('environments', filters.environments);
+                form.setValue('min_events', filters.min_events);
+              }}
+              showMinEvents={form.watch('alert_type') === 'new_issue'}
+              disabled={isPending}
+            />
+          </div>
           <CooldownField disabled={isPending} />
           <EnabledField disabled={isPending} />
 
