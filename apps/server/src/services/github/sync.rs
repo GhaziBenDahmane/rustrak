@@ -120,11 +120,20 @@ pub async fn create_issue(
         .await?;
     let link = GitHubService::add_link(pool, issue.id, &repo, &remote).await?;
     record_link(pool, issue.id, user_id, &link, "created").await;
+    // A status change made while GitHub was answering found no link to
+    // mirror onto. Only that one: an issue opened for an already resolved
+    // Rustrak issue stays open, as it was asked for.
+    let now = crate::services::IssueService::get_by_id(pool, issue.id).await?;
+    if now.status != issue.status {
+        spawn("status sync", mirror_status(pool.clone(), issue.id));
+    }
     Ok(link)
 }
 
-/// Links an existing GitHub issue or pull request, and leaves a comment on it
-/// pointing back, as Sentry does.
+/// Links an existing GitHub issue, and leaves a comment on it pointing back,
+/// as Sentry does. Not a pull request: the issues API answers for one too, but
+/// its status would not sync back, and closing it from here would close it
+/// unmerged.
 pub async fn link_issue(
     pool: &DbPool,
     project: &Project,
@@ -145,6 +154,11 @@ pub async fn link_issue(
         })?;
     let client = GitHubClient::new(&app);
     let remote = client.issue(installation_id, &repo, number).await?;
+    if remote.url.contains("/pull/") {
+        return Err(AppError::Validation(format!(
+            "{repo}#{number} is a pull request; link a GitHub issue instead"
+        )));
+    }
     let link = GitHubService::add_link(pool, issue.id, &repo, &remote).await?;
     record_link(pool, issue.id, user_id, &link, "linked").await;
     let url = AlertService::build_issue_url(dashboard_url, project.id, issue.id);
@@ -194,35 +208,44 @@ async fn mirror_targets(
 
 /// Closes (or reopens) the linked GitHub issues to match the Rustrak issue's
 /// status as it is now. Ignored issues leave GitHub alone.
+///
+/// A change made while GitHub was answering may have been skipped by its own
+/// sync, which saw this one's link state from before; so after each pass the
+/// status is read again, and another pass runs until it stops moving.
 pub async fn mirror_status(pool: DbPool, issue_id: Uuid) -> AppResult<()> {
-    let issue = crate::services::IssueService::get_by_id(&pool, issue_id).await?;
-    let state = match issue.status.as_str() {
-        crate::models::STATUS_RESOLVED => "closed",
-        crate::models::STATUS_UNRESOLVED => "open",
-        _ => return Ok(()),
-    };
-    let Some((app, installation_id, links)) = mirror_targets(&pool, issue_id).await? else {
-        return Ok(());
-    };
-    let client = GitHubClient::new(&app);
-    for link in links.iter().filter(|l| l.state != state) {
-        let result = async {
-            client
-                .set_issue_state(installation_id, &link.repo_full_name, link.number, state)
-                .await?;
-            GitHubService::update_remote(
-                &pool,
-                &link.repo_full_name,
-                link.number,
-                &link.title,
-                state,
-            )
-            .await
+    loop {
+        let issue = crate::services::IssueService::get_by_id(&pool, issue_id).await?;
+        let state = match issue.status.as_str() {
+            crate::models::STATUS_RESOLVED => "closed",
+            crate::models::STATUS_UNRESOLVED => "open",
+            _ => return Ok(()),
+        };
+        let Some((app, installation_id, links)) = mirror_targets(&pool, issue_id).await? else {
+            return Ok(());
+        };
+        let client = GitHubClient::new(&app);
+        for link in links.iter().filter(|l| l.state != state) {
+            let result = async {
+                client
+                    .set_issue_state(installation_id, &link.repo_full_name, link.number, state)
+                    .await?;
+                GitHubService::update_remote(
+                    &pool,
+                    &link.repo_full_name,
+                    link.number,
+                    &link.title,
+                    state,
+                )
+                .await
+            }
+            .await;
+            skip_failed(link, result);
         }
-        .await;
-        skip_failed(link, result);
+        let now = crate::services::IssueService::get_by_id(&pool, issue_id).await?;
+        if now.status == issue.status {
+            return Ok(());
+        }
     }
-    Ok(())
 }
 
 /// One link GitHub refuses (a repository the installation lost, say) must not
@@ -278,39 +301,54 @@ pub async fn mirror_comment(
 
 /// Assigns the linked GitHub issues to the Rustrak assignee's GitHub login,
 /// or clears them when the issue is unassigned. An assignee without a GitHub
-/// login set leaves GitHub alone, and so does `except`, the GitHub issue the
-/// change came from.
+/// login set leaves GitHub alone, and so does one that is not a user, and so
+/// does `except`, the GitHub issue the change came from.
+///
+/// Reads the assignee as it is now, not as it was when the change was made,
+/// and again after each pass, as `mirror_status` does: a slow request for an
+/// earlier assignee must not land last.
 pub async fn mirror_assignee(
     pool: DbPool,
     issue_id: Uuid,
-    user_id: Option<i32>,
     except: Option<(String, i64)>,
 ) -> AppResult<()> {
-    let logins = match user_id {
-        Some(user_id) => match github_login(&pool, user_id).await? {
-            Some(login) => vec![login],
-            None => return Ok(()),
-        },
-        None => Vec::new(),
-    };
-    let Some((app, installation_id, links)) = mirror_targets(&pool, issue_id).await? else {
-        return Ok(());
-    };
-    let client = GitHubClient::new(&app);
-    let skipped = |link: &IssueLink| {
-        except.as_ref().is_some_and(|(repo, number)| {
-            link.repo_full_name.eq_ignore_ascii_case(repo) && link.number == *number
-        })
-    };
-    for link in links.iter().filter(|l| !skipped(l)) {
-        skip_failed(
-            link,
-            client
-                .set_assignees(installation_id, &link.repo_full_name, link.number, &logins)
-                .await,
-        );
+    let assignee = |issue: &Issue| (issue.assigned_to, issue.assignee_type.clone());
+    loop {
+        let issue = crate::services::IssueService::get_by_id(&pool, issue_id).await?;
+        let user_id = match issue.assignee_type.as_deref() {
+            // No type is how the dashboard assigns a person.
+            None | Some("user") => issue.assigned_to,
+            Some(_) => return Ok(()),
+        };
+        let logins = match user_id {
+            Some(user_id) => match github_login(&pool, user_id).await? {
+                Some(login) => vec![login],
+                None => return Ok(()),
+            },
+            None => Vec::new(),
+        };
+        let Some((app, installation_id, links)) = mirror_targets(&pool, issue_id).await? else {
+            return Ok(());
+        };
+        let client = GitHubClient::new(&app);
+        let skipped = |link: &IssueLink| {
+            except.as_ref().is_some_and(|(repo, number)| {
+                link.repo_full_name.eq_ignore_ascii_case(repo) && link.number == *number
+            })
+        };
+        for link in links.iter().filter(|l| !skipped(l)) {
+            skip_failed(
+                link,
+                client
+                    .set_assignees(installation_id, &link.repo_full_name, link.number, &logins)
+                    .await,
+            );
+        }
+        let now = crate::services::IssueService::get_by_id(&pool, issue_id).await?;
+        if assignee(&now) == assignee(&issue) {
+            return Ok(());
+        }
     }
-    Ok(())
 }
 
 /// The Rustrak issues an `auto_create` is opening a GitHub issue for right now.

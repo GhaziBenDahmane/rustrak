@@ -15,6 +15,7 @@ import {
   setProjectRepository,
   syncCodeowners,
 } from '@/features/github/api/mutations';
+import { savableMappings } from '@/features/github/lib/code-mappings';
 import {
   conditionsFromForm,
   formFromConditions,
@@ -334,7 +335,7 @@ function PathMappings({
           <Button
             size="sm"
             disabled={disabled}
-            onClick={() => onSave(mappings.filter((m) => m.stack_root))}
+            onClick={() => onSave(savableMappings(mappings))}
           >
             {t('save')}
           </Button>

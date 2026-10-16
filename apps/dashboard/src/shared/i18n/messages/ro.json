@@ -1785,7 +1785,7 @@
       "linkFailed": "Issue-ul GitHub nu a putut fi legat",
       "unlinkFailed": "Issue-ul GitHub nu a putut fi dezlegat",
       "linkTitle": "Leagă un issue GitHub",
-      "linkDescription": "Lipește URL-ul unui issue sau pull request, sau scrie #123 pentru depozitul acestui proiect.",
+      "linkDescription": "Lipește URL-ul unui issue GitHub, sau numărul lui precedat de # (de exemplu, #42) dacă este în depozitul acestui proiect.",
       "linkSubmit": "Leagă"
     },
     "code": {

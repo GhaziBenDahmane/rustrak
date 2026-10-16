@@ -1785,7 +1785,7 @@
       "linkFailed": "Impossible de lier le ticket GitHub",
       "unlinkFailed": "Impossible de délier le ticket GitHub",
       "linkTitle": "Lier un ticket GitHub",
-      "linkDescription": "Collez l'URL d'un ticket ou d'une pull request, ou tapez #123 pour le dépôt de ce projet.",
+      "linkDescription": "Collez l'URL d'un ticket GitHub, ou son numéro précédé de # (par exemple #42) s'il est dans le dépôt de ce projet.",
       "linkSubmit": "Lier"
     },
     "code": {

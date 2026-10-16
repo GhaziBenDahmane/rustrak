@@ -354,15 +354,21 @@ impl GitHubService {
         Ok(())
     }
 
-    /// The Rustrak issues linked to one GitHub issue.
+    /// The Rustrak issues linked to one GitHub issue, in projects still
+    /// connected to GitHub. A project disconnected since keeps its links as a
+    /// record, but GitHub no longer changes it, as Rustrak no longer changes
+    /// GitHub for it.
     pub async fn links_to_remote(
         pool: &DbPool,
         repo_full_name: &str,
         number: i64,
     ) -> AppResult<Vec<IssueLink>> {
         Ok(sqlx::query_as::<_, IssueLink>(
-            "SELECT id, issue_id, repo_full_name, number, title, url, state, created_at
-             FROM issue_external_links WHERE LOWER(repo_full_name) = LOWER($1) AND number = $2",
+            "SELECT l.id, l.issue_id, l.repo_full_name, l.number, l.title, l.url, l.state, l.created_at
+             FROM issue_external_links l
+             JOIN issues i ON i.id = l.issue_id
+             JOIN project_repositories r ON r.project_id = i.project_id
+             WHERE LOWER(l.repo_full_name) = LOWER($1) AND l.number = $2",
         )
         .bind(repo_full_name)
         .bind(number)

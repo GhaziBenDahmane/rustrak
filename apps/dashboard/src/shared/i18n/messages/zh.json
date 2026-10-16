@@ -1785,7 +1785,7 @@
       "linkFailed": "无法关联 GitHub Issue",
       "unlinkFailed": "无法取消关联 GitHub Issue",
       "linkTitle": "关联 GitHub Issue",
-      "linkDescription": "粘贴 Issue 或 Pull Request 的 URL，或输入 #123 表示此项目仓库中的 Issue。",
+      "linkDescription": "粘贴 GitHub Issue 的 URL，或输入前面加 # 的编号（例如 #42），用于此项目仓库中的 Issue。",
       "linkSubmit": "关联"
     },
     "code": {

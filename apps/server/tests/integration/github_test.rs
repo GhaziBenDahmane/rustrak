@@ -186,6 +186,26 @@ async fn answer(
                 "html_url": "https://github.com/acme/slow/issues/6",
             }))
         }
+        // GitHub is slow to apply the first change, so a later one lands
+        // before it. `APPLIED` records the order GitHub applied them in.
+        ("PATCH", "/repos/acme/slow/issues/6") => {
+            let first = calls
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|c| c.method == "PATCH" && c.path == path)
+                .count()
+                == 1;
+            if first {
+                actix_web::rt::time::sleep(Duration::from_millis(300)).await;
+            }
+            calls.lock().unwrap().push(Call {
+                method: "APPLIED".into(),
+                path,
+                body,
+            });
+            HttpResponse::Ok().json(json!({}))
+        }
         ("POST", "/repos/acme/flaky/issues") => HttpResponse::Created().json(json!({
             "number": 8, "title": body["title"], "state": "open",
             "html_url": "https://github.com/acme/flaky/issues/8",
@@ -193,6 +213,12 @@ async fn answer(
         ("POST", "/repos/acme/web/issues") => HttpResponse::Created().json(json!({
             "number": 7, "title": body["title"], "state": "open",
             "html_url": "https://github.com/acme/web/issues/7",
+        })),
+        // The issues API answers for pull requests too.
+        ("GET", "/repos/acme/web/issues/14") => HttpResponse::Ok().json(json!({
+            "number": 14, "title": "Fix the login", "state": "open",
+            "html_url": "https://github.com/acme/web/pull/14",
+            "pull_request": { "url": "https://api.github.com/repos/acme/web/pulls/14" },
         })),
         ("GET", "/repos/acme/web/issues/12") => HttpResponse::Ok().json(json!({
             "number": 12, "title": "Login is broken", "state": "open",
@@ -816,6 +842,215 @@ async fn link_12(db: &TestDb, issue_id: uuid::Uuid) -> rustrak::models::github::
     .unwrap()
 }
 
+/// Links `acme/slow#6`, where GitHub applies the first change late.
+async fn link_slow(db: &TestDb, issue_id: uuid::Uuid) {
+    GitHubService::add_link(
+        &db.pool,
+        issue_id,
+        "acme/slow",
+        &rustrak::services::github::client::RemoteIssue {
+            number: 6,
+            title: "Slow".into(),
+            url: "https://github.com/acme/slow/issues/6".into(),
+            state: "open".into(),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+/// The last change GitHub applied to `acme/slow#6`, once every request is in.
+async fn applied_last(github: &FakeGitHub) -> Value {
+    actix_web::rt::time::sleep(Duration::from_millis(600)).await;
+    github
+        .calls()
+        .into_iter()
+        .rfind(|c| c.method == "APPLIED")
+        .expect("nothing applied")
+        .body
+}
+
+#[actix_web::test]
+async fn a_quick_reopen_leaves_github_open() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_slow(&db, issue.id).await;
+
+    // Resolved, then reopened while GitHub is still closing it.
+    IssueService::set_status(&db.pool, issue.id, "resolved", None)
+        .await
+        .unwrap();
+    let closing = actix_web::rt::spawn(rustrak::services::github::sync::mirror_status(
+        db.pool.clone(),
+        issue.id,
+    ));
+    github.wait_for("PATCH", "/repos/acme/slow/issues/6").await;
+    IssueService::set_status(&db.pool, issue.id, "unresolved", None)
+        .await
+        .unwrap();
+    rustrak::services::github::sync::mirror_status(db.pool.clone(), issue.id)
+        .await
+        .unwrap();
+    closing.await.unwrap().unwrap();
+
+    assert_eq!(applied_last(&github).await["state"], "open");
+}
+
+#[actix_web::test]
+async fn a_quick_reassignment_leaves_github_with_the_latest_assignee() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_slow(&db, issue.id).await;
+    let mut users = Vec::new();
+    for login in ["alice", "bob"] {
+        let user = rustrak::services::UsersService::create_user_with_password_hash(
+            &db.pool,
+            &format!("{login}@acme.dev"),
+            "unused",
+            rustrak::models::UserRole::Member,
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE users SET github_login = $1 WHERE id = $2")
+            .bind(login)
+            .bind(user.id)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        users.push(user.id);
+    }
+
+    // Alice, then Bob while GitHub is still assigning Alice.
+    IssueService::assign(&db.pool, issue.id, Some(users[0]), Some("user"))
+        .await
+        .unwrap();
+    let first = actix_web::rt::spawn(rustrak::services::github::sync::mirror_assignee(
+        db.pool.clone(),
+        issue.id,
+        None,
+    ));
+    github.wait_for("PATCH", "/repos/acme/slow/issues/6").await;
+    IssueService::assign(&db.pool, issue.id, Some(users[1]), Some("user"))
+        .await
+        .unwrap();
+    rustrak::services::github::sync::mirror_assignee(db.pool.clone(), issue.id, None)
+        .await
+        .unwrap();
+    first.await.unwrap().unwrap();
+
+    assert_eq!(applied_last(&github).await["assignees"], json!(["bob"]));
+}
+
+#[actix_web::test]
+async fn a_github_issue_created_by_hand_closes_when_resolved_meanwhile() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    sqlx::query("UPDATE project_repositories SET repo_full_name = 'acme/slow'")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+
+    let creating = {
+        let (pool, project, issue) = (db.pool.clone(), project.clone(), issue.clone());
+        actix_web::rt::spawn(async move {
+            rustrak::services::github::sync::create_issue(
+                &pool,
+                &project,
+                &issue,
+                None,
+                None,
+                None,
+                "http://rustrak",
+            )
+            .await
+        })
+    };
+    // Resolved before GitHub answers: there is no link yet to close.
+    github.wait_for("POST", "/repos/acme/slow/issues").await;
+    IssueService::set_status(&db.pool, issue.id, "resolved", None)
+        .await
+        .unwrap();
+    rustrak::services::github::sync::mirror_status(db.pool.clone(), issue.id)
+        .await
+        .unwrap();
+    creating.await.unwrap().unwrap();
+
+    let call = github.wait_for("PATCH", "/repos/acme/slow/issues/6").await;
+    assert_eq!(call.body["state"], "closed");
+}
+
+#[actix_web::test]
+async fn a_github_issue_created_by_hand_for_a_resolved_issue_stays_open() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    let issue = IssueService::set_status(&db.pool, issue.id, "resolved", None)
+        .await
+        .unwrap();
+
+    rustrak::services::github::sync::create_issue(
+        &db.pool,
+        &project,
+        &issue,
+        None,
+        None,
+        None,
+        "http://rustrak",
+    )
+    .await
+    .unwrap();
+
+    actix_web::rt::time::sleep(Duration::from_millis(200)).await;
+    assert!(!github.calls().iter().any(|c| c.method == "PATCH"));
+}
+
+#[actix_web::test]
+async fn an_issue_assigned_to_something_other_than_a_person_leaves_github_alone() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    let user = rustrak::services::UsersService::create_user_with_password_hash(
+        &db.pool,
+        "octo@acme.dev",
+        "unused",
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+    sqlx::query("UPDATE users SET github_login = 'octocat' WHERE id = $1")
+        .bind(user.id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // A team that happens to share the person's id.
+    IssueService::assign(&db.pool, issue.id, Some(user.id), Some("team"))
+        .await
+        .unwrap();
+    rustrak::services::github::sync::mirror_assignee(db.pool.clone(), issue.id, None)
+        .await
+        .unwrap();
+
+    assert!(!github
+        .calls()
+        .iter()
+        .any(|c| c.method == "PATCH" && c.body.get("assignees").is_some()));
+}
+
 #[actix_web::test]
 async fn creating_a_github_issue_links_it() {
     let db = TestDb::new().await;
@@ -855,6 +1090,37 @@ async fn creating_a_github_issue_links_it() {
         body["links"][0]["url"],
         "https://github.com/acme/web/issues/7"
     );
+}
+
+/// Its status and assignees do not sync (the app is not subscribed to pull
+/// requests), and closing one through the issues API would close it unmerged.
+#[actix_web::test]
+async fn a_pull_request_cannot_be_linked() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let token = token(&db).await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    let app = app!(db);
+
+    let req = test::TestRequest::post()
+        .uri(&format!(
+            "/api/projects/{}/issues/{}/github/links",
+            project.id, issue.id
+        ))
+        .insert_header(bearer(&token))
+        .set_json(json!({ "reference": "#14" }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 400);
+    assert!(GitHubService::links(&db.pool, issue.id)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(!github
+        .calls()
+        .iter()
+        .any(|c| c.method == "POST" && c.path == "/repos/acme/web/issues/14/comments"));
 }
 
 #[actix_web::test]
@@ -1313,6 +1579,42 @@ async fn closing_one_linked_github_issue_closes_the_others() {
         .calls()
         .iter()
         .any(|c| c.method == "PATCH" && c.path == "/repos/acme/web/issues/12"));
+}
+
+#[actix_web::test]
+async fn a_disconnected_project_ignores_its_old_github_issues() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    let issue = issue(&db, project.id, "/app/lib/db.ts").await;
+    link_12(&db, issue.id).await;
+    GitHubService::delete_project_repository(&db.pool, project.id)
+        .await
+        .unwrap();
+    let app = app!(db);
+
+    let req = webhook("issues", &github_issue_event("closed", "ana"), "whs").to_request();
+    test::call_service(&app, req).await;
+    let mut comment = github_issue_event("created", "ana");
+    comment["comment"] = json!({ "body": "Looking into it", "user": { "login": "ana" },
+                                 "html_url": "https://github.com/acme/web/issues/12#c1" });
+    test::call_service(&app, webhook("issue_comment", &comment, "whs").to_request()).await;
+
+    let now = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+    assert_eq!(now.status, "unresolved");
+    let activity = rustrak::services::IssueSocialService::list_activity(&db.pool, issue.id)
+        .await
+        .unwrap();
+    assert!(activity.iter().all(|a| a.activity_type != "note"));
+    // The link stays, as the record of what it was linked to.
+    assert_eq!(
+        GitHubService::links(&db.pool, issue.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[actix_web::test]

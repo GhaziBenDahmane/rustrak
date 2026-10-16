@@ -134,12 +134,7 @@ async fn assignee(
         // assignees than the one Rustrak keeps.
         super::sync::spawn(
             "assignee sync",
-            super::sync::mirror_assignee(
-                pool.clone(),
-                link.issue_id,
-                user_id,
-                Some(remote.clone()),
-            ),
+            super::sync::mirror_assignee(pool.clone(), link.issue_id, Some(remote.clone())),
         );
     }
     Ok(())

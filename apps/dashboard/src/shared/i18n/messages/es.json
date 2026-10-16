@@ -1785,7 +1785,7 @@
       "linkFailed": "No se pudo enlazar el issue de GitHub",
       "unlinkFailed": "No se pudo desenlazar el issue de GitHub",
       "linkTitle": "Enlazar un issue de GitHub",
-      "linkDescription": "Pega la URL de un issue o pull request, o escribe #123 para el repositorio de este proyecto.",
+      "linkDescription": "Pega la URL de un issue de GitHub, o su número con # delante (por ejemplo, #42) si está en el repositorio de este proyecto.",
       "linkSubmit": "Enlazar"
     },
     "code": {
