@@ -129,6 +129,7 @@ impl Reporter {
             health,
             config: ConfigFacts {
                 alert_providers: super::alert_providers(&self.pool).await?,
+                github_connected: super::github_connected(&self.pool).await?,
                 ..self.context.config.clone()
             },
         })

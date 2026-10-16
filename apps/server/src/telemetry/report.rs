@@ -48,6 +48,10 @@ pub struct Volume {
     pub transactions_24h: u64,
     pub sessions_24h: u64,
     pub logs_24h: u64,
+    /// Projects with a GitHub repository connected.
+    pub github_projects: u64,
+    /// Of those, the ones that open GitHub issues automatically.
+    pub github_auto_create_projects: u64,
 }
 
 /// Which knobs are set. Booleans and kinds only, never values.
@@ -58,6 +62,8 @@ pub struct ConfigFacts {
     pub smtp_configured: bool,
     pub session_secret_set: bool,
     pub alert_providers: Vec<String>,
+    /// Whether a GitHub App is connected to this server.
+    pub github_connected: bool,
     /// Whether any quota limit differs from its default. Never the limits.
     pub quota_customized: bool,
 }

@@ -1,4 +1,4 @@
-//! How much the installation holds. Seven counts, each blurred before it
+//! How much the installation holds. Nine counts, each blurred before it
 //! leaves, run once per window off the request path.
 
 use crate::db::DbPool;
@@ -27,6 +27,12 @@ impl Volume {
             )
             .await?,
             logs_24h: count(pool, &last_day("logs", "ingested_at")).await?,
+            github_projects: count(pool, "SELECT COUNT(*) FROM project_repositories").await?,
+            github_auto_create_projects: count(
+                pool,
+                "SELECT COUNT(*) FROM project_repositories WHERE auto_create_issues = TRUE",
+            )
+            .await?,
         })
     }
 }
@@ -67,4 +73,12 @@ pub async fn alert_providers(pool: &DbPool) -> AppResult<Vec<String>> {
     .fetch_all(pool)
     .await?;
     Ok(kinds)
+}
+
+/// Whether a GitHub App is connected to this server.
+pub async fn github_connected(pool: &DbPool) -> AppResult<bool> {
+    let apps: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM github_app")
+        .fetch_one(pool)
+        .await?;
+    Ok(apps > 0)
 }

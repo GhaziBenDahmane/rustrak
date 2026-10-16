@@ -225,6 +225,7 @@ async fn main() -> std::io::Result<()> {
                 smtp_configured: std::env::var("SMTP_HOST").is_ok_and(|h| !h.trim().is_empty()),
                 session_secret_set: config.security.session_secret_key.is_some(),
                 alert_providers: Vec::new(),
+                github_connected: false,
                 quota_customized: config.rate_limit.is_customized(),
             },
             sqlite_path: rustrak::telemetry::sqlite_path_from_url(&config.database.url),
