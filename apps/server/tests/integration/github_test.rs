@@ -1819,6 +1819,35 @@ async fn an_event_replayed_while_its_github_issue_is_opening_does_not_open_anoth
 }
 
 #[actix_web::test]
+async fn an_issue_resolved_while_its_github_issue_is_opening_closes_it() {
+    let db = TestDb::new().await;
+    let github = FakeGitHub::start().await;
+    let project = project(&db).await;
+    connect(&db, &github, project.id).await;
+    sqlx::query("UPDATE project_repositories SET repo_full_name = 'acme/slow'")
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    auto_create(&db, project.id, json!({})).await;
+
+    digest(&db, project.id, "production").await;
+    // Resolved before GitHub answers: there is no link yet to close.
+    let (issue_id,): (uuid::Uuid,) = sqlx::query_as("SELECT id FROM issues")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    IssueService::set_status(&db.pool, issue_id, "resolved", None)
+        .await
+        .unwrap();
+    rustrak::services::github::sync::mirror_status(db.pool.clone(), issue_id)
+        .await
+        .unwrap();
+
+    let call = github.wait_for("PATCH", "/repos/acme/slow/issues/6").await;
+    assert_eq!(call.body["state"], "closed");
+}
+
+#[actix_web::test]
 async fn the_filters_decide_when_the_github_issue_opens() {
     let db = TestDb::new().await;
     let github = FakeGitHub::start().await;

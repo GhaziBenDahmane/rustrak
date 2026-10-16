@@ -370,9 +370,12 @@ pub async fn auto_create(
     let Some(_opening) = Opening::claim(issue.id) else {
         return Ok(());
     };
-    let Some((app, installation_id, repo)) = project_installation(&pool, project.id).await? else {
+    // The row whose settings passed above, not a second read that could name
+    // a repository chosen since.
+    let Some(app) = GitHubService::app(&pool).await? else {
         return Ok(());
     };
+    let (installation_id, repo) = (repo.installation_id, repo.repo_full_name);
     let client = GitHubClient::new(&app);
     let started = Utc::now() - chrono::Duration::minutes(1);
     // Hidden in the body and new to this run, so only the issue this run
@@ -419,7 +422,9 @@ pub async fn auto_create(
         }
         .await;
         match opened {
-            Ok(()) => return Ok(()),
+            // A status change made while GitHub was answering found no link to
+            // mirror onto; the new link catches up with it here.
+            Ok(()) => return mirror_status(pool, issue.id).await,
             Err(error) if wait > 0 => {
                 log::warn!("GitHub issue auto-create failed, retrying in {wait}s: {error}");
                 tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
