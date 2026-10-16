@@ -323,8 +323,14 @@ async fn main() -> std::io::Result<()> {
             // line that has the method and path, so the id has to appear here
             // for the two to be greppable as one incident. Reads `-` on every
             // response that is not a 5xx.
+            //
+            // `%{r}a` instead of `%a`: behind a reverse proxy the peer is
+            // always the proxy, so `%a` logs its address on every line. The
+            // real-IP form reads `Forwarded` / `X-Forwarded-For` and falls
+            // back to the peer without them, the same address ingest already
+            // stores on each event (`realip_remote_addr` in routes/ingest.rs).
             .wrap(middleware::Logger::new(&format!(
-                "%a \"%r\" %s %b \"%{{Referer}}i\" \"%{{User-Agent}}i\" %T incident=%{{{}}}o",
+                "%{{r}}a \"%r\" %s %b \"%{{Referer}}i\" \"%{{User-Agent}}i\" %T incident=%{{{}}}o",
                 rustrak::error::INCIDENT_ID_HEADER
             )))
             .wrap(middleware::Compress::default())
