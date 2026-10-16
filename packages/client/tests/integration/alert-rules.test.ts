@@ -55,6 +55,22 @@ describe('AlertRulesResource Integration', () => {
       expect(expectErr(result).kind).toBe('invalid_response');
     });
 
+    it('lists a rule whose stored conditions predate the filters', async () => {
+      // The server stored any object before; it now evaluates one it cannot
+      // read as no filters, and so does the client.
+      server.use(
+        http.get('http://localhost:8080/api/projects/1/alert-rules', () => {
+          return HttpResponse.json([
+            { ...mockRule, conditions: { min_level: 'critical' } },
+          ]);
+        }),
+      );
+
+      const rules = expectOk(await client.alertRules.list(projectId));
+
+      expect(rules[0]?.conditions).toEqual({});
+    });
+
     it('should handle empty array', async () => {
       server.use(
         http.get('http://localhost:8080/api/projects/1/alert-rules', () => {
@@ -156,16 +172,15 @@ describe('AlertRulesResource Integration', () => {
     });
 
     it('should reject a rule whose conditions name an unknown level', async () => {
-      server.use(
-        http.get('http://localhost:8080/api/projects/1/alert-rules', () =>
-          HttpResponse.json([
-            { ...mockRule, conditions: { min_level: 'loud' } },
-          ]),
-        ),
-      );
+      const result = await client.alertRules.create(projectId, {
+        name: 'Test',
+        alert_type: 'new_issue',
+        channels: [],
+        // @ts-expect-error - Testing runtime validation
+        conditions: { min_level: 'loud' },
+      });
 
-      const result = await client.alertRules.list(projectId);
-      expect(expectErr(result).kind).toBe('invalid_response');
+      expect(expectErr(result).kind).toBe('invalid_request');
     });
 
     it('should create new_issue rule with channels', async () => {

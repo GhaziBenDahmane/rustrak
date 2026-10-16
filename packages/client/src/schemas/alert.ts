@@ -99,7 +99,10 @@ export const alertRuleSchema = z.object({
   name: z.string(),
   alert_type: alertTypeSchema,
   is_enabled: z.boolean(),
-  conditions: alertRuleConditionsSchema,
+  // A rule stored before the filters existed may hold any object. The server
+  // evaluates one it cannot read as no filters; one bad row must not fail the
+  // whole list either.
+  conditions: alertRuleConditionsSchema.catch({}),
   cooldown_minutes: z.number().int(),
   last_triggered_at: dateTimeSchema.nullable(),
   created_at: dateTimeSchema,
