@@ -1,9 +1,9 @@
 <div align="center">
-  <a href="https://rustrak.github.io/rustrak">
+  <a href="https://rustrak.dev">
     <img src="https://raw.githubusercontent.com/rustrak/rustrak/main/apps/docs/public/logo.svg" alt="Rustrak" width="64" height="64" />
   </a>
   <h1>@rustrak/mcp</h1>
-  <p>MCP server that gives AI assistants full control of your <a href="https://rustrak.github.io/rustrak">Rustrak</a> error tracking</p>
+  <p>MCP server that gives AI assistants full control of your <a href="https://rustrak.dev">Rustrak</a> error tracking</p>
 
   <p>
     <a href="https://www.npmjs.com/package/@rustrak/mcp">
@@ -21,7 +21,7 @@
   </p>
 
   <p>
-    <a href="https://rustrak.github.io/rustrak/sdks/mcp">Documentation</a>
+    <a href="https://rustrak.dev/sdks/mcp">Documentation</a>
     ·
     <a href="https://github.com/rustrak/rustrak">GitHub</a>
     ·
@@ -31,9 +31,9 @@
 
 ---
 
-`@rustrak/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server for [Rustrak](https://rustrak.github.io/rustrak) — the self-hosted, Sentry-compatible error tracker. Connect it to Claude Desktop, Cursor, Continue.dev, or any MCP-compatible AI assistant and get 18 tools to list projects, inspect issues, view stack traces, resolve errors, and manage tokens without leaving your AI tool.
+`@rustrak/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server for [Rustrak](https://rustrak.dev) — the self-hosted, Sentry-compatible error tracker. Connect it to Claude Desktop, Cursor, Continue.dev, or any MCP-compatible AI assistant and get 18 tools to list projects, inspect issues, view stack traces, resolve errors, and manage tokens without leaving your AI tool.
 
-**[Full documentation →](https://rustrak.github.io/rustrak/sdks/mcp)**
+**[Full documentation →](https://rustrak.dev/sdks/mcp)**
 
 ## Quick Start
 
@@ -210,10 +210,10 @@ The server runs as a local process over stdio — no open network port, no daemo
 
 ## What is Rustrak?
 
-[Rustrak](https://rustrak.github.io/rustrak) is a self-hosted error tracking server written in Rust that accepts events from any Sentry SDK: point the SDK's DSN at it and nothing else changes. One container serves the API and the dashboard.
+[Rustrak](https://rustrak.dev) is a self-hosted error tracking server written in Rust that accepts events from any Sentry SDK: point the SDK's DSN at it and nothing else changes. One container serves the API and the dashboard.
 
-- [Getting Started](https://rustrak.github.io/rustrak/getting-started/overview)
-- [Self-Hosting Guide](https://rustrak.github.io/rustrak/configuration/production)
+- [Getting Started](https://rustrak.dev/getting-started/overview)
+- [Self-Hosting Guide](https://rustrak.dev/configuration/production)
 - [GitHub](https://github.com/rustrak/rustrak)
 
 ## Development

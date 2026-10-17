@@ -1,9 +1,9 @@
 <div align="center">
-  <a href="https://rustrak.github.io/rustrak">
+  <a href="https://rustrak.dev">
     <img src="https://raw.githubusercontent.com/rustrak/rustrak/main/apps/docs/public/logo.svg" alt="Rustrak" width="64" height="64" />
   </a>
   <h1>@rustrak/client</h1>
-  <p>Official TypeScript client for the <a href="https://rustrak.github.io/rustrak">Rustrak</a> self-hosted error tracking API</p>
+  <p>Official TypeScript client for the <a href="https://rustrak.dev">Rustrak</a> self-hosted error tracking API</p>
 
   <p>
     <a href="https://www.npmjs.com/package/@rustrak/client">
@@ -24,7 +24,7 @@
   </p>
 
   <p>
-    <a href="https://rustrak.github.io/rustrak/sdks/client">Documentation</a>
+    <a href="https://rustrak.dev/sdks/client">Documentation</a>
     ·
     <a href="https://github.com/rustrak/rustrak">GitHub</a>
     ·
@@ -34,7 +34,7 @@
 
 ---
 
-`@rustrak/client` is the official TypeScript client for [Rustrak](https://rustrak.github.io/rustrak) — an ultra-lightweight, self-hosted error tracking system compatible with any Sentry SDK. This package wraps the Rustrak REST API with full type safety, runtime validation via Zod, built-in retry logic, and structured error handling. Total bundle size: ~28 KB.
+`@rustrak/client` is the official TypeScript client for [Rustrak](https://rustrak.dev) — an ultra-lightweight, self-hosted error tracking system compatible with any Sentry SDK. This package wraps the Rustrak REST API with full type safety, runtime validation via Zod, built-in retry logic, and structured error handling. Total bundle size: ~28 KB.
 
 ## Installation
 
@@ -78,7 +78,7 @@ const resolved = await client.issues.updateState(1, 'issue-id', {
 });
 ```
 
-**[Full documentation →](https://rustrak.github.io/rustrak/sdks/client)**
+**[Full documentation →](https://rustrak.dev/sdks/client)**
 
 ## Features
 
@@ -319,11 +319,11 @@ import type {
 
 ## What is Rustrak?
 
-[Rustrak](https://rustrak.github.io/rustrak) is a self-hosted error tracking server written in Rust that accepts events from any Sentry SDK: point the SDK's DSN at it and nothing else changes. One container serves the API and the dashboard.
+[Rustrak](https://rustrak.dev) is a self-hosted error tracking server written in Rust that accepts events from any Sentry SDK: point the SDK's DSN at it and nothing else changes. One container serves the API and the dashboard.
 
-- [Getting Started](https://rustrak.github.io/rustrak/getting-started/overview)
-- [Self-Hosting Guide](https://rustrak.github.io/rustrak/configuration/production)
-- [API Reference](https://rustrak.github.io/rustrak/api-reference)
+- [Getting Started](https://rustrak.dev/getting-started/overview)
+- [Self-Hosting Guide](https://rustrak.dev/configuration/production)
+- [API Reference](https://rustrak.dev/api-reference)
 - [GitHub](https://github.com/rustrak/rustrak)
 
 ## License

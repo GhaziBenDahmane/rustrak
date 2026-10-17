@@ -78,7 +78,7 @@ The database and uploaded source maps live in the `/data` volume. Use the
 | `SOURCEMAP_STORAGE_PATH` | No | `/data/sourcemaps` | Where uploaded source maps are stored |
 | `RUSTRAK_TELEMETRY` | No | `on` | `off` stops the anonymous heartbeat |
 
-The full list is in the [environment reference](https://rustrak.github.io/rustrak/configuration/environment).
+The full list is in the [environment reference](https://rustrak.dev/configuration/environment).
 
 ## API Endpoints
 

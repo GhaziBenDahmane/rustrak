@@ -6,7 +6,7 @@ import matter from 'gray-matter';
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHANGELOG_DIR = path.join(ROOT, 'content/changelog');
 const OUTPUT = path.join(ROOT, 'public/versions.json');
-const CHANGELOG_URL = 'https://rustrak.github.io/rustrak/changelog';
+const CHANGELOG_URL = 'https://rustrak.dev/changelog';
 
 function safeDate(value) {
   const date = new Date(value);

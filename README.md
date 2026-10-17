@@ -10,10 +10,10 @@
 [![Docker pulls](https://img.shields.io/docker/pulls/rustrak/rustrak-server)](https://hub.docker.com/r/rustrak/rustrak-server)
 [![Sponsors](https://img.shields.io/github/sponsors/AbianS?label=sponsors&color=db61a2)](https://github.com/sponsors/AbianS)
 
-**[Documentation](https://rustrak.github.io/rustrak/)** ·
+**[Documentation](https://rustrak.dev/)** ·
 [Quickstart](#quickstart) ·
-[Roadmap](https://rustrak.github.io/rustrak/roadmap) ·
-[Changelog](https://rustrak.github.io/rustrak/changelog) ·
+[Roadmap](https://rustrak.dev/roadmap) ·
+[Changelog](https://rustrak.dev/changelog) ·
 [Report a bug](https://github.com/rustrak/rustrak/issues)
 
 </div>
@@ -82,11 +82,11 @@ Open <http://localhost:8080> and sign in with those credentials. One container
 answers both the dashboard and the API, so there is no second port and no
 address to tell one half about the other. Want the dashboard on a different
 host from your data? `rustrak/rustrak-ui` is the same dashboard behind nginx;
-see the [production guide](https://rustrak.github.io/rustrak/configuration/production#dashboard-on-its-own-host).
+see the [production guide](https://rustrak.dev/configuration/production#dashboard-on-its-own-host).
 
 Running at scale? `docker-compose.postgres.yml` runs the `:postgres` image next
 to a PostgreSQL service. The
-[installation guide](https://rustrak.github.io/rustrak/getting-started/installation)
+[installation guide](https://rustrak.dev/getting-started/installation)
 has both setups and the production notes.
 
 ## Point your SDK at it
@@ -255,7 +255,7 @@ npx @rustrak/mcp              # Claude, Cursor, Continue
 | [`@rustrak/client`](https://www.npmjs.com/package/@rustrak/client) | [![npm](https://img.shields.io/npm/v/@rustrak/client?style=flat-square)](https://www.npmjs.com/package/@rustrak/client) | TypeScript client. Every method returns `Result<T, RustrakError>` and never throws, so a call that can fail says so in its type |
 | [`@rustrak/mcp`](https://www.npmjs.com/package/@rustrak/mcp) | [![npm](https://img.shields.io/npm/v/@rustrak/mcp?style=flat-square)](https://www.npmjs.com/package/@rustrak/mcp) | MCP server over that client, so an assistant can read and manage your instance |
 
-The OpenAPI spec is browsable in the [API reference](https://rustrak.github.io/rustrak/api-reference).
+The OpenAPI spec is browsable in the [API reference](https://rustrak.dev/api-reference).
 
 ## Telemetry
 
@@ -270,18 +270,18 @@ RUSTRAK_TELEMETRY=off   # or DO_NOT_TRACK=1; either one is enough
 ```
 
 Every field is listed in the
-[telemetry page](https://rustrak.github.io/rustrak/configuration/telemetry),
+[telemetry page](https://rustrak.dev/configuration/telemetry),
 and `GET /api/telemetry/preview` shows the exact document before it leaves.
 
 ## Documentation
 
 | | |
 |---|---|
-| [Getting started](https://rustrak.github.io/rustrak/getting-started/overview) | What Rustrak is and how it fits together |
-| [Installation](https://rustrak.github.io/rustrak/getting-started/installation) | Self-hosting, PostgreSQL, production notes |
-| [Configuration](https://rustrak.github.io/rustrak/configuration/environment) | Every environment variable |
-| [API reference](https://rustrak.github.io/rustrak/reference/api) | Endpoints and schemas |
-| [Architecture](https://rustrak.github.io/rustrak/reference/architecture) | Two-phase ingestion, grouping, storage |
+| [Getting started](https://rustrak.dev/getting-started/overview) | What Rustrak is and how it fits together |
+| [Installation](https://rustrak.dev/getting-started/installation) | Self-hosting, PostgreSQL, production notes |
+| [Configuration](https://rustrak.dev/configuration/environment) | Every environment variable |
+| [API reference](https://rustrak.dev/reference/api) | Endpoints and schemas |
+| [Architecture](https://rustrak.dev/reference/architecture) | Two-phase ingestion, grouping, storage |
 
 ## Contributors
 

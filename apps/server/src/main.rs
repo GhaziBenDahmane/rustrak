@@ -239,7 +239,7 @@ async fn main() -> std::io::Result<()> {
                 .unwrap_or_else(|_| "unknown".to_string());
             log::info!(
                 "Anonymous telemetry is on (instance {instance}). RUSTRAK_TELEMETRY=off disables it. \
-                 https://rustrak.github.io/rustrak/configuration/telemetry"
+                 https://rustrak.dev/configuration/telemetry"
             );
             tokio::spawn(Arc::clone(&telemetry_reporter).run());
         }

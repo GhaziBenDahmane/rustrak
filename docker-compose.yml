@@ -5,13 +5,13 @@
 #   docker compose up -d
 #
 # For PostgreSQL, use docker-compose.postgres.yml. For a dashboard on another
-# host from the server: https://rustrak.github.io/rustrak/configuration/production#dashboard-on-its-own-host
+# host from the server: https://rustrak.dev/configuration/production#dashboard-on-its-own-host
 services:
   server:
     image: rustrak/rustrak-server:latest
     # Behind a reverse proxy on the same Docker network, delete this `ports`
     # block: the proxy reaches the container on 8080 and nothing needs a host
-    # port. Full setup: https://rustrak.github.io/rustrak/configuration/production#reverse-proxy
+    # port. Full setup: https://rustrak.dev/configuration/production#reverse-proxy
     ports:
       - "${SERVER_PORT:-8080}:8080"
     environment:

@@ -18,7 +18,7 @@
  * template on its own, rather than a paragraph in the alerts page.
  */
 export const TEMPLATE_DOCS_URL =
-  'https://rustrak.github.io/rustrak/usage/alerts/message-body-template';
+  'https://rustrak.dev/usage/alerts/message-body-template';
 
 /**
  * The editor's placeholder: a minimal body, not copy. Held here rather than

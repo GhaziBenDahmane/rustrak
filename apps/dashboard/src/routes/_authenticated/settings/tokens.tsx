@@ -45,7 +45,7 @@ function TokensPage() {
       </div>
 
       <Link
-        href="https://rustrak.github.io/rustrak/api-reference"
+        href="https://rustrak.dev/api-reference"
         target="_blank"
         rel="noopener noreferrer"
         className="mb-6 flex items-center gap-4 rounded-lg border bg-card px-5 py-4 transition-colors hover:bg-accent group"

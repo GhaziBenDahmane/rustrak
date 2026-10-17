@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getServerVersion } from '@/shared/api/server-version';
 import { compareVersions, type UpdateCheck } from '@/shared/lib/version';
 
-const VERSIONS_URL = 'https://rustrak.github.io/rustrak/versions.json';
+const VERSIONS_URL = 'https://rustrak.dev/versions.json';
 const FETCH_TIMEOUT_MS = 3000;
 
 const feedSchema = z.object({
