@@ -93,3 +93,17 @@ fn an_interval_never_goes_back_in_the_repeated_hour() {
         at("2026-11-01T06:20:00Z")
     );
 }
+
+#[test]
+fn an_interval_steps_over_a_two_hour_gap() {
+    let s = Schedule::Interval {
+        value: 1,
+        unit: IntervalUnit::Day,
+    };
+    // Troll jumps from 01:00 +00 to 03:00 +02 on 2026-03-29, so 02:30 that
+    // day does not exist.
+    assert_eq!(
+        s.next_after(at("2026-03-28T02:30:00Z"), Tz::Antarctica__Troll),
+        at("2026-03-29T02:30:00Z") // 04:30 +02
+    );
+}

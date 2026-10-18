@@ -181,13 +181,14 @@ fn step(tz: Tz, from: DateTime<Utc>, value: u32, unit: IntervalUnit, k: u32) -> 
             }
         }
         // A wall time skipped when clocks go forward: read it with the
-        // offset in force just before the jump, as dateutil does.
-        // ponytail: assumes a gap of at most an hour; a longer one (historic
-        // zone changes) falls back to `from`.
-        LocalResult::None => tz
-            .from_local_datetime(&(shifted - Duration::hours(1)))
-            .earliest()
-            .map(|t| t.with_timezone(&Utc) + Duration::hours(1))
+        // offset in force just before the jump, as dateutil does. Gaps run
+        // from half an hour to a whole day (Samoa, 2011).
+        LocalResult::None => (1..=24)
+            .find_map(|h| {
+                tz.from_local_datetime(&(shifted - Duration::hours(h)))
+                    .earliest()
+                    .map(|t| t.with_timezone(&Utc) + Duration::hours(h))
+            })
             .unwrap_or(from),
     }
 }
