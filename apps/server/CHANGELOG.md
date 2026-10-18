@@ -1,5 +1,11 @@
 # @rustrak/server
 
+## 0.18.0
+
+### Minor Changes
+
+- [`5ff519f`](https://github.com/rustrak/rustrak/commit/5ff519f6ef4c7f4c81e51c33b7a63406df5f9f3f) Thanks [@AbianS](https://github.com/AbianS)! - Crons: Sentry-compatible cron monitors that open an issue when a job is missed, fails or runs too long, from SDK check-ins or plain HTTP. Storage retention: keep each kind of data for a set period, per project if needed, with a daily or weekly cleanup and a Storage page that shows what it holds and what the next run frees. Custom headers on webhook integrations. Schedule previews in the API, client and MCP.
+
 ## 0.17.0
 
 ### Minor Changes
