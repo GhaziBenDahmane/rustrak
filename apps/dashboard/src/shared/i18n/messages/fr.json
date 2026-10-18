@@ -1960,7 +1960,10 @@
       "nameRequired": "Le nom est obligatoire",
       "slugFormat": "Utilisez des minuscules, des chiffres, - et _",
       "intervalMin": "Au moins 1",
-      "crontabInvalid": "Ce n’est pas un crontab valide à cinq champs"
+      "crontabInvalid": "Ce n’est pas un crontab valide à cinq champs",
+      "numberRange": "Entre {min} et {max}",
+      "tooLong": "{max} caractères au maximum",
+      "timezoneRequired": "Choisissez un fuseau horaire"
     }
   },
   "schedule": {

@@ -14,12 +14,25 @@ export const MAX_THRESHOLD = 720;
 
 /** What the monitor form collects. */
 export function monitorFormSchema(t: Translate) {
+  // A cleared number input is NaN; it gets the same message as one out of range.
+  const count = (max: number) => {
+    const error = t('validation.numberRange', { min: 1, max });
+    return z
+      .number({ error })
+      .int({ error })
+      .min(1, { error })
+      .max(max, { error });
+  };
   return z.object({
-    name: z.string().trim().min(1, t('validation.nameRequired')).max(128),
+    name: z
+      .string()
+      .trim()
+      .min(1, t('validation.nameRequired'))
+      .max(128, t('validation.tooLong', { max: 128 })),
     slug: z
       .string()
       .trim()
-      .max(50)
+      .max(50, t('validation.tooLong', { max: 50 }))
       .regex(/^[a-z0-9_-]*$/, t('validation.slugFormat')),
     // Whether a crontab parses is the server's call (`schedules.preview`).
     schedule: z.discriminatedUnion('type', [
@@ -33,11 +46,11 @@ export function monitorFormSchema(t: Translate) {
         unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
       }),
     ]),
-    timezone: z.string().min(1),
-    checkin_margin: z.number().int().min(1).max(MAX_MARGIN),
-    max_runtime: z.number().int().min(1).max(MAX_RUNTIME),
-    failure_issue_threshold: z.number().int().min(1).max(MAX_THRESHOLD),
-    recovery_threshold: z.number().int().min(1).max(MAX_THRESHOLD),
+    timezone: z.string().min(1, t('validation.timezoneRequired')),
+    checkin_margin: count(MAX_MARGIN),
+    max_runtime: count(MAX_RUNTIME),
+    failure_issue_threshold: count(MAX_THRESHOLD),
+    recovery_threshold: count(MAX_THRESHOLD),
   });
 }
 

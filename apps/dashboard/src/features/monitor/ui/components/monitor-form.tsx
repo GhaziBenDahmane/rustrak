@@ -64,9 +64,7 @@ export function MonitorForm({
   });
 
   const listHref = `/projects/${projectId}/crons`;
-  const cancelHref = monitor
-    ? `${listHref}/${encodeURIComponent(monitor.slug)}`
-    : listHref;
+  const cancelHref = monitor ? monitorHref(projectId, monitor.slug) : listHref;
 
   const onSubmit = (data: MonitorFormData) => {
     startTransition(async () => {

@@ -1907,7 +1907,7 @@
     "actions": {
       "edit": "Editează",
       "more": "Mai multe acțiuni",
-      "mute": "Silențios",
+      "mute": "Trece pe silențios",
       "unmute": "Reactivează",
       "muted": "Monitor trecut pe silențios",
       "unmuted": "Monitor reactivat",
@@ -1960,7 +1960,10 @@
       "nameRequired": "Numele este obligatoriu",
       "slugFormat": "Folosește litere mici, cifre, - și _",
       "intervalMin": "Cel puțin 1",
-      "crontabInvalid": "Nu este un crontab valid cu cinci câmpuri"
+      "crontabInvalid": "Nu este un crontab valid cu cinci câmpuri",
+      "numberRange": "Între {min} și {max}",
+      "tooLong": "Cel mult {max} caractere",
+      "timezoneRequired": "Alege un fus orar"
     }
   },
   "schedule": {

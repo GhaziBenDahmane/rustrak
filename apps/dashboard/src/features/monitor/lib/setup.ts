@@ -87,8 +87,10 @@ if ./run-your-task.sh; then
   # 🟢 Notify Rustrak your job has completed successfully:
   curl "$RUSTRAK_CRONS?status=ok"
 else
-  # 🔴 Notify Rustrak your job has failed:
+  status=$?
+  # 🔴 Notify Rustrak your job has failed, and still fail:
   curl "$RUSTRAK_CRONS?status=error"
+  exit "$status"
 fi`;
 }
 

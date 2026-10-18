@@ -54,6 +54,8 @@ describe('cronGuide', () => {
     expect(code).toMatch(
       /if [\s\S]*then[\s\S]*status=ok[\s\S]*else[\s\S]*status=error[\s\S]*fi/,
     );
+    // A failed task still fails the script, for a scheduler that reads it.
+    expect(code).toMatch(/else\s+status=\$\?[\s\S]*exit "\$status"\s+fi/);
   });
 
   it('upserts the monitor when a schedule is given', () => {

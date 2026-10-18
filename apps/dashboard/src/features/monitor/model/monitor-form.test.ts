@@ -18,6 +18,31 @@ describe('monitorFormSchema', () => {
     ).toBe(true);
   });
 
+  it("explains every rule in the reader's language", () => {
+    const parsed = schema.safeParse({
+      ...DEFAULT_MONITOR_FORM,
+      name: 'x'.repeat(129),
+      slug: 'x'.repeat(51),
+      timezone: '',
+      checkin_margin: Number.NaN,
+      max_runtime: 0,
+      failure_issue_threshold: 1_000,
+      recovery_threshold: 1.5,
+    });
+    const messages = Object.fromEntries(
+      (parsed.error?.issues ?? []).map((i) => [i.path[0], i.message]),
+    );
+    expect(messages).toEqual({
+      name: 'validation.tooLong',
+      slug: 'validation.tooLong',
+      timezone: 'validation.timezoneRequired',
+      checkin_margin: 'validation.numberRange',
+      max_runtime: 'validation.numberRange',
+      failure_issue_threshold: 'validation.numberRange',
+      recovery_threshold: 'validation.numberRange',
+    });
+  });
+
   it('requires a name', () => {
     expect(schema.safeParse(DEFAULT_MONITOR_FORM).success).toBe(false);
   });

@@ -1960,7 +1960,10 @@
       "nameRequired": "名称为必填项",
       "slugFormat": "请使用小写字母、数字、- 和 _",
       "intervalMin": "至少为 1",
-      "crontabInvalid": "不是有效的五字段 crontab"
+      "crontabInvalid": "不是有效的五字段 crontab",
+      "numberRange": "介于 {min} 和 {max} 之间",
+      "tooLong": "最多 {max} 个字符",
+      "timezoneRequired": "请选择时区"
     }
   },
   "schedule": {
