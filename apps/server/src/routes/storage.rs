@@ -47,10 +47,13 @@ fn require_admin(actor: &ApiActor) -> AppResult<()> {
     security(("bearer_auth" = [])),
 ))]
 /// GET /api/storage/summary — row counts, DB size, and source-map weight.
-pub async fn get_summary(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+pub async fn get_summary(
+    pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    let summary = StorageService::global_summary(pool.get_ref()).await?;
-    Ok(HttpResponse::Ok().json(summary))
+    Ok(HttpResponse::Ok().json(&job.snapshot(pool.get_ref()).await?.summary))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -64,10 +67,13 @@ pub async fn get_summary(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<
     security(("bearer_auth" = [])),
 ))]
 /// GET /api/storage/projects — per-project counts and estimated weight.
-pub async fn get_projects(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+pub async fn get_projects(
+    pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    let rows = StorageService::by_project(pool.get_ref()).await?;
-    Ok(HttpResponse::Ok().json(rows))
+    Ok(HttpResponse::Ok().json(&job.snapshot(pool.get_ref()).await?.projects))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -183,11 +189,13 @@ pub async fn preview_source_map_gc(
 /// POST /api/storage/source-maps/gc — delete orphaned source maps (DB + disk).
 pub async fn gc_source_maps(
     pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
     store: web::Data<Arc<dyn SourceMapStore>>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
     let result = StorageService::gc_source_maps(pool.get_ref(), store.get_ref().as_ref()).await?;
+    job.forget_snapshot().await;
     Ok(HttpResponse::Ok().json(result))
 }
 
@@ -375,9 +383,13 @@ pub async fn run_retention(
     security(("bearer_auth" = [])),
 ))]
 /// GET /api/storage/age — rows per age bucket, per project and kind.
-pub async fn get_age(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+pub async fn get_age(
+    pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(HttpResponse::Ok().json(StorageService::age_breakdown(pool.get_ref()).await?))
+    Ok(HttpResponse::Ok().json(&job.snapshot(pool.get_ref()).await?.age))
 }
 
 async fn retention_response(pool: &DbPool, job: &CleanupJob) -> AppResult<RetentionResponse> {

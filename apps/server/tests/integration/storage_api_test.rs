@@ -849,6 +849,94 @@ async fn the_age_breakdown_buckets_each_kind_by_how_long_ago_it_arrived() {
     assert!(Utc::now() - oldest > chrono::Duration::days(399));
 }
 
+/// The storage page reads summary, projects and age at once. They come from
+/// one read of the tables, kept until a cleanup changes what is stored:
+/// reading each table once per endpoint and per load took over 30s on a
+/// large instance.
+#[actix_web::test]
+async fn the_storage_figures_are_read_once_and_kept_until_a_cleanup() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "kept").await;
+    seed_old_log(&db.pool, project, 40).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+    let get = |uri: &'static str| {
+        test::TestRequest::get()
+            .uri(uri)
+            .insert_header(bearer(&token))
+            .to_request()
+    };
+    let logs_in = |projects: &Value| {
+        projects
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["project_id"] == project)
+            .unwrap()["logs_count"]
+            .clone()
+    };
+
+    let summary: Value = test::call_and_read_body_json(&app, get("/api/storage/summary")).await;
+    assert_eq!(summary["logs_count"], 1);
+
+    seed_old_log(&db.pool, project, 5).await;
+    let summary: Value = test::call_and_read_body_json(&app, get("/api/storage/summary")).await;
+    let projects: Value = test::call_and_read_body_json(&app, get("/api/storage/projects")).await;
+    let age: Value = test::call_and_read_body_json(&app, get("/api/storage/age")).await;
+    assert_eq!(summary["logs_count"], 1, "the figures read a moment ago");
+    assert_eq!(logs_in(&projects), 1, "the same read as the summary");
+    assert_eq!(
+        age["projects"][0]["logs"]["counts"],
+        json!([0, 0, 0, 1, 0, 0, 0])
+    );
+
+    // A cleanup changes what is stored, even one that deletes nothing.
+    let req = test::TestRequest::post()
+        .uri("/api/storage/cleanup")
+        .insert_header(bearer(&token))
+        .set_json(json!({ "older_than_days": 365 }))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 202);
+    wait_for_cleanup(&app, &token).await;
+    let summary: Value = test::call_and_read_body_json(&app, get("/api/storage/summary")).await;
+    let projects: Value = test::call_and_read_body_json(&app, get("/api/storage/projects")).await;
+    let age: Value = test::call_and_read_body_json(&app, get("/api/storage/age")).await;
+    assert_eq!(summary["logs_count"], 2);
+    assert_eq!(logs_in(&projects), 2);
+    assert_eq!(
+        age["projects"][0]["logs"]["counts"],
+        json!([1, 0, 0, 1, 0, 0, 0])
+    );
+}
+
+/// Collecting unused source maps changes what is stored too, without a
+/// cleanup job: the next read of the figures must not be the one from before.
+#[actix_web::test]
+async fn collecting_source_maps_drops_the_kept_figures() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    insert_orphan_source_file(&db.pool, 2_048).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+    let files = || async {
+        let req = test::TestRequest::get()
+            .uri("/api/storage/summary")
+            .insert_header(bearer(&token))
+            .to_request();
+        let body: Value = test::call_and_read_body_json(&app, req).await;
+        body["source_maps"]["file_count"].clone()
+    };
+
+    assert_eq!(files().await, 1);
+    let req = test::TestRequest::post()
+        .uri("/api/storage/source-maps/gc")
+        .insert_header(bearer(&token))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 200);
+    assert_eq!(files().await, 0);
+}
+
 #[actix_web::test]
 async fn the_age_breakdown_is_admin_only() {
     let db = TestDb::new().await;
