@@ -1251,6 +1251,8 @@
       "loadFailed": "Curățarea automată nu a putut fi încărcată",
       "pickOne": "Alege cel puțin un tip de date",
       "daysMin": "Cel puțin 1 zi",
+      "crontabRequired": "Introdu un crontab",
+      "intervalMin": "Cel puțin 1",
       "nextRun": "Următoarea rulare {when}",
       "nextRunPending": "Se programează următoarea rulare…",
       "off": "Dezactivată",

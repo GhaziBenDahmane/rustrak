@@ -1251,6 +1251,8 @@
       "loadFailed": "No se pudo cargar la limpieza automática",
       "pickOne": "Elige al menos un tipo de dato",
       "daysMin": "Como mínimo 1 día",
+      "crontabRequired": "Escribe un crontab",
+      "intervalMin": "Como mínimo 1",
       "nextRun": "Próxima ejecución {when}",
       "nextRunPending": "Programando la próxima ejecución…",
       "off": "Desactivada",

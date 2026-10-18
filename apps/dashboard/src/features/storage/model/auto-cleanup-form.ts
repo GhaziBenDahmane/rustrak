@@ -14,11 +14,14 @@ export function autoCleanupFormSchema(t: Translate) {
       schedule: z.discriminatedUnion('type', [
         z.object({
           type: z.literal('crontab'),
-          value: z.string().trim().min(1),
+          value: z.string().trim().min(1, t('auto.crontabRequired')),
         }),
         z.object({
           type: z.literal('interval'),
-          value: z.number().int().min(1),
+          value: z
+            .number({ error: t('auto.intervalMin') })
+            .int({ error: t('auto.intervalMin') })
+            .min(1, t('auto.intervalMin')),
           unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']),
         }),
       ]),
@@ -64,6 +67,17 @@ export interface StatusLine {
   key: string;
   at?: string;
   values?: Record<string, string>;
+}
+
+/**
+ * Whether the saved status is about to change on its own: a save leaves the
+ * next run for the scheduler's next tick, and a running cleanup finishes.
+ */
+export function statusMayChange(state: AutoCleanup): boolean {
+  return (
+    (state.settings.enabled && !state.next_run_at) ||
+    state.last_run?.status === 'running'
+  );
 }
 
 /** When automatic cleanup runs next, and how its last run went. */

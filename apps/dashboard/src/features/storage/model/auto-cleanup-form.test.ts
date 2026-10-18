@@ -9,6 +9,7 @@ import {
   autoCleanupFormSchema,
   removedParts,
   runStatus,
+  statusMayChange,
 } from './auto-cleanup-form';
 
 const t: Translate = (key) => key;
@@ -27,6 +28,17 @@ const settings: AutoCleanupSettings = {
 describe('autoCleanupFormSchema', () => {
   it('accepts sensible settings', () => {
     expect(schema.safeParse(settings).success).toBe(true);
+  });
+
+  it("explains an empty schedule in the reader's language", () => {
+    const message = (schedule: AutoCleanupSettings['schedule']) =>
+      schema.safeParse({ ...settings, schedule }).error?.issues[0]?.message;
+    expect(message({ type: 'crontab', value: '  ' })).toBe(
+      'auto.crontabRequired',
+    );
+    expect(message({ type: 'interval', value: 0, unit: 'day' })).toBe(
+      'auto.intervalMin',
+    );
   });
 
   it('needs at least one kind of data when enabled', () => {
@@ -145,5 +157,38 @@ describe('runStatus', () => {
 
   it('has no last run before the first one', () => {
     expect(runStatus(state({}), t).last).toBeNull();
+  });
+});
+
+describe('statusMayChange', () => {
+  const state = (patch: Partial<AutoCleanup>): AutoCleanup => ({
+    settings,
+    next_run_at: '2026-01-02T03:00:00Z',
+    last_run: null,
+    ...patch,
+  });
+
+  it('waits for the scheduler to set the next run after a save', () => {
+    expect(statusMayChange(state({ next_run_at: null }))).toBe(true);
+  });
+
+  it('waits for a running cleanup to finish', () => {
+    const last_run = {
+      started_at: '2026-01-01T03:00:00Z',
+      finished_at: null,
+      status: 'running',
+      removed: null,
+      error: null,
+    } as AutoCleanup['last_run'];
+    expect(statusMayChange(state({ last_run }))).toBe(true);
+  });
+
+  it('is settled once scheduled and idle, or when off', () => {
+    expect(statusMayChange(state({}))).toBe(false);
+    expect(
+      statusMayChange(
+        state({ settings: { ...settings, enabled: false }, next_run_at: null }),
+      ),
+    ).toBe(false);
   });
 });

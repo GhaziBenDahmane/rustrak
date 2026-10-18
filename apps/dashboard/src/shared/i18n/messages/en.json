@@ -1251,6 +1251,8 @@
       "loadFailed": "Could not load automatic cleanup",
       "pickOne": "Pick at least one kind of data",
       "daysMin": "At least 1 day",
+      "crontabRequired": "Type a crontab",
+      "intervalMin": "At least 1",
       "nextRun": "Next run {when}",
       "nextRunPending": "Scheduling the next run…",
       "off": "Off",

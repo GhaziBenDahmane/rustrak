@@ -1251,6 +1251,8 @@
       "loadFailed": "无法加载自动清理",
       "pickOne": "请至少选择一种数据",
       "daysMin": "至少 1 天",
+      "crontabRequired": "请输入 crontab",
+      "intervalMin": "至少为 1",
       "nextRun": "下次运行 {when}",
       "nextRunPending": "正在安排下次运行…",
       "off": "已关闭",

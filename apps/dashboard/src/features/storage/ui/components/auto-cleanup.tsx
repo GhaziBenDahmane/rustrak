@@ -1,16 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { AutoCleanup as AutoCleanupState } from '@rustrak/client';
 import { CalendarClock, Loader2 } from 'lucide-react';
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useFormatter, useTranslations } from 'use-intl';
 import { updateAutoCleanup } from '@/features/storage/api/mutations';
+import { getAutoCleanup } from '@/features/storage/api/queries';
 import {
   type AutoCleanupFormData,
   autoCleanupFormSchema,
   runStatus,
   type StatusLine,
+  statusMayChange,
 } from '@/features/storage/model/auto-cleanup-form';
 import { applyServerFieldErrors } from '@/shared/lib/form-errors';
 import { cn } from '@/shared/lib/utils';
@@ -67,6 +69,18 @@ export function AutoCleanup({ initial }: { initial: AutoCleanupState }) {
     resolver: zodResolver(schema),
     defaultValues: initial.settings,
   });
+  // Polls only while the status is about to change, and only the status: the
+  // form keeps whatever is being typed.
+  const waiting = statusMayChange(state);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(async () => {
+      const result = await getAutoCleanup();
+      if (result.success) setState(result.data);
+    }, 15_000);
+    return () => clearInterval(timer);
+  }, [waiting]);
+
   const [enabled, schedule, timezone] = useWatch({
     control: form.control,
     name: ['enabled', 'schedule', 'timezone'],
@@ -216,7 +230,14 @@ export function AutoCleanup({ initial }: { initial: AutoCleanupState }) {
                         value={field.value}
                         onChange={field.onChange}
                         disabled={isPending}
-                        error={fieldState.error?.message}
+                        error={
+                          fieldState.error?.message ??
+                          (
+                            fieldState.error as
+                              | { value?: { message?: string } }
+                              | undefined
+                          )?.value?.message
+                        }
                       />
                     )}
                   />
