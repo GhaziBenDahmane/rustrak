@@ -500,3 +500,61 @@ async fn sweep_drops_check_ins_older_than_the_retention() {
         .iter()
         .any(|c| c.date_added == at("2026-03-20T05:00:00Z")));
 }
+
+#[actix_web::test]
+async fn an_older_run_finishing_ok_does_not_hide_a_newer_failure() {
+    let db = TestDb::new().await;
+    let pid = project(&db.pool).await;
+    upsert(&db.pool, pid, 1, at("2026-01-01T05:00:00Z")).await;
+    let slow = Uuid::new_v4();
+    for (id, status, when) in [
+        (slow, CheckInStatus::InProgress, "2026-01-01T06:00:00Z"),
+        (Uuid::new_v4(), CheckInStatus::Error, "2026-01-01T06:30:00Z"),
+        (slow, CheckInStatus::Ok, "2026-01-01T06:40:00Z"),
+    ] {
+        MonitorService::process_check_in(&db.pool, pid, check_in(id, status, None), at(when))
+            .await
+            .unwrap();
+    }
+
+    let monitor = MonitorService::get_by_slug(&db.pool, pid, "backup")
+        .await
+        .unwrap();
+    assert_eq!(
+        monitor.environments[0].status,
+        MonitorEnvironmentStatus::Error
+    );
+}
+
+#[actix_web::test]
+async fn concurrent_start_and_result_of_a_run_are_one_check_in() {
+    let db = TestDb::new().await;
+    let pid = project(&db.pool).await;
+    upsert(&db.pool, pid, 1, at("2026-01-01T05:00:00Z")).await;
+
+    // `Sentry.withMonitor` sends both at once.
+    let mut runs = tokio::task::JoinSet::new();
+    for _ in 0..20 {
+        let id = Uuid::new_v4();
+        for status in [CheckInStatus::InProgress, CheckInStatus::Ok] {
+            let pool = db.pool.clone();
+            runs.spawn(async move {
+                MonitorService::process_check_in(
+                    &pool,
+                    pid,
+                    check_in(id, status, None),
+                    at("2026-01-01T05:30:00Z"),
+                )
+                .await
+            });
+        }
+    }
+    while let Some(run) = runs.join_next().await {
+        run.unwrap().unwrap();
+    }
+
+    let (_, total) = MonitorService::list_checkins(&db.pool, pid, "backup", None, 1, 10)
+        .await
+        .unwrap();
+    assert_eq!(total, 21);
+}

@@ -1,13 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslations } from 'use-intl';
 import { getMonitor } from '@/features/monitor/api/queries';
+import { monitorHref } from '@/features/monitor/lib/href';
 import { MonitorForm } from '@/features/monitor/ui/components/monitor-form';
 import { translator } from '@/shared/i18n/intl';
 import { Link } from '@/shared/ui/components/link';
 import { LoadFailure } from '@/shared/ui/components/load-failure';
 
 export const Route = createFileRoute(
-  '/_authenticated/projects/$id/crons/$slug/edit',
+  '/_authenticated/projects/$id/crons/m/$slug/edit',
 )({
   loader: async ({ params }) => ({
     monitor: await getMonitor(Number.parseInt(params.id, 10), params.slug),
@@ -35,7 +36,7 @@ function EditMonitorPage() {
   if (!monitor.success) {
     return <LoadFailure error={monitor.error} title={t('loadMonitorFailed')} />;
   }
-  const detailHref = `/projects/${projectId}/crons/${encodeURIComponent(monitor.data.slug)}`;
+  const detailHref = monitorHref(projectId, monitor.data.slug);
 
   return (
     <div className="flex h-[calc(100vh-64px)] flex-col">

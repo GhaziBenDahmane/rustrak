@@ -6,6 +6,7 @@ import { type Path, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { useTimeZone, useTranslations } from 'use-intl';
 import { createMonitor, updateMonitor } from '@/features/monitor/api/mutations';
+import { monitorHref } from '@/features/monitor/lib/href';
 import {
   DEFAULT_MONITOR_FORM,
   formFromMonitor,
@@ -63,9 +64,7 @@ export function MonitorForm({
   });
 
   const listHref = `/projects/${projectId}/crons`;
-  const cancelHref = monitor
-    ? `${listHref}/${encodeURIComponent(monitor.slug)}`
-    : listHref;
+  const cancelHref = monitor ? monitorHref(projectId, monitor.slug) : listHref;
 
   const onSubmit = (data: MonitorFormData) => {
     startTransition(async () => {
@@ -96,7 +95,7 @@ export function MonitorForm({
       }
 
       toast.success(t(monitor ? 'form.saved' : 'form.created'));
-      router.push(`${listHref}/${encodeURIComponent(result.data.slug)}`);
+      router.push(monitorHref(projectId, result.data.slug));
     });
   };
 

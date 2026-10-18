@@ -3,6 +3,7 @@ import { BellOff, Hourglass } from 'lucide-react';
 import { useTransition } from 'react';
 import { useTranslations } from 'use-intl';
 import { getMonitor, listCheckIns } from '@/features/monitor/api/queries';
+import { monitorHref } from '@/features/monitor/lib/href';
 import { CheckInsTable } from '@/features/monitor/ui/components/check-ins-table';
 import { CronSetupGuide } from '@/features/monitor/ui/components/cron-setup-guide';
 import { MonitorActions } from '@/features/monitor/ui/components/monitor-actions';
@@ -20,7 +21,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 const PER_PAGE = 25;
 
 export const Route = createFileRoute(
-  '/_authenticated/projects/$id/crons/$slug/',
+  '/_authenticated/projects/$id/crons/m/$slug/',
 )({
   validateSearch: (search: Record<string, unknown>) => ({
     page: searchPage(search.page),
@@ -150,9 +151,7 @@ function MonitorPage() {
                 pending={isPending}
                 onPageChange={(next) =>
                   startTransition(() => {
-                    router.push(
-                      `${listHref}/${encodeURIComponent(slug)}?page=${next}`,
-                    );
+                    router.push(`${monitorHref(projectId, slug)}?page=${next}`);
                   })
                 }
               />

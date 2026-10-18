@@ -32,28 +32,29 @@ export function useSchedulePreview(
   schedule: Schedule | null,
   timezone: string,
 ): SchedulePreviewState {
-  const [state, setState] = useState<SchedulePreviewState>(IDLE);
+  // Each answer is kept with the schedule it is for: on the render after a
+  // change, before the effect runs, the last answer is for the old one.
+  const [answer, setAnswer] = useState<{
+    key: string;
+    state: SchedulePreviewState;
+  } | null>(null);
   // Compared by value: forms hand in a fresh object on every render.
   const key = schedule ? JSON.stringify({ schedule, timezone }) : null;
 
   useEffect(() => {
-    if (key === null) {
-      setState(IDLE);
-      return;
-    }
+    if (key === null) return;
     let cancelled = false;
-    setState((prev) => ({ ...prev, pending: true }));
     const timer = setTimeout(async () => {
       const client = await createClient();
       const result = await client.schedules.preview(JSON.parse(key));
       if (cancelled) return;
       if (result.success) {
-        setState({ ...IDLE, runs: result.data.next_runs });
+        setAnswer({ key, state: { ...IDLE, runs: result.data.next_runs } });
       } else {
         const invalid =
           result.error.kind === 'validation' ||
           result.error.kind === 'invalid_request';
-        setState({ ...IDLE, invalid, failed: !invalid });
+        setAnswer({ key, state: { ...IDLE, invalid, failed: !invalid } });
       }
     }, 300);
     return () => {
@@ -62,5 +63,6 @@ export function useSchedulePreview(
     };
   }, [key]);
 
-  return state;
+  if (key === null) return IDLE;
+  return answer?.key === key ? answer.state : { ...IDLE, pending: true };
 }

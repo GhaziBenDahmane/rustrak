@@ -1990,7 +1990,10 @@
       "nameRequired": "El nombre es obligatorio",
       "slugFormat": "Usa minúsculas, números, - y _",
       "intervalMin": "Como mínimo 1",
-      "crontabInvalid": "No es un crontab válido de cinco campos"
+      "crontabInvalid": "No es un crontab válido de cinco campos",
+      "numberRange": "Entre {min} y {max}",
+      "tooLong": "Como máximo {max} caracteres",
+      "timezoneRequired": "Elige una zona horaria"
     }
   },
   "schedule": {

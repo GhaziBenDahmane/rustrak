@@ -1,5 +1,5 @@
 import type { IntervalUnit, Schedule } from '@rustrak/client';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslations } from 'use-intl';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import { Input } from '@/shared/ui/components/shadcn/input';
@@ -43,6 +43,8 @@ export function ScheduleField({
   error?: string;
 }) {
   const t = useTranslations('schedule');
+  const fallbackId = useId();
+  const inputId = id ?? fallbackId;
   const [crontab, setCrontab] = useState(
     value.type === 'crontab' ? value.value : '0 * * * *',
   );
@@ -89,11 +91,11 @@ export function ScheduleField({
 
       {value.type === 'crontab' ? (
         <div className="space-y-2">
-          <label htmlFor={id} className={`block ${LABEL}`}>
+          <label htmlFor={inputId} className={`block ${LABEL}`}>
             {t('crontab')}
           </label>
           <Input
-            id={id}
+            id={inputId}
             className="max-w-xs font-mono"
             placeholder="0 * * * *"
             autoComplete="off"
@@ -110,10 +112,12 @@ export function ScheduleField({
         </div>
       ) : (
         <div className="space-y-2">
-          <span className={`block ${LABEL}`}>{t('every')}</span>
+          <label htmlFor={inputId} className={`block ${LABEL}`}>
+            {t('every')}
+          </label>
           <div className="flex items-start gap-2">
             <Input
-              id={id}
+              id={inputId}
               type="number"
               inputMode="numeric"
               min={1}
