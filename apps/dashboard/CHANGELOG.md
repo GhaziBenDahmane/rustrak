@@ -1,5 +1,12 @@
 # @rustrak/dashboard
 
+## 0.18.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @rustrak/client@0.18.1
+
 ## 0.18.0
 
 ### Patch Changes

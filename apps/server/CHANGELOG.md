@@ -1,5 +1,11 @@
 # @rustrak/server
 
+## 0.18.1
+
+### Patch Changes
+
+- [`be5a954`](https://github.com/rustrak/rustrak/commit/be5a954927c787eac7e596c93a6bd38edb909504) Thanks [@AbianS](https://github.com/AbianS)! - The storage page loads on large instances again. Its figures come from one read of the database, shared by the page's requests and kept for five minutes or until a cleanup, and the page shows its header and actions at once while each panel fills in on its own.
+
 ## 0.18.0
 
 ### Minor Changes
