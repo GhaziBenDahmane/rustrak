@@ -224,11 +224,8 @@ impl AutoCleanupSettings {
         if let Err(message) = crate::scheduler::schedule::parse_timezone(&self.timezone) {
             return invalid(message, "timezone");
         }
-        if self.older_than_days < 1 {
-            return invalid(
-                "older_than_days must be at least 1".to_string(),
-                "older_than_days",
-            );
+        if let Err(e) = crate::services::storage::validate_retention(self.older_than_days) {
+            return Err(e.with_field("older_than_days", FieldErrorCode::Invalid));
         }
         if self.enabled && !(self.include_events || self.include_transactions || self.include_logs)
         {

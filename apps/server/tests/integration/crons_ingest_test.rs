@@ -368,3 +368,28 @@ async fn the_monitor_sweep_runs_as_a_scheduled_job() {
     assert_eq!(state.last_result, Some(serde_json::json!({"failures": 1})));
     assert_eq!(issue_status(&s.db.pool, s.project_id).await, ["unresolved"]);
 }
+
+#[actix_web::test]
+async fn an_ok_check_in_resolves_an_issue_left_open_on_a_healthy_monitor() {
+    let s = setup().await;
+    let app = app(&s).await;
+    test::call_service(&app, post_envelope(&s, envelope(UPSERT))).await;
+    let failed = r#"{"monitor_slug":"nightly","status":"error"}"#;
+    test::call_service(&app, post_envelope(&s, envelope(failed))).await;
+    let ok = r#"{"monitor_slug":"nightly","status":"ok"}"#;
+    test::call_service(&app, post_envelope(&s, envelope(ok))).await;
+
+    // A failure digested after the recovery (a replay) reopens the issue.
+    sqlx::query(if cfg!(feature = "postgres") {
+        "UPDATE issues SET status = 'unresolved' WHERE project_id = $1"
+    } else {
+        "UPDATE issues SET status = 'unresolved' WHERE project_id = ?"
+    })
+    .bind(s.project_id)
+    .execute(&s.db.pool)
+    .await
+    .unwrap();
+
+    test::call_service(&app, post_envelope(&s, envelope(ok))).await;
+    assert_eq!(issue_status(&s.db.pool, s.project_id).await, ["resolved"]);
+}

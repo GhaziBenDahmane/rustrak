@@ -241,7 +241,11 @@ impl CheckIn {
                 "check-in monitor_slug is empty".to_string(),
             ));
         }
+        // PostgreSQL rejects NUL in text, and the HTTP endpoint has no
+        // envelope `\u0000` cleanup in front of it.
+        let strip_nul = |s: String| s.replace('\0', "");
         let environment = environment
+            .map(strip_nul)
             .filter(|e| !e.is_empty())
             .unwrap_or_else(|| DEFAULT_ENVIRONMENT.to_string());
         if environment.chars().count() > MAX_ENVIRONMENT_LENGTH {
@@ -261,7 +265,7 @@ impl CheckIn {
             environment,
             duration: duration.filter(|d| d.is_finite() && *d >= 0.0),
             monitor_config,
-            trace_id,
+            trace_id: trace_id.map(strip_nul),
         })
     }
 }
