@@ -216,6 +216,7 @@ export function registerStorageTools(
       description:
         'Turn the automatic storage cleanup on or off and set what it deletes (admin only). ' +
         'Once enabled it permanently deletes data older than older_than_days, of the chosen kinds, on the schedule. ' +
+        'DESTRUCTIVE when enabled: you MUST set confirm=true to save enabled settings; without it the tool refuses. Turning it off needs no confirmation. ' +
         'Send every field; check the schedule with preview_schedule first.',
       inputSchema: {
         enabled: z.boolean().describe('Run it on the schedule'),
@@ -233,10 +234,20 @@ export function registerStorageTools(
           .boolean()
           .describe('Delete old transactions and their spans'),
         include_logs: z.boolean().describe('Delete old logs'),
+        confirm: z
+          .boolean()
+          .optional()
+          .describe('Must be true to save enabled settings'),
       },
       annotations: { destructiveHint: true },
     },
-    async (settings) =>
-      mcpJson(await client.storage.updateAutoCleanup(settings)),
+    async ({ confirm, ...settings }) => {
+      if (settings.enabled && confirm !== true) {
+        return mcpRefusal(
+          'update_auto_cleanup with enabled=true schedules permanent deletion and was not confirmed. Show the user the settings, then call again with confirm=true to proceed.',
+        );
+      }
+      return mcpJson(await client.storage.updateAutoCleanup(settings));
+    },
   );
 }
