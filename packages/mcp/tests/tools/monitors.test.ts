@@ -121,6 +121,16 @@ describe('monitor tools', () => {
     });
   });
 
+  it('create_monitor refuses a config without a schedule', async () => {
+    const result = await callTool({
+      name: 'create_monitor',
+      arguments: { project_id: 1, name: 'Nightly backup', config: {} },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(mockClient.monitors.create).not.toHaveBeenCalled();
+  });
+
   it('update_monitor mutes a monitor', async () => {
     mockClient.monitors.update.mockResolvedValue(
       ok({ ...monitor, is_muted: true }),

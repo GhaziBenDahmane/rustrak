@@ -110,7 +110,9 @@ export function registerMonitorTools(
           .max(50)
           .optional()
           .describe('Slug; from the name when omitted'),
-        config: configSchema.describe('Config; schedule is required'),
+        config: configSchema
+          .extend({ schedule: scheduleSchema })
+          .describe('Config; schedule is required'),
       },
     },
     async ({ project_id, name, slug, config }) =>
