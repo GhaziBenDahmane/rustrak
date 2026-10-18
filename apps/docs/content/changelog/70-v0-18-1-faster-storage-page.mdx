@@ -1,0 +1,30 @@
+---
+version: v0.18.1
+title: Faster Storage Page
+description: The storage page reads its figures once and shows its actions while they load
+date: 2026-10-18
+tags: [server, dashboard, storage]
+---
+
+## Faster storage page
+
+On a large instance **Settings → Storage** could stay blank and then fail with
+"The Rustrak API took too long to answer". Its three reads each
+scanned the same tables at once. On a 24 GB Postgres instance one of them took
+over two minutes.
+
+- The page's figures come from one read of the database, shared by its
+  requests. On that instance a first load now takes about 14 seconds, and
+  reloads are instant
+- The figures are kept for five minutes, and read again after a cleanup or a
+  source-map collection
+- A read the browser gives up on still finishes, so a reload finds it done
+- The header and its actions show at once. Each panel fills in on its own,
+  and the actions are enabled once the current figures are in
+
+## Improvements
+
+- Spans that belong to no transaction are counted in one pass instead of one
+  per project
+- The span estimate can no longer read the whole `spans` table on Postgres
+  with stale statistics
