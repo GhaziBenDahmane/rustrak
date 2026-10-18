@@ -582,7 +582,7 @@
       "validEmail": "Introdu un e-mail valid",
       "templateRequired": "Șablonul este obligatoriu",
       "headerNameRequired": "Numele antetului este obligatoriu",
-      "headerNameInvalid": "Folosește doar litere, cifre și -, fără spații",
+      "headerNameInvalid": "Nume de antet HTTP invalid: fără spații sau simboluri precum : sau @",
       "headerNameDuplicate": "Acest antet este deja setat"
     },
     "routing": {

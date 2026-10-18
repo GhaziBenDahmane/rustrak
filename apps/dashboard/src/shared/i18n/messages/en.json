@@ -582,7 +582,7 @@
       "validEmail": "Please enter a valid email",
       "templateRequired": "Template is required",
       "headerNameRequired": "Header name is required",
-      "headerNameInvalid": "Use letters, digits and - only, no spaces",
+      "headerNameInvalid": "Not a valid HTTP header name: no spaces or symbols like : or @",
       "headerNameDuplicate": "This header is already set"
     },
     "routing": {

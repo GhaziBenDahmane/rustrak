@@ -582,7 +582,7 @@
       "validEmail": "请输入有效的邮箱地址",
       "templateRequired": "模板不能为空",
       "headerNameRequired": "请求头名称不能为空",
-      "headerNameInvalid": "只能使用字母、数字和 -，不能有空格",
+      "headerNameInvalid": "不是有效的 HTTP 请求头名称：不能包含空格或 :、@ 等符号",
       "headerNameDuplicate": "该请求头已设置"
     },
     "routing": {

@@ -582,7 +582,7 @@
       "validEmail": "Veuillez saisir une adresse e-mail valide",
       "templateRequired": "Le modèle est requis",
       "headerNameRequired": "Le nom de l'en-tête est requis",
-      "headerNameInvalid": "Lettres, chiffres et - uniquement, sans espaces",
+      "headerNameInvalid": "Nom d'en-tête HTTP invalide : pas d'espaces ni de symboles comme : ou @",
       "headerNameDuplicate": "Cet en-tête est déjà défini"
     },
     "routing": {

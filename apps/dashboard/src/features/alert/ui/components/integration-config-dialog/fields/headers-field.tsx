@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react';
+import { useId } from 'react';
 import {
   type ArrayPath,
   type FieldValues,
@@ -10,7 +11,6 @@ import { useTranslations } from 'use-intl';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import {
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -37,9 +37,23 @@ export function HeadersField<T extends FieldValues>({
     name: 'headers' as ArrayPath<T>,
   });
 
+  // One description for every row, so it belongs to the group rather than to
+  // a FormItem: `FormDescription` outside one gets an `undefined-…` id that
+  // no input points to.
+  const labelId = useId();
+  const descriptionId = useId();
+
   return (
-    <div className="space-y-2">
-      <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+    <div
+      role="group"
+      aria-labelledby={labelId}
+      aria-describedby={descriptionId}
+      className="space-y-2"
+    >
+      <span
+        id={labelId}
+        className="text-xs font-bold uppercase tracking-widest text-muted-foreground"
+      >
         {t('headers.label')}
       </span>
 
@@ -113,7 +127,9 @@ export function HeadersField<T extends FieldValues>({
         {t('headers.add')}
       </Button>
 
-      <FormDescription>{t('headers.description')}</FormDescription>
+      <p id={descriptionId} className="text-muted-foreground text-sm">
+        {t('headers.description')}
+      </p>
     </div>
   );
 }

@@ -582,7 +582,7 @@
       "validEmail": "Introduce un correo electrónico válido",
       "templateRequired": "La plantilla es obligatoria",
       "headerNameRequired": "El nombre de la cabecera es obligatorio",
-      "headerNameInvalid": "Usa solo letras, dígitos y -, sin espacios",
+      "headerNameInvalid": "No es un nombre de cabecera HTTP válido: sin espacios ni símbolos como : o @",
       "headerNameDuplicate": "Esta cabecera ya está definida"
     },
     "routing": {
