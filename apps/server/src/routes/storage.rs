@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use actix_web::{web, HttpResponse};
+use chrono::DurationRound;
 
 use crate::auth::ApiActor;
 use crate::db::DbPool;
@@ -339,14 +340,18 @@ pub async fn run_retention(
         Arc::clone(store.get_ref()),
     )?;
     // Recorded as the job's last run, like a scheduled one, so the page's
-    // "last cleanup" is this one.
+    // "last cleanup" is this one. Milliseconds, so the finish matches the
+    // start on every backend (Postgres keeps microseconds). The cleanup has
+    // already started: failing to record it is logged, not answered.
     let pool = pool.get_ref().clone();
-    Scheduler::record_start(
-        &pool,
-        StorageCleanupJob::KEY,
-        status.started_at.unwrap_or_else(chrono::Utc::now),
-    )
-    .await?;
+    let started = status
+        .started_at
+        .unwrap_or_else(chrono::Utc::now)
+        .duration_trunc(chrono::Duration::milliseconds(1))
+        .unwrap_or_else(|_| chrono::Utc::now());
+    if let Err(e) = Scheduler::record_start(&pool, StorageCleanupJob::KEY, started).await {
+        log::error!("Could not record the start of a retention cleanup: {e}");
+    }
     tokio::spawn(async move {
         let outcome = match handle.await {
             Ok(result) => result.map(|removed| serde_json::to_value(removed).unwrap_or_default()),
@@ -354,7 +359,7 @@ pub async fn run_retention(
                 "The cleanup stopped unexpectedly: {e}"
             ))),
         };
-        Scheduler::record_finish(&pool, StorageCleanupJob::KEY, outcome).await;
+        Scheduler::record_finish(&pool, StorageCleanupJob::KEY, started, outcome).await;
     });
     Ok(HttpResponse::Accepted().json(status))
 }

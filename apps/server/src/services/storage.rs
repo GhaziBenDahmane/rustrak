@@ -494,8 +494,11 @@ impl StorageService {
                 counts += Self::count_cleanup(pool, cutoff, Some(project_id), filter).await?;
             }
         }
-        // Every retention cleanup deletes the source maps no upload uses.
-        counts.source_maps = Self::preview_source_map_gc(pool).await?.files_removed;
+        // Every retention cleanup deletes the source maps no upload uses;
+        // keeping everything forever runs no cleanup at all.
+        if settings.deletes_anything() {
+            counts.source_maps = Self::preview_source_map_gc(pool).await?.files_removed;
+        }
         Ok(counts)
     }
 

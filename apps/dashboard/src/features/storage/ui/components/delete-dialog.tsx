@@ -104,20 +104,8 @@ function Editor({
   const t = useTranslations('storage');
   const [kinds, setKinds] = useState<Kind[]>([...KINDS]);
   const [sourceMaps, setSourceMaps] = useState(true);
-  const [unused, setUnused] = useState<SourceMapGcResult | null>(null);
   const [days, setDays] = useState(90);
   const [project, setProject] = useState(ALL);
-
-  // Unused source maps belong to no project and have no age: one count.
-  useEffect(() => {
-    let cancelled = false;
-    previewStorageSourceMapGc().then((result) => {
-      if (!cancelled && result.success) setUnused(result.data);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const options = {
     older_than_days: days,
@@ -127,15 +115,12 @@ function Editor({
     include_logs: kinds.includes('logs'),
   };
 
-  const { counts, retry } = useCount(options);
-
-  const { maps, rows, parts, size } = whatGoes(
-    counts,
-    sourceMaps ? unused : null,
-    projects,
-    t,
-  );
   const nothingChosen = kinds.length === 0 && !sourceMaps;
+  const { state, maps, rows, parts, size, retry } = useDeletion(
+    options,
+    { rows: kinds.length > 0, sourceMaps },
+    projects,
+  );
 
   const run = () =>
     startTransition(async () => {
@@ -189,7 +174,7 @@ function Editor({
       />
 
       <ImpactLine
-        state={nothingChosen ? 'ready' : impactState(counts)}
+        state={nothingChosen ? 'ready' : state}
         sentence={
           !nothingChosen && parts.length > 0
             ? t('delete.impact', { parts: parts.join(', '), size })
@@ -206,7 +191,9 @@ function Editor({
         <Button
           variant="destructive"
           onClick={run}
-          disabled={isPending || (rows === 0 && maps === 0)}
+          disabled={
+            isPending || state !== 'ready' || (rows === 0 && maps === 0)
+          }
         >
           {isPending && <Loader2 className="animate-spin" />}
           {rows > 0 || maps > 0
@@ -387,4 +374,65 @@ function whatGoes(
   const bytes =
     (known ? estimateBytes(known, projects) : 0) + (unused?.bytes_freed ?? 0);
   return { maps, rows, parts, size: formatBytes(bytes) };
+}
+
+/** The source maps no upload uses: one count, with no age or project. */
+function useUnused() {
+  const [unused, setUnused] = useState<SourceMapGcResult | null | 'failed'>(
+    null,
+  );
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setUnused(null);
+    previewStorageSourceMapGc().then((result) => {
+      if (!cancelled) setUnused(result.success ? result.data : 'failed');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+  return { unused, retryUnused: () => setAttempt((a) => a + 1) };
+}
+
+/** Two counts as one: failed if either failed, else counting if either is. */
+function joined(
+  ...states: ('counting' | 'failed' | 'ready')[]
+): 'counting' | 'failed' | 'ready' {
+  if (states.includes('failed')) return 'failed';
+  return states.includes('counting') ? 'counting' : 'ready';
+}
+
+/**
+ * Everything a deletion would remove, counted as its options change: the
+ * rows of the chosen kinds and the unused source maps. Ready only once
+ * every count asked for is in, since deleting on one still pending would
+ * skip what it had not counted.
+ */
+function useDeletion(
+  options: CleanupOptions,
+  chosen: { rows: boolean; sourceMaps: boolean },
+  projects: readonly ProjectStorage[],
+) {
+  const t = useTranslations('storage');
+  const { counts, retry } = useCount(options);
+  const { unused, retryUnused } = useUnused();
+  const goes = whatGoes(
+    counts,
+    chosen.sourceMaps && unused !== 'failed' ? unused : null,
+    projects,
+    t,
+  );
+  const state = joined(
+    chosen.rows ? impactState(counts) : 'ready',
+    chosen.sourceMaps ? impactState(unused) : 'ready',
+  );
+  return {
+    ...goes,
+    state,
+    retry: () => {
+      retry();
+      retryUnused();
+    },
+  };
 }

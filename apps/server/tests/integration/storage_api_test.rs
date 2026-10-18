@@ -940,3 +940,21 @@ async fn the_retention_preview_counts_the_unused_source_maps_it_would_delete() {
 
     assert_eq!(body["source_maps"], 1);
 }
+
+#[actix_web::test]
+async fn keeping_everything_forever_previews_no_source_maps_since_no_cleanup_runs() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    insert_orphan_source_file(&db.pool, 2_048).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/preview")
+        .insert_header(bearer(&token))
+        .set_json(json!({}))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+
+    assert_eq!(body["source_maps"], 0);
+}

@@ -199,7 +199,7 @@ impl Scheduler {
             if let Err(e) = &outcome {
                 log::error!("Scheduled job {key} failed: {e}");
             }
-            Self::record_finish(&pool, key, outcome).await;
+            Self::record_finish(&pool, key, now, outcome).await;
         })
     }
 
@@ -215,9 +215,15 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Records how a run of `key` ended. A failure to record is logged: the
-    /// run itself already happened.
-    pub async fn record_finish(pool: &DbPool, key: &str, outcome: AppResult<Value>) {
+    /// Records how the run of `key` started at `started_at` ended, unless a
+    /// later run has started since (its own finish will be recorded). A
+    /// failure to record is logged: the run itself already happened.
+    pub async fn record_finish(
+        pool: &DbPool,
+        key: &str,
+        started_at: DateTime<Utc>,
+        outcome: AppResult<Value>,
+    ) {
         let (status, result, error) = match outcome {
             Ok(result) => ("ok", Some(Json(result)), None),
             Err(e) => ("error", None, Some(e.to_string())),
@@ -226,7 +232,7 @@ impl Scheduler {
             r#"
             UPDATE scheduled_jobs
             SET last_finished_at = $2, last_status = $3, last_result = $4, last_error = $5
-            WHERE key = $1
+            WHERE key = $1 AND last_started_at = $6
             "#,
         )
         .bind(key)
@@ -234,6 +240,7 @@ impl Scheduler {
         .bind(status)
         .bind(result)
         .bind(error)
+        .bind(started_at)
         .execute(pool)
         .await
         {

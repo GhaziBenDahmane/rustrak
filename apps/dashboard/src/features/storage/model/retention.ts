@@ -306,7 +306,7 @@ export function nextReadIn(state: Retention, now: number): number | null {
 
 /** How far a count of what goes has got: pending, failed, or in. */
 export function impactState(
-  impact: CleanupCounts | null | 'failed',
+  impact: object | null | 'failed',
 ): 'counting' | 'failed' | 'ready' {
   if (impact === 'failed') return 'failed';
   return impact === null ? 'counting' : 'ready';
