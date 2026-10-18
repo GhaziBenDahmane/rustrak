@@ -189,11 +189,13 @@ pub async fn preview_source_map_gc(
 /// POST /api/storage/source-maps/gc — delete orphaned source maps (DB + disk).
 pub async fn gc_source_maps(
     pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
     store: web::Data<Arc<dyn SourceMapStore>>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
     let result = StorageService::gc_source_maps(pool.get_ref(), store.get_ref().as_ref()).await?;
+    job.forget_snapshot().await;
     Ok(HttpResponse::Ok().json(result))
 }
 

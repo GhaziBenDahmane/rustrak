@@ -164,8 +164,11 @@ impl CleanupJob {
     ///
     /// The read runs in its own task, so a client that gives up does not
     /// cancel it and the next request finds it done. The lock makes requests
-    /// that arrive meanwhile wait for that read instead of starting their own.
+    /// that arrive meanwhile wait for that read instead of starting their own,
+    /// even while a cleanup runs: a read that began after the request arrived
+    /// is as fresh as one it would start.
     pub async fn snapshot(&self, pool: &DbPool) -> AppResult<Arc<StorageSnapshot>> {
+        let asked_at = Utc::now();
         let cache = Arc::clone(&self.snapshot);
         let status = Arc::clone(&self.status);
         let pool = pool.clone();
@@ -174,9 +177,11 @@ impl CleanupJob {
             let job = lock(&status).clone();
             let now = Utc::now();
             if let Some((read_at, snapshot)) = cached.as_ref() {
-                let cleaned = job.state == CleanupState::Running
-                    || job.finished_at.is_some_and(|f| f >= *read_at);
-                if !cleaned && now - *read_at < chrono::Duration::minutes(SNAPSHOT_TTL_MINUTES) {
+                let cleaned_since = job.finished_at.is_some_and(|f| f >= *read_at);
+                let fresh = *read_at >= asked_at
+                    || (job.state != CleanupState::Running
+                        && now - *read_at < chrono::Duration::minutes(SNAPSHOT_TTL_MINUTES));
+                if fresh && !cleaned_since {
                     return Ok(Arc::clone(snapshot));
                 }
             }
@@ -186,6 +191,12 @@ impl CleanupJob {
         })
         .await
         .map_err(|e| AppError::Internal(format!("The storage read stopped unexpectedly: {e}")))?
+    }
+
+    /// Drops the kept snapshot, after a change that does not go through a
+    /// cleanup (a source-map GC).
+    pub async fn forget_snapshot(&self) {
+        *self.snapshot.lock().await = None;
     }
 
     /// Validates the window and starts the cleanup in the background,

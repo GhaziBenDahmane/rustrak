@@ -136,16 +136,18 @@ export function StorageView({
           </h1>
           <p className="mt-1 text-muted-foreground">{subtitle}</p>
         </div>
+        {/* Shown at once, enabled once the figures are in: both dialogs
+            price what they delete from the projects' sizes. */}
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={() => setDeleting(true)}
-            disabled={cleanup.running}
+            disabled={cleanup.running || !data}
           >
             <Trash2 />
             {t('deleteAction')}
           </Button>
-          <Button onClick={() => setEditing(true)}>
+          <Button onClick={() => setEditing(true)} disabled={!data}>
             <Settings2 />
             {t('action')}
           </Button>
