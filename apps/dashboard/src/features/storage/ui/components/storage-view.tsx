@@ -2,6 +2,7 @@ import type {
   CleanupStatus,
   ProjectStorage,
   Retention,
+  RustrakError,
   StorageAge,
   StorageSummary,
 } from '@rustrak/client';
@@ -14,6 +15,7 @@ import {
   nextReadIn,
   summarize,
 } from '@/features/storage/model/retention';
+import { LoadFailure } from '@/shared/ui/components/load-failure';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import {
   Card,
@@ -29,33 +31,46 @@ import { ProjectRetentionDialog } from './project-retention-dialog';
 import { RetentionDialog } from './retention-dialog';
 import { StorageOverview } from './storage-overview';
 import { StorageProjects } from './storage-projects';
+import {
+  ChartSkeleton,
+  OverviewSkeleton,
+  ProjectsSkeleton,
+} from './storage-skeletons';
 
-export interface StorageViewData {
+/** What the storage page shows, read together and slower than the rest. */
+export interface StorageFigures {
   summary: StorageSummary;
   projects: readonly ProjectStorage[];
   age: StorageAge;
-  retention: Retention;
 }
 
 /**
  * The storage page: what is held, how old it is, and which project holds
  * it. The header's two actions change retention and delete data now; a
  * project's own retention is changed from its row.
+ *
+ * The header and its actions need only the retention, which answers at once;
+ * the figures can take seconds on a large instance, so each panel that shows
+ * them holds its own skeleton (or the failure) until they land.
  */
 export function StorageView({
-  data,
+  retention: initialRetention,
+  figures,
   title,
   subtitle,
   onChanged,
 }: {
-  data: StorageViewData;
+  retention: Retention;
+  /** `null` while loading. */
+  figures: { data: StorageFigures } | { error: RustrakError } | null;
   title: string;
   subtitle: string;
   /** Reads the page's data again, after a cleanup. */
   onChanged: () => void;
 }) {
   const t = useTranslations('storage');
-  const [retention, setRetention] = useState(data.retention);
+  const ts = useTranslations('settings');
+  const [retention, setRetention] = useState(initialRetention);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [project, setProject] = useState<{ id: number; name: string } | null>(
@@ -91,8 +106,11 @@ export function StorageView({
     };
   }, [retention]);
 
+  const data = figures && 'data' in figures ? figures.data : null;
+  const projects = data?.projects ?? [];
   const summary = useMemo(
     () =>
+      data &&
       summarize({
         projects: data.projects,
         age: data.age,
@@ -134,11 +152,21 @@ export function StorageView({
         </div>
       </div>
 
-      <StorageOverview
-        summary={summary}
-        retention={retention}
-        job={cleanup.job}
-      />
+      {figures && 'error' in figures ? (
+        <LoadFailure
+          error={figures.error}
+          title={ts('storage.loadFailed')}
+          notFoundOnMissing={false}
+        />
+      ) : summary ? (
+        <StorageOverview
+          summary={summary}
+          retention={retention}
+          job={cleanup.job}
+        />
+      ) : (
+        <OverviewSkeleton />
+      )}
 
       <Card>
         <CardHeader>
@@ -148,27 +176,35 @@ export function StorageView({
           <CardDescription>{t('age.description')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <AgeChart buckets={summary.buckets} kinds={KINDS} />
+          {summary ? (
+            <AgeChart buckets={summary.buckets} kinds={KINDS} />
+          ) : (
+            <ChartSkeleton />
+          )}
         </CardContent>
       </Card>
 
-      <StorageProjects
-        projects={summary.projects}
-        settings={retention.settings}
-        onEditRetention={setProject}
-      />
+      {summary ? (
+        <StorageProjects
+          projects={summary.projects}
+          settings={retention.settings}
+          onEditRetention={setProject}
+        />
+      ) : (
+        <ProjectsSkeleton />
+      )}
 
       <RetentionDialog
         open={editing}
         onOpenChange={setEditing}
         retention={retention}
-        projects={data.projects}
+        projects={projects}
         onDone={saved}
       />
       <DeleteDialog
         open={deleting}
         onOpenChange={setDeleting}
-        projects={data.projects}
+        projects={projects}
         onStarted={cleanup.follow}
         onChanged={onChanged}
       />
@@ -176,7 +212,7 @@ export function StorageView({
         project={project}
         onClose={() => setProject(null)}
         retention={retention}
-        projects={data.projects}
+        projects={projects}
         onDone={saved}
       />
     </div>

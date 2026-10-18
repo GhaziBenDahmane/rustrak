@@ -1,3 +1,4 @@
+import type { Result, Retention, RustrakError } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
 import { ShieldX } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -8,8 +9,10 @@ import {
   getStorageProjects,
   getStorageSummary,
 } from '@/features/storage/api/queries';
-import { StorageSkeleton } from '@/features/storage/ui/components/storage-skeletons';
-import { StorageView } from '@/features/storage/ui/components/storage-view';
+import {
+  type StorageFigures,
+  StorageView,
+} from '@/features/storage/ui/components/storage-view';
 import { translator } from '@/shared/i18n/intl';
 import { LoadFailure } from '@/shared/ui/components/load-failure';
 import { Card, CardContent } from '@/shared/ui/components/shadcn/card';
@@ -72,81 +75,76 @@ function StoragePage() {
 }
 
 /**
- * Everything the page shows, read together. `version` reads it all again
- * after a cleanup; the last answer stays on screen meanwhile.
+ * The retention and the figures, read apart: the retention answers at once
+ * and brings up the header and its actions; the figures can take seconds and
+ * fill in their own panels. `version` reads both again after a cleanup; the
+ * last figures stay on screen meanwhile.
  */
 function StorageContent() {
   const t = useTranslations('settings');
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
-  // The answer keeps the version it was read for: the view below is keyed
-  // by it, so it starts afresh from the new answer, not from the old one
-  // the moment a reload is asked for.
-  const [data, setData] = useState<{
+  // Each answer keeps the version it was read for. The view is keyed by the
+  // retention's, so it starts afresh from the new retention rather than the
+  // old one the moment a reload is asked for.
+  const [retention, setRetention] = useState<{
     version: number;
-    results: Awaited<ReturnType<typeof load>>;
+    result: Result<Retention, RustrakError>;
   } | null>(null);
+  const [figures, setFigures] = useState<
+    { data: StorageFigures } | { error: RustrakError } | null
+  >(null);
   // Not `useAsync`, which drops its answer while the next one loads. A
   // newer read wins; an older one is dropped.
   useEffect(() => {
     let live = true;
-    void load().then((results) => live && setData({ version, results }));
+    void getRetention().then(
+      (result) => live && setRetention({ version, result }),
+    );
+    void loadFigures().then((answer) => live && setFigures(answer));
     return () => {
       live = false;
     };
   }, [version]);
 
-  if (data === null) {
+  if (retention === null) return <PageHeader />;
+  if (!retention.result.success) {
     return (
       <>
         <PageHeader />
-        <StorageSkeleton />
-      </>
-    );
-  }
-  const [summary, projects, age, retention] = data.results;
-  if (
-    !summary.success ||
-    !projects.success ||
-    !age.success ||
-    !retention.success
-  ) {
-    const failed = [summary, projects, age, retention].find((r) => !r.success);
-    return (
-      <>
-        <PageHeader />
-        {failed && !failed.success && (
-          <LoadFailure
-            error={failed.error}
-            title={t('storage.loadFailed')}
-            notFoundOnMissing={false}
-          />
-        )}
+        <LoadFailure
+          error={retention.result.error}
+          title={t('storage.loadFailed')}
+          notFoundOnMissing={false}
+        />
       </>
     );
   }
 
   return (
     <StorageView
-      key={data.version}
+      key={retention.version}
       title={t('storage.title')}
       subtitle={t('storage.subtitle')}
-      data={{
-        summary: summary.data,
-        projects: projects.data,
-        age: age.data,
-        retention: retention.data,
-      }}
+      retention={retention.result.data}
+      figures={figures}
       onChanged={reload}
     />
   );
 }
 
-function load() {
-  return Promise.all([
+async function loadFigures(): Promise<
+  { data: StorageFigures } | { error: RustrakError }
+> {
+  const [summary, projects, age] = await Promise.all([
     getStorageSummary(),
     getStorageProjects(),
     getStorageAge(),
-    getRetention(),
   ]);
+  if (!summary.success) return { error: summary.error };
+  if (!projects.success) return { error: projects.error };
+  if (!age.success) return { error: age.error };
+  return {
+    data: { summary: summary.data, projects: projects.data, age: age.data },
+  };
 }
