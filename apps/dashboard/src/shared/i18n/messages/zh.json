@@ -580,7 +580,10 @@
       "botTokenPrefix": "Bot token 必须以 xoxb- 开头",
       "smtpHostRequired": "必须填写 SMTP 主机",
       "validEmail": "请输入有效的邮箱地址",
-      "templateRequired": "模板不能为空"
+      "templateRequired": "模板不能为空",
+      "headerNameRequired": "请求头名称不能为空",
+      "headerNameInvalid": "不是有效的 HTTP 请求头名称：不能包含空格或 :、@ 等符号",
+      "headerNameDuplicate": "该请求头已设置"
     },
     "routing": {
       "slackChannelRequired": "必须为 “{name}” 指定 Slack 频道",
@@ -720,6 +723,16 @@
         "structured": "为你自己的 API 准备的类型化字段"
       },
       "insertFieldHint": "先在消息体中点击要插入字段的位置"
+    },
+    "headers": {
+      "label": "请求头（可选）",
+      "nameLabel": "请求头名称",
+      "valueLabel": "请求头值",
+      "namePlaceholder": "Authorization",
+      "valuePlaceholder": "Bearer …",
+      "add": "添加请求头",
+      "remove": "移除请求头",
+      "description": "随每个请求发送，例如端点要求的 API 密钥。"
     },
     "slack": {
       "titleNew": "添加 Slack 集成",

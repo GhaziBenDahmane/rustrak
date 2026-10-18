@@ -580,7 +580,10 @@
       "botTokenPrefix": "El token de bot debe empezar por xoxb-",
       "smtpHostRequired": "El host SMTP es obligatorio",
       "validEmail": "Introduce un correo electrónico válido",
-      "templateRequired": "La plantilla es obligatoria"
+      "templateRequired": "La plantilla es obligatoria",
+      "headerNameRequired": "El nombre de la cabecera es obligatorio",
+      "headerNameInvalid": "No es un nombre de cabecera HTTP válido: sin espacios ni símbolos como : o @",
+      "headerNameDuplicate": "Esta cabecera ya está definida"
     },
     "routing": {
       "slackChannelRequired": "Se requiere un canal de Slack para «{name}»",
@@ -720,6 +723,16 @@
         "structured": "Campos tipados para tu propia API"
       },
       "insertFieldHint": "Haz clic en el cuerpo donde deba ir el campo"
+    },
+    "headers": {
+      "label": "Cabeceras (opcional)",
+      "nameLabel": "Nombre de la cabecera",
+      "valueLabel": "Valor de la cabecera",
+      "namePlaceholder": "Authorization",
+      "valuePlaceholder": "Bearer …",
+      "add": "Añadir cabecera",
+      "remove": "Quitar cabecera",
+      "description": "Se envían con cada petición, p. ej. la clave de API que pide tu endpoint."
     },
     "slack": {
       "titleNew": "Añadir integración de Slack",

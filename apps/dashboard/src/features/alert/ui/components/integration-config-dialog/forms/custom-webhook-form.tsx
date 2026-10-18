@@ -10,6 +10,7 @@ import {
   type CustomWebhookFormData,
   customWebhookDefaults,
   customWebhookFormSchema,
+  headersFromRows,
 } from '@/features/alert/model/integration-forms';
 import {
   TEMPLATE_DOCS_URL,
@@ -37,6 +38,7 @@ import {
 } from '@/shared/ui/components/shadcn/form';
 import { ConfigFooter } from '../fields/config-footer';
 import { EnabledField } from '../fields/enabled-field';
+import { HeadersField } from '../fields/headers-field';
 import { NameField } from '../fields/name-field';
 import { TextInputField } from '../fields/text-input-field';
 import type { ConfigFormProps } from '../integration-config-dialog';
@@ -86,6 +88,7 @@ export function CustomWebhookForm({
         url: data.url,
         secret: data.secret,
         template: data.template,
+        headers: headersFromRows(data.headers),
       }),
     fieldMap: CUSTOM_WEBHOOK_FIELD_MAP,
     labels: {
@@ -191,6 +194,8 @@ export function CustomWebhookForm({
                   type="password"
                   disabled={isLoading}
                 />
+
+                <HeadersField<CustomWebhookFormData> disabled={isLoading} />
 
                 <EnabledField<CustomWebhookFormData> disabled={isLoading} />
               </div>

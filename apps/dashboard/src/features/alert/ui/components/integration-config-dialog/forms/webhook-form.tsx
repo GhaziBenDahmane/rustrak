@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslations } from 'use-intl';
 import { filledCredentials } from '@/features/alert/lib/credentials';
 import {
+  headersFromRows,
   WEBHOOK_FIELD_MAP,
   type WebhookFormData,
   webhookDefaults,
@@ -18,6 +19,7 @@ import {
 import { Form, FormRootError } from '@/shared/ui/components/shadcn/form';
 import { ConfigFooter } from '../fields/config-footer';
 import { EnabledField } from '../fields/enabled-field';
+import { HeadersField } from '../fields/headers-field';
 import { NameField } from '../fields/name-field';
 import { TextInputField } from '../fields/text-input-field';
 import type { ConfigFormProps } from '../integration-config-dialog';
@@ -49,7 +51,11 @@ export function WebhookForm({
     existingIntegration,
     providerType: 'webhook',
     credentials: (data) =>
-      filledCredentials({ url: data.url, secret: data.secret }),
+      filledCredentials({
+        url: data.url,
+        secret: data.secret,
+        headers: headersFromRows(data.headers),
+      }),
     fieldMap: WEBHOOK_FIELD_MAP,
     labels: {
       name: t('common.fieldName'),
@@ -100,6 +106,8 @@ export function WebhookForm({
             type="password"
             disabled={isLoading}
           />
+
+          <HeadersField<WebhookFormData> disabled={isLoading} />
 
           <EnabledField<WebhookFormData> disabled={isLoading} />
 

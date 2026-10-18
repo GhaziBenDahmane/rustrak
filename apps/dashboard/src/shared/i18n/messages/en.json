@@ -580,7 +580,10 @@
       "botTokenPrefix": "Bot token must start with xoxb-",
       "smtpHostRequired": "SMTP host is required",
       "validEmail": "Please enter a valid email",
-      "templateRequired": "Template is required"
+      "templateRequired": "Template is required",
+      "headerNameRequired": "Header name is required",
+      "headerNameInvalid": "Not a valid HTTP header name: no spaces or symbols like : or @",
+      "headerNameDuplicate": "This header is already set"
     },
     "routing": {
       "slackChannelRequired": "Slack channel is required for \"{name}\"",
@@ -720,6 +723,16 @@
         "structured": "Typed fields for your own API"
       },
       "insertFieldHint": "Click in the body where the field should go"
+    },
+    "headers": {
+      "label": "Headers (optional)",
+      "nameLabel": "Header name",
+      "valueLabel": "Header value",
+      "namePlaceholder": "Authorization",
+      "valuePlaceholder": "Bearer …",
+      "add": "Add header",
+      "remove": "Remove header",
+      "description": "Sent with every request, e.g. the API key your endpoint asks for."
     },
     "slack": {
       "titleNew": "Add Slack Integration",

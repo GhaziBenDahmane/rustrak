@@ -34,6 +34,7 @@ use crate::models::{
 #[cfg(feature = "openapi")]
 use crate::models::{AlertRuleResponse, NotificationChannel};
 use crate::services::access::{self, Action};
+use crate::services::notification::webhook::validate_headers;
 use crate::services::{create_dispatcher, AlertService, ProjectService};
 
 #[cfg(feature = "openapi")]
@@ -139,6 +140,7 @@ pub fn validate_routing_override(
                     )));
                 }
             }
+            validate_headers(r.extra_headers.as_ref())?;
         }
     }
     Ok(())
@@ -979,6 +981,17 @@ mod tests {
         let creds = serde_json::json!({});
         let routing = serde_json::json!({"url": "http://internal.example.com/hook"});
         assert!(validate_routing_override(ProviderType::Webhook, &creds, &routing).is_ok());
+    }
+
+    #[test]
+    fn test_validate_routing_webhook_invalid_extra_headers_fails() {
+        let creds = serde_json::json!({"url": "https://example.com/hook"});
+        for provider in [ProviderType::Webhook, ProviderType::CustomWebhook] {
+            let routing = serde_json::json!({"extra_headers": {"X-Rustrak-Signature": "x"}});
+            assert!(validate_routing_override(provider, &creds, &routing).is_err());
+            let routing = serde_json::json!({"extra_headers": {"Authorization": "Bearer t"}});
+            assert!(validate_routing_override(provider, &creds, &routing).is_ok());
+        }
     }
 
     // Custom Webhook routes exactly like Webhook: same flat override shape.

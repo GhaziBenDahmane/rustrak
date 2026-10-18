@@ -580,7 +580,10 @@
       "botTokenPrefix": "Token-ul de bot trebuie să înceapă cu xoxb-",
       "smtpHostRequired": "Gazda SMTP este obligatorie",
       "validEmail": "Introdu un e-mail valid",
-      "templateRequired": "Șablonul este obligatoriu"
+      "templateRequired": "Șablonul este obligatoriu",
+      "headerNameRequired": "Numele antetului este obligatoriu",
+      "headerNameInvalid": "Nume de antet HTTP invalid: fără spații sau simboluri precum : sau @",
+      "headerNameDuplicate": "Acest antet este deja setat"
     },
     "routing": {
       "slackChannelRequired": "Canalul Slack este obligatoriu pentru „{name}”",
@@ -720,6 +723,16 @@
         "structured": "Câmpuri tipizate pentru propriul tău API"
       },
       "insertFieldHint": "Dă clic în corp acolo unde trebuie să ajungă câmpul"
+    },
+    "headers": {
+      "label": "Antete (opțional)",
+      "nameLabel": "Numele antetului",
+      "valueLabel": "Valoarea antetului",
+      "namePlaceholder": "Authorization",
+      "valuePlaceholder": "Bearer …",
+      "add": "Adaugă antet",
+      "remove": "Elimină antetul",
+      "description": "Trimise cu fiecare cerere, de ex. cheia API cerută de endpoint."
     },
     "slack": {
       "titleNew": "Adaugă integrare Slack",

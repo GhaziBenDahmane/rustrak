@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 
 use super::json_template;
-use super::webhook::WebhookNotifier;
+use super::webhook::{own_headers, request_headers, validate_headers, WebhookNotifier};
 use super::{NotificationDispatcher, NotificationResult};
 use crate::error::{AppError, AppResult};
 use crate::models::{AlertIntegration, AlertPayload, CustomWebhookConfig, WebhookRoutingOverride};
@@ -319,30 +319,34 @@ impl NotificationDispatcher for CustomWebhookNotifier {
 
         let timestamp = Utc::now().timestamp().to_string();
 
-        let mut request = self
+        let signature = credentials
+            .secret
+            .as_deref()
+            .map(|secret| WebhookNotifier::generate_signature(secret, &timestamp, &body));
+        let own = match own_headers(&timestamp, &payload.alert_id, signature) {
+            Ok(h) => h,
+            Err(e) => return NotificationResult::failure(e, None),
+        };
+        // Same precedence as the plain webhook dispatcher.
+        let headers = match request_headers(
+            [
+                credentials.headers.as_ref(),
+                routing_override.extra_headers.as_ref(),
+            ],
+            own,
+        ) {
+            Ok(h) => h,
+            Err(e) => return NotificationResult::failure(e, None),
+        };
+
+        match self
             .client
             .post(&url)
-            .header("Content-Type", "application/json")
-            .header("X-Rustrak-Timestamp", &timestamp)
-            .header("X-Rustrak-Request-ID", &payload.alert_id);
-
-        if let Some(ref secret) = credentials.secret {
-            let signature = WebhookNotifier::generate_signature(secret, &timestamp, &body);
-            request = request.header("X-Rustrak-Signature", format!("sha256={}", signature));
-        }
-
-        // Credential-level headers, then routing-level extras on top
-        // (same precedence as the plain webhook dispatcher).
-        for headers in [&credentials.headers, &routing_override.extra_headers]
-            .into_iter()
-            .flatten()
+            .headers(headers)
+            .body(body)
+            .send()
+            .await
         {
-            for (key, value) in headers {
-                request = request.header(key.as_str(), value.as_str());
-            }
-        }
-
-        match request.body(body).send().await {
             Ok(response) => {
                 let status = response.status().as_u16();
                 // A body that cannot be read (truncated, oversized past
@@ -386,6 +390,7 @@ impl NotificationDispatcher for CustomWebhookNotifier {
             .map_err(|e| AppError::Validation(format!("Invalid custom webhook config: {}", e)))?;
 
         Self::validate_url(&config.url)?;
+        validate_headers(config.headers.as_ref())?;
 
         if config.template.trim().is_empty() {
             return Err(AppError::Validation("Template cannot be empty".to_string()));
@@ -975,6 +980,31 @@ mod tests {
             .expect("url is optional like the plain webhook");
     }
 
+    #[test]
+    fn test_validate_rejects_invalid_headers() {
+        let notifier = CustomWebhookNotifier::new();
+        let err = notifier
+            .validate_config(&json!({
+                "url": "https://example.com/hook",
+                "headers": {"Authorization": "Bearer x\nX-Injected: 1"},
+                "template": r#"{"a":1}"#,
+            }))
+            .expect_err("header injection must be rejected");
+        assert!(err.to_string().contains("Authorization"), "got: {err}");
+    }
+
+    #[test]
+    fn test_validate_accepts_authorization_header() {
+        let notifier = CustomWebhookNotifier::new();
+        notifier
+            .validate_config(&json!({
+                "url": "https://example.com/hook",
+                "headers": {"Authorization": "Bearer re_123"},
+                "template": r#"{"a":1}"#,
+            }))
+            .expect("an Authorization header is the point of #419");
+    }
+
     // -------------------------------------------------------------------------
     // effective_url and dispatch guards
     // -------------------------------------------------------------------------
@@ -1094,11 +1124,20 @@ mod tests {
         let credentials = json!({
             "url": format!("http://{addr}/hook"),
             "secret": "s3cret",
-            "headers": {"X-Custom": "cred-level"},
+            // Stored without validation (pre-#419 rows, or written straight
+            // to the database): a forged signature must still lose.
+            "headers": {
+                "X-Custom": "cred-level",
+                "Authorization": "Bearer cred-token",
+                "X-Rustrak-Signature": "sha256=forged",
+            },
             "template": PRESET_DINGTALK_TEXT,
         });
         let integration = make_integration(credentials, true);
-        let routing = json!({"extra_headers": {"X-Extra": "route-level"}});
+        let routing = json!({"extra_headers": {
+            "X-Extra": "route-level",
+            "authorization": "Bearer route-token",
+        }});
 
         let result = notifier
             .send(&integration, &routing, &create_test_payload())
@@ -1120,6 +1159,18 @@ mod tests {
         assert!(lower.contains("x-rustrak-signature: sha256="), "got: {raw}");
         assert!(lower.contains("x-custom: cred-level"), "got: {raw}");
         assert!(lower.contains("x-extra: route-level"), "got: {raw}");
+        // Routing replaces the credential value instead of sending both.
+        assert!(
+            lower.contains("authorization: bearer route-token"),
+            "got: {raw}"
+        );
+        assert!(!lower.contains("cred-token"), "got: {raw}");
+        assert_eq!(
+            lower.matches("x-rustrak-signature:").count(),
+            1,
+            "got: {raw}"
+        );
+        assert!(!lower.contains("forged"), "got: {raw}");
         assert!(
             lower.contains("x-rustrak-request-id: test-123"),
             "got: {raw}"
