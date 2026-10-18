@@ -295,18 +295,40 @@ describe('storage tools', () => {
       );
     });
 
-    it('update_auto_cleanup sends the full settings', async () => {
+    it('update_auto_cleanup sends the full settings, without confirm', async () => {
       mockClient.storage.updateAutoCleanup.mockResolvedValue(
         ok({ settings, next_run_at: null, last_run: null }),
       );
       const result = await callTool({
         name: 'update_auto_cleanup',
-        arguments: settings,
+        arguments: { ...settings, confirm: true },
       });
       expect(result.isError).toBeFalsy();
       expect(mockClient.storage.updateAutoCleanup).toHaveBeenCalledWith(
         settings,
       );
+    });
+
+    it('update_auto_cleanup refuses to enable deletion without confirm:true', async () => {
+      const result = await callTool({
+        name: 'update_auto_cleanup',
+        arguments: settings,
+      });
+      expect(result.isError).toBe(true);
+      expect(mockClient.storage.updateAutoCleanup).not.toHaveBeenCalled();
+    });
+
+    it('update_auto_cleanup turns it off without confirm', async () => {
+      const off = { ...settings, enabled: false };
+      mockClient.storage.updateAutoCleanup.mockResolvedValue(
+        ok({ settings: off, next_run_at: null, last_run: null }),
+      );
+      const result = await callTool({
+        name: 'update_auto_cleanup',
+        arguments: off,
+      });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.storage.updateAutoCleanup).toHaveBeenCalledWith(off);
     });
 
     it('update_auto_cleanup is marked destructive', async () => {

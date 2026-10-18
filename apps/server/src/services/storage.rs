@@ -114,62 +114,99 @@ impl CleanupJob {
         project_id: Option<i32>,
         filter: CleanupFilter,
     ) -> AppResult<CleanupStatus> {
-        validate_retention(older_than_days)?;
-
-        let started = {
-            let mut status = lock(&self.status);
-            if status.state == CleanupState::Running {
-                return Err(AppError::Conflict(
-                    "A storage cleanup is already running".to_string(),
-                ));
-            }
-            *status = CleanupStatus {
-                state: CleanupState::Running,
-                started_at: Some(Utc::now()),
-                ..Default::default()
-            };
-            status.clone()
-        };
-
-        let shared = Arc::clone(&self.status);
-        tokio::spawn(async move {
-            let progress = Arc::clone(&shared);
-            // Its own task so a panic inside surfaces here as a JoinError
-            // instead of leaving the job `running` forever.
-            let outcome = tokio::spawn(async move {
-                StorageService::execute_cleanup_in_batches(
-                    &pool,
-                    older_than_days,
-                    project_id,
-                    filter,
-                    CLEANUP_BATCH_SIZE,
-                    |counts| lock(&progress).removed = counts.clone(),
-                )
-                .await
-            })
-            .await;
-
-            let mut status = lock(&shared);
-            status.finished_at = Some(Utc::now());
-            match outcome {
-                Ok(Ok(counts)) => {
-                    status.state = CleanupState::Completed;
-                    status.removed = counts;
-                }
-                Ok(Err(error)) => {
-                    log::error!("Storage cleanup failed: {error}");
-                    status.state = CleanupState::Failed;
-                    status.error = Some(error.to_string());
-                }
-                Err(error) => {
-                    log::error!("Storage cleanup task stopped: {error}");
-                    status.state = CleanupState::Failed;
-                    status.error = Some("The cleanup stopped unexpectedly".to_string());
-                }
-            }
-        });
-
+        let started = self.begin(older_than_days)?;
+        tokio::spawn(Self::execute(
+            Arc::clone(&self.status),
+            pool,
+            older_than_days,
+            project_id,
+            filter,
+        ));
         Ok(started)
+    }
+
+    /// Runs a cleanup of every project to the end, under the same one at a
+    /// time rule as [`Self::start`]: the scheduled cleanup, which must never
+    /// overlap a manual one.
+    pub async fn run(
+        &self,
+        pool: DbPool,
+        older_than_days: i64,
+        filter: CleanupFilter,
+    ) -> AppResult<CleanupCounts> {
+        self.begin(older_than_days)?;
+        Self::execute(
+            Arc::clone(&self.status),
+            pool,
+            older_than_days,
+            None,
+            filter,
+        )
+        .await
+    }
+
+    /// Marks the job `running`, or refuses with `Conflict` while it already is.
+    fn begin(&self, older_than_days: i64) -> AppResult<CleanupStatus> {
+        validate_retention(older_than_days)?;
+        let mut status = lock(&self.status);
+        if status.state == CleanupState::Running {
+            return Err(AppError::Conflict(
+                "A storage cleanup is already running".to_string(),
+            ));
+        }
+        *status = CleanupStatus {
+            state: CleanupState::Running,
+            started_at: Some(Utc::now()),
+            ..Default::default()
+        };
+        Ok(status.clone())
+    }
+
+    async fn execute(
+        shared: Arc<Mutex<CleanupStatus>>,
+        pool: DbPool,
+        older_than_days: i64,
+        project_id: Option<i32>,
+        filter: CleanupFilter,
+    ) -> AppResult<CleanupCounts> {
+        let progress = Arc::clone(&shared);
+        // Its own task so a panic inside surfaces here as a JoinError
+        // instead of leaving the job `running` forever.
+        let outcome = tokio::spawn(async move {
+            StorageService::execute_cleanup_in_batches(
+                &pool,
+                older_than_days,
+                project_id,
+                filter,
+                CLEANUP_BATCH_SIZE,
+                |counts| lock(&progress).removed = counts.clone(),
+            )
+            .await
+        })
+        .await;
+
+        let mut status = lock(&shared);
+        status.finished_at = Some(Utc::now());
+        match outcome {
+            Ok(Ok(counts)) => {
+                status.state = CleanupState::Completed;
+                status.removed = counts.clone();
+                Ok(counts)
+            }
+            Ok(Err(error)) => {
+                log::error!("Storage cleanup failed: {error}");
+                status.state = CleanupState::Failed;
+                status.error = Some(error.to_string());
+                Err(error)
+            }
+            Err(error) => {
+                log::error!("Storage cleanup task stopped: {error}");
+                let message = "The cleanup stopped unexpectedly".to_string();
+                status.state = CleanupState::Failed;
+                status.error = Some(message.clone());
+                Err(AppError::Internal(message))
+            }
+        }
     }
 }
 
@@ -178,13 +215,22 @@ impl CleanupJob {
 /// it's rejected before any cutoff is computed. Mirrors the `min(1)` the MCP and
 /// UI already enforce on the client side.
 const MIN_RETENTION_DAYS: i64 = 1;
+/// Largest accepted window, a century: far past any real retention, and far
+/// below where `Duration::days` panics.
+const MAX_RETENTION_DAYS: i64 = 36_500;
 
-/// Rejects retention windows that would delete current/future data. Shared by the
-/// preview and execute paths so both fail fast on the same contract.
-fn validate_retention(older_than_days: i64) -> AppResult<()> {
+/// Rejects retention windows that would delete current/future data, or that
+/// no cutoff can be computed for. Shared by the preview, execute and
+/// automatic paths so all fail fast on the same contract.
+pub(crate) fn validate_retention(older_than_days: i64) -> AppResult<()> {
     if older_than_days < MIN_RETENTION_DAYS {
         return Err(AppError::Validation(format!(
             "older_than_days must be at least {MIN_RETENTION_DAYS}"
+        )));
+    }
+    if older_than_days > MAX_RETENTION_DAYS {
+        return Err(AppError::Validation(format!(
+            "older_than_days must be at most {MAX_RETENTION_DAYS}"
         )));
     }
     Ok(())
