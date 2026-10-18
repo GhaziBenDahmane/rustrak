@@ -41,6 +41,77 @@ export const CUSTOM_WEBHOOK_FIELD_MAP: ServerFieldMap = {
 };
 
 /* -------------------------------------------------------------------------- */
+/* Custom headers -- shared by both webhook dialogs                            */
+/* -------------------------------------------------------------------------- */
+
+/** An RFC 9110 token, the only thing an HTTP header name may be. */
+const HEADER_NAME = /^[!#$%&'*+\-.^_`|~A-Za-z0-9]+$/;
+
+export type HeaderRow = { name: string; value: string };
+
+const isBlankRow = (row: HeaderRow) =>
+  row.name.trim() === '' && row.value.trim() === '';
+
+/**
+ * Header rows as the form edits them. A row left blank is the empty row the
+ * dialog offers, not a header. Which names the server reserves for itself
+ * (`Content-Type`, `X-Rustrak-*`) is left to the server's answer: one list,
+ * in one place.
+ */
+function headersSchema(t: Translate) {
+  return z
+    .array(z.object({ name: z.string(), value: z.string() }))
+    .superRefine((rows, ctx) => {
+      const seen = new Set<string>();
+      rows.forEach((row, index) => {
+        if (isBlankRow(row)) return;
+        const name = row.name.trim();
+        const path = [index, 'name'];
+        if (name === '') {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: t('validation.headerNameRequired'),
+          });
+        } else if (!HEADER_NAME.test(name)) {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: t('validation.headerNameInvalid'),
+          });
+        } else if (seen.has(name.toLowerCase())) {
+          ctx.addIssue({
+            code: 'custom',
+            path,
+            message: t('validation.headerNameDuplicate'),
+          });
+        }
+        seen.add(name.toLowerCase());
+      });
+    });
+}
+
+/**
+ * What the form posts as `credentials.headers`. Always an object, never
+ * omitted: the server replaces credentials whole, so `{}` is how removing the
+ * last row clears them.
+ */
+export function headersFromRows(rows: HeaderRow[]): Record<string, string> {
+  return Object.fromEntries(
+    rows
+      .filter((row) => !isBlankRow(row))
+      .map((row) => [row.name.trim(), row.value.trim()]),
+  );
+}
+
+function headerRows(headers: Record<string, string> | undefined): HeaderRow[] {
+  return Object.entries(headers ?? {}).map(([name, value]) => ({
+    name,
+    value,
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
 /* Schemas -- credentials only, no routing fields                              */
 /* -------------------------------------------------------------------------- */
 
@@ -60,6 +131,7 @@ export function webhookFormSchema(t: Translate) {
         { message: t('validation.validHttpUrl') },
       ),
     secret: z.string().optional(),
+    headers: headersSchema(t),
     is_enabled: z.boolean(),
   });
 }
@@ -184,6 +256,7 @@ export function customWebhookFormSchema(t: Translate) {
       ),
     secret: z.string().optional(),
     template: z.string().min(1, t('validation.templateRequired')),
+    headers: headersSchema(t),
     is_enabled: z.boolean(),
   });
 }
@@ -206,11 +279,13 @@ export function webhookDefaults(
   const creds = (integration?.credentials ?? {}) as {
     url?: string;
     secret?: string;
+    headers?: Record<string, string>;
   };
   return {
     name: integration?.name ?? '',
     url: creds.url ?? '',
     secret: creds.secret ?? '',
+    headers: headerRows(creds.headers),
     is_enabled: integration?.is_enabled ?? true,
   };
 }
@@ -263,6 +338,7 @@ export function customWebhookDefaults(
     url?: string;
     secret?: string;
     template?: string;
+    headers?: Record<string, string>;
   };
   return {
     name: integration?.name ?? '',
@@ -271,6 +347,7 @@ export function customWebhookDefaults(
     // Seeded, unlike a secret: the template is configuration, not a
     // credential, and the server returns it in full.
     template: creds.template ?? '',
+    headers: headerRows(creds.headers),
     is_enabled: integration?.is_enabled ?? true,
   };
 }

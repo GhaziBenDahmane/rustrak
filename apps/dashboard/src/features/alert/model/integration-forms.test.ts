@@ -3,7 +3,10 @@ import type { Translate } from '@/shared/lib/error-copy';
 import {
   customWebhookDefaults,
   customWebhookFormSchema,
+  headersFromRows,
   slackFormSchema,
+  webhookDefaults,
+  webhookFormSchema,
 } from './integration-forms';
 
 /** The key, so a test asserts which reason was given rather than its copy. */
@@ -143,6 +146,7 @@ const customWebhook = (over: Record<string, unknown>) => ({
   url: 'https://example.com/hooks/incoming',
   secret: '',
   template: '{"msgtype":"text"}',
+  headers: [],
   is_enabled: true,
   ...over,
 });
@@ -194,5 +198,85 @@ describe('customWebhookDefaults', () => {
         is_enabled: true,
       } as never).secret,
     ).toBe('');
+  });
+});
+
+describe('custom headers (#419)', () => {
+  const rows = (...pairs: [string, string][]) =>
+    pairs.map(([name, value]) => ({ name, value }));
+
+  it('accepts an Authorization header', () => {
+    expect(
+      firstCwIssue(
+        customWebhook({ headers: rows(['Authorization', 'Bearer re_123']) }),
+      ),
+    ).toBeNull();
+  });
+
+  it('ignores a row left completely blank', () => {
+    expect(
+      firstCwIssue(customWebhook({ headers: rows(['', ''], [' ', '']) })),
+    ).toBeNull();
+  });
+
+  it('requires a name once a value is typed', () => {
+    expect(
+      firstCwIssue(customWebhook({ headers: rows(['', 'Bearer x']) })),
+    ).toEqual(['headers.0.name', 'validation.headerNameRequired']);
+  });
+
+  it('rejects a name that cannot be sent as a header', () => {
+    expect(
+      firstCwIssue(customWebhook({ headers: rows(['Bad Header', 'x']) })),
+    ).toEqual(['headers.0.name', 'validation.headerNameInvalid']);
+  });
+
+  it('rejects the same name twice, whatever its case', () => {
+    expect(
+      firstCwIssue(
+        customWebhook({
+          headers: rows(['Authorization', 'a'], ['authorization', 'b']),
+        }),
+      ),
+    ).toEqual(['headers.1.name', 'validation.headerNameDuplicate']);
+  });
+
+  it('validates them on the plain webhook too', () => {
+    const result = webhookFormSchema(t).safeParse({
+      name: 'Hook',
+      url: 'https://example.com/h',
+      secret: '',
+      headers: rows(['Bad Header', 'x']),
+      is_enabled: true,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('posts the filled rows as an object, trimmed', () => {
+    expect(
+      headersFromRows(rows([' Authorization ', ' Bearer x '], ['', ''])),
+    ).toEqual({ Authorization: 'Bearer x' });
+  });
+
+  it('posts an empty object when every row was removed, so they are cleared', () => {
+    expect(headersFromRows([])).toEqual({});
+  });
+
+  it('seeds the stored headers on both webhook dialogs', () => {
+    const integration = {
+      id: 1,
+      name: 'Mailer',
+      provider_type: 'custom_webhook',
+      credentials: {
+        url: 'https://example.test/h',
+        template: '{}',
+        headers: { Authorization: 'Bearer x' },
+      },
+      is_enabled: true,
+    } as never;
+    const expected = rows(['Authorization', 'Bearer x']);
+    expect(customWebhookDefaults(integration).headers).toEqual(expected);
+    expect(webhookDefaults(integration).headers).toEqual(expected);
+    expect(webhookDefaults(null).headers).toEqual([]);
   });
 });

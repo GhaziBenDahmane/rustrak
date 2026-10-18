@@ -60,6 +60,12 @@ Send JSON payloads to any HTTP endpoint.
 | `X-Rustrak-Request-ID` | Unique alert ID |
 | `X-Rustrak-Signature` | `sha256=<hmac>` (if secret configured) |
 
+#### Custom headers
+
+Both Webhook and Custom Webhook can send extra headers with every request, for an endpoint that wants an `Authorization` or an API key header. Add them under **Headers** in the integration dialog. An alert rule can add or replace headers for its own deliveries with `extra_headers` in its routing override.
+
+Up to 20 headers. Names have to be valid HTTP header names and each one can appear only once, whatever its case. `Content-Type`, `Content-Length`, `Host`, `Transfer-Encoding` and anything starting with `X-Rustrak-` are reserved and get rejected, so a custom header can never replace the signature.
+
 #### Verifying signatures
 
 If you configure a secret, verify the `X-Rustrak-Signature` header:

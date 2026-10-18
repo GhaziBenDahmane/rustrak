@@ -580,7 +580,10 @@
       "botTokenPrefix": "Le token de bot doit commencer par xoxb-",
       "smtpHostRequired": "L’hôte SMTP est obligatoire",
       "validEmail": "Veuillez saisir une adresse e-mail valide",
-      "templateRequired": "Le modèle est requis"
+      "templateRequired": "Le modèle est requis",
+      "headerNameRequired": "Le nom de l'en-tête est requis",
+      "headerNameInvalid": "Lettres, chiffres et - uniquement, sans espaces",
+      "headerNameDuplicate": "Cet en-tête est déjà défini"
     },
     "routing": {
       "slackChannelRequired": "Un canal Slack est requis pour « {name} »",
@@ -720,6 +723,16 @@
         "structured": "Champs typés pour votre propre API"
       },
       "insertFieldHint": "Cliquez dans le corps là où le champ doit aller"
+    },
+    "headers": {
+      "label": "En-têtes (facultatif)",
+      "nameLabel": "Nom de l'en-tête",
+      "valueLabel": "Valeur de l'en-tête",
+      "namePlaceholder": "Authorization",
+      "valuePlaceholder": "Bearer …",
+      "add": "Ajouter un en-tête",
+      "remove": "Supprimer l'en-tête",
+      "description": "Envoyés avec chaque requête, par ex. la clé d'API demandée par votre endpoint."
     },
     "slack": {
       "titleNew": "Ajouter l’intégration Slack",
