@@ -1,0 +1,52 @@
+---
+version: v0.18.0
+title: Crons and Retention
+description: Monitor scheduled jobs, keep data for as long as you choose, and send custom headers with webhooks
+date: 2026-10-18
+tags: [server, dashboard, crons, storage, alerts, mcp]
+---
+
+## Crons
+
+Errors tell you when code breaks, not when it never ran. **Crons** watches
+scheduled jobs and opens an issue when a run is **missed**, **fails** or
+**runs too long**. It speaks Sentry Crons, so `check_in` items from Sentry
+SDKs, `sentry-cli monitors run` and plain `curl` check-ins work unchanged.
+
+- Create monitors from code with a `monitor_config`, or from a project's
+  **Crons** page, which previews the next runs as you type the schedule
+- Crontab or interval schedules, read in the monitor's timezone across
+  daylight saving time
+- Grace period, max runtime, and failure and recovery tolerances. Issues go
+  through your alerts and resolve themselves when the job recovers
+- Each environment is tracked separately. Mute a monitor during maintenance
+- Check-ins are kept for 90 days
+
+See [Crons](/usage/crons).
+
+## Retention
+
+**Settings → Storage** now sets how long errors, transactions and logs are
+kept (7 days to a year, or forever), with overrides per project, and runs the
+cleanup every day or week at an hour you pick. Everything is still kept
+forever until you choose otherwise.
+
+- The page shows what the instance holds by kind, by age and by project, and
+  what the next cleanup frees before you save
+- Cleanup also removes source maps nothing references any more
+- Cleanup works in small batches, so ingestion keeps going, and a run missed
+  while the server was down happens when it comes back
+
+See [Storage](/usage/storage).
+
+## Webhook custom headers
+
+Webhook and custom webhook integrations can send up to 20 custom headers,
+for APIs that authenticate with one such as `api-key`. Headers that frame the
+request and anything under `X-Rustrak-` stay Rustrak's.
+
+## Improvements
+
+- `@rustrak/client` and `@rustrak/mcp` cover monitors, retention and schedule
+  previews. MCP asks for confirmation before saving retention that deletes data
+- The documentation moved to [rustrak.dev](https://rustrak.dev). Old links redirect
