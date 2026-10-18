@@ -7,10 +7,12 @@ use serde_json::{json, Value};
 
 use crate::digest::processors::Processors;
 use crate::error::AppResult;
-use crate::models::AutoCleanupSettings;
+use crate::models::RetentionSettings;
 use crate::scheduler::engine::{JobContext, Misfire, ScheduledJob};
-use crate::scheduler::schedule::{parse_timezone, IntervalUnit, Schedule};
+use crate::scheduler::schedule::{IntervalUnit, Schedule};
+use crate::services::sourcemap_store::SourceMapStore;
 use crate::services::CleanupJob;
+use std::sync::Arc;
 
 /// Cron monitors: marks the check-ins that were missed or ran past their max
 /// runtime, once a minute, the granularity of every monitor schedule.
@@ -55,22 +57,24 @@ impl ScheduledJob for MonitorSweepJob {
     }
 }
 
-/// Automatic storage cleanup, on the schedule and for the categories an
-/// admin chose in Settings → Storage. Off until turned on. Runs through the
-/// manual cleanup's [`CleanupJob`], so the two never overlap.
+/// Enforces the retention an admin chose in Settings → Storage, daily or
+/// weekly at the hour they chose, in UTC. Never runs while everything is
+/// kept forever. Runs through the manual cleanup's [`CleanupJob`], so the
+/// two never overlap.
 pub struct StorageCleanupJob {
     cleanup: web::Data<CleanupJob>,
+    store: Arc<dyn SourceMapStore>,
 }
 
 impl StorageCleanupJob {
     pub const KEY: &'static str = "storage_cleanup";
 
-    pub fn new(cleanup: web::Data<CleanupJob>) -> Self {
-        Self { cleanup }
+    pub fn new(cleanup: web::Data<CleanupJob>, store: Arc<dyn SourceMapStore>) -> Self {
+        Self { cleanup, store }
     }
 
     /// Stored settings, with defaults for anything missing or unreadable.
-    pub fn settings(stored: &Value) -> AutoCleanupSettings {
+    pub fn settings(stored: &Value) -> RetentionSettings {
         serde_json::from_value(stored.clone()).unwrap_or_default()
     }
 }
@@ -83,11 +87,10 @@ impl ScheduledJob for StorageCleanupJob {
 
     fn schedule(&self, settings: &Value) -> Option<(Schedule, Tz)> {
         let settings = Self::settings(settings);
-        if !settings.enabled || settings.validate().is_err() {
+        if !settings.deletes_anything() || settings.validate().is_err() {
             return None;
         }
-        let tz = parse_timezone(&settings.timezone).ok()?;
-        Some((settings.schedule, tz))
+        Some((settings.schedule(), Tz::UTC))
     }
 
     /// A missed cleanup runs once: catching up on every night it slept
@@ -100,11 +103,7 @@ impl ScheduledJob for StorageCleanupJob {
         let settings = Self::settings(ctx.settings);
         let removed = self
             .cleanup
-            .run(
-                ctx.pool.clone(),
-                settings.older_than_days,
-                settings.filter(),
-            )
+            .run_retention(ctx.pool.clone(), settings, Arc::clone(&self.store))
             .await?;
         Ok(serde_json::to_value(removed).unwrap_or_default())
     }

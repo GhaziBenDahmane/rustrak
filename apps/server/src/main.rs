@@ -291,6 +291,7 @@ async fn main() -> std::io::Result<()> {
         )),
         Arc::new(rustrak::scheduler::jobs::StorageCleanupJob::new(
             cleanup_job_data.clone(),
+            Arc::clone(&sourcemap_store),
         )),
     ]);
     let scheduler_pool = db_pool.clone();

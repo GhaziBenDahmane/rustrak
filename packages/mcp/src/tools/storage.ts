@@ -2,7 +2,6 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { RustrakClient } from '@rustrak/client';
 import { z } from 'zod';
 import { mcpJson, mcpRefusal } from '../errors.js';
-import { scheduleSchema } from './schedules.js';
 
 export function registerStorageTools(
   server: McpServer,
@@ -199,55 +198,116 @@ export function registerStorageTools(
     },
   );
 
+  // Days a kind of data is kept; null keeps it forever.
+  const days = z.number().int().min(1).max(36_500).nullable();
+  const retentionInput = {
+    defaults: z
+      .object({
+        events_days: days.describe('Error events, and the issues they empty'),
+        transactions_days: days.describe('Transactions with their spans'),
+        logs_days: days.describe('Logs'),
+      })
+      .describe('How long every project keeps each kind; null is forever'),
+    overrides: z
+      .array(
+        z.object({
+          project_id: z.number().int(),
+          events_days: days,
+          transactions_days: days,
+          logs_days: days,
+        }),
+      )
+      .describe(
+        'Projects kept for other windows; each replaces the defaults whole',
+      ),
+    frequency: z.enum(['daily', 'weekly']).describe('How often it runs'),
+    hour: z.number().int().min(0).max(23).describe('Hour it runs, UTC'),
+    weekday: z
+      .number()
+      .int()
+      .min(0)
+      .max(6)
+      .describe('Day of a weekly run, 0 = Sunday'),
+  };
+
   server.registerTool(
-    'get_auto_cleanup',
+    'get_retention',
     {
       description:
-        'Get the automatic storage cleanup (admin only): whether it is on, its schedule, how old data must be to go, ' +
-        'which kinds (events, transactions with their spans, logs), when it runs next and how its last run went.',
+        'Get the storage retention (admin only): how many days each kind of data (error events, transactions with their spans, logs) is kept by default and per project (null keeps it forever), ' +
+        'when the cleanup that enforces it runs (daily or weekly at an hour, UTC), when it runs next and how its last run went.',
       inputSchema: {},
     },
-    async () => mcpJson(await client.storage.getAutoCleanup()),
+    async () => mcpJson(await client.storage.getRetention()),
   );
 
   server.registerTool(
-    'update_auto_cleanup',
+    'preview_retention',
     {
       description:
-        'Turn the automatic storage cleanup on or off and set what it deletes (admin only). ' +
-        'Once enabled it permanently deletes data older than older_than_days, of the chosen kinds, on the schedule. ' +
-        'DESTRUCTIVE when enabled: you MUST set confirm=true to save enabled settings; without it the tool refuses. Turning it off needs no confirmation. ' +
-        'Send every field; check the schedule with preview_schedule first.',
+        'Dry-run retention settings (admin only): the rows enforcing them now would permanently delete, each project against its own windows. Saves and deletes nothing. ' +
+        'Run it before update_retention and show the user the counts.',
+      inputSchema: retentionInput,
+    },
+    async (settings) =>
+      mcpJson(await client.storage.previewRetention(settings)),
+  );
+
+  server.registerTool(
+    'run_retention',
+    {
+      description:
+        'DESTRUCTIVE (admin only): enforce the saved retention now instead of waiting for the schedule. ' +
+        "Permanently deletes every project's data older than its retention window, and the source maps no upload uses. " +
+        'You MUST set confirm=true to proceed; without it the tool refuses. Run preview_retention with the saved settings first and show the user what goes. ' +
+        'It runs in the background: this returns the started job, and get_storage_cleanup_status reports its progress.',
       inputSchema: {
-        enabled: z.boolean().describe('Run it on the schedule'),
-        schedule: scheduleSchema.describe('When it runs'),
-        timezone: z.string().describe('IANA zone the schedule is read in'),
-        older_than_days: z
-          .number()
-          .int()
-          .min(1)
-          .describe('Delete data older than this many days'),
-        include_events: z
-          .boolean()
-          .describe('Delete old error events (and issues left empty)'),
-        include_transactions: z
-          .boolean()
-          .describe('Delete old transactions and their spans'),
-        include_logs: z.boolean().describe('Delete old logs'),
         confirm: z
           .boolean()
           .optional()
-          .describe('Must be true to save enabled settings'),
+          .describe('Must be true to run this destructive cleanup'),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ confirm }) => {
+      if (confirm !== true) {
+        return mcpRefusal(
+          'run_retention is destructive and was not confirmed. Run preview_retention, show the user what goes, then call again with confirm=true to proceed.',
+        );
+      }
+      return mcpJson(await client.storage.runRetention());
+    },
+  );
+
+  server.registerTool(
+    'update_retention',
+    {
+      description:
+        'Replace the storage retention settings (admin only). Every field is sent. ' +
+        'DESTRUCTIVE whenever any window is set: the cleanup then permanently deletes data older than it on every run. You MUST set confirm=true to save such settings; without it the tool refuses. ' +
+        'Keeping everything forever needs no confirmation. Run preview_retention first and show the user what goes.',
+      inputSchema: {
+        ...retentionInput,
+        confirm: z
+          .boolean()
+          .optional()
+          .describe('Must be true to save settings that delete anything'),
       },
       annotations: { destructiveHint: true },
     },
     async ({ confirm, ...settings }) => {
-      if (settings.enabled && confirm !== true) {
+      const deletes = [settings.defaults, ...settings.overrides].some(
+        (w) =>
+          w.events_days !== null ||
+          w.transactions_days !== null ||
+          w.logs_days !== null,
+      );
+      if (deletes && confirm !== true) {
         return mcpRefusal(
-          'update_auto_cleanup with enabled=true schedules permanent deletion and was not confirmed. Show the user the settings, then call again with confirm=true to proceed.',
+          'update_retention with a retention window schedules permanent deletion and was not confirmed. Run preview_retention, show the user what goes, then call again with confirm=true to proceed.',
         );
       }
-      return mcpJson(await client.storage.updateAutoCleanup(settings));
+      return mcpJson(await client.storage.updateRetention(settings));
     },
   );
 }

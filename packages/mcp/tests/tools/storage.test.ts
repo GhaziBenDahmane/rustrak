@@ -56,8 +56,10 @@ describe('storage tools', () => {
         getCleanupStatus: vi.fn(),
         previewGcSourceMaps: vi.fn(),
         gcSourceMaps: vi.fn(),
-        getAutoCleanup: vi.fn(),
-        updateAutoCleanup: vi.fn(),
+        getRetention: vi.fn(),
+        updateRetention: vi.fn(),
+        previewRetention: vi.fn(),
+        runRetention: vi.fn(),
       },
     };
     testEnv = await createTestEnv(mockClient);
@@ -270,72 +272,104 @@ describe('storage tools', () => {
     });
   });
 
-  describe('auto cleanup', () => {
+  describe('retention', () => {
     const settings = {
-      enabled: true,
-      schedule: { type: 'crontab', value: '0 3 * * 0' },
-      timezone: 'UTC',
-      older_than_days: 30,
-      include_events: false,
-      include_transactions: true,
-      include_logs: true,
+      defaults: { events_days: 90, transactions_days: 30, logs_days: null },
+      overrides: [
+        {
+          project_id: 7,
+          events_days: 365,
+          transactions_days: null,
+          logs_days: 7,
+        },
+      ],
+      frequency: 'daily',
+      hour: 3,
+      weekday: 0,
+    };
+    const forever = {
+      ...settings,
+      defaults: { events_days: null, transactions_days: null, logs_days: null },
+      overrides: [],
     };
 
-    it('get_auto_cleanup returns settings, next run and last run', async () => {
-      mockClient.storage.getAutoCleanup.mockResolvedValue(
+    it('get_retention returns settings, next cleanup and last cleanup', async () => {
+      mockClient.storage.getRetention.mockResolvedValue(
         ok({ settings, next_run_at: null, last_run: null }),
       );
-      const result = await callTool({
-        name: 'get_auto_cleanup',
-        arguments: {},
-      });
+      const result = await callTool({ name: 'get_retention', arguments: {} });
       expect(result.isError).toBeFalsy();
-      expect(JSON.parse(result.content[0].text).settings.older_than_days).toBe(
-        30,
-      );
+      expect(
+        JSON.parse(result.content[0].text).settings.defaults.events_days,
+      ).toBe(90);
     });
 
-    it('update_auto_cleanup sends the full settings, without confirm', async () => {
-      mockClient.storage.updateAutoCleanup.mockResolvedValue(
-        ok({ settings, next_run_at: null, last_run: null }),
-      );
+    it('preview_retention reports what the settings would delete', async () => {
+      mockClient.storage.previewRetention.mockResolvedValue(ok(mockCounts));
       const result = await callTool({
-        name: 'update_auto_cleanup',
-        arguments: { ...settings, confirm: true },
+        name: 'preview_retention',
+        arguments: settings,
       });
       expect(result.isError).toBeFalsy();
-      expect(mockClient.storage.updateAutoCleanup).toHaveBeenCalledWith(
+      expect(mockClient.storage.previewRetention).toHaveBeenCalledWith(
         settings,
       );
     });
 
-    it('update_auto_cleanup refuses to enable deletion without confirm:true', async () => {
+    it('update_retention sends the settings, without confirm', async () => {
+      mockClient.storage.updateRetention.mockResolvedValue(
+        ok({ settings, next_run_at: null, last_run: null }),
+      );
       const result = await callTool({
-        name: 'update_auto_cleanup',
+        name: 'update_retention',
+        arguments: { ...settings, confirm: true },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.storage.updateRetention).toHaveBeenCalledWith(settings);
+    });
+
+    it('update_retention refuses settings that delete without confirm:true', async () => {
+      const result = await callTool({
+        name: 'update_retention',
         arguments: settings,
       });
       expect(result.isError).toBe(true);
-      expect(mockClient.storage.updateAutoCleanup).not.toHaveBeenCalled();
+      expect(mockClient.storage.updateRetention).not.toHaveBeenCalled();
     });
 
-    it('update_auto_cleanup turns it off without confirm', async () => {
-      const off = { ...settings, enabled: false };
-      mockClient.storage.updateAutoCleanup.mockResolvedValue(
-        ok({ settings: off, next_run_at: null, last_run: null }),
+    it('update_retention keeps everything forever without confirm', async () => {
+      mockClient.storage.updateRetention.mockResolvedValue(
+        ok({ settings: forever, next_run_at: null, last_run: null }),
       );
       const result = await callTool({
-        name: 'update_auto_cleanup',
-        arguments: off,
+        name: 'update_retention',
+        arguments: forever,
       });
       expect(result.isError).toBeFalsy();
-      expect(mockClient.storage.updateAutoCleanup).toHaveBeenCalledWith(off);
+      expect(mockClient.storage.updateRetention).toHaveBeenCalledWith(forever);
     });
 
-    it('update_auto_cleanup is marked destructive', async () => {
-      const tools = await testEnv.mcpClient.listTools();
-      const tool = tools.tools.find(
-        (t: any) => t.name === 'update_auto_cleanup',
+    it('run_retention refuses without confirm:true', async () => {
+      const result = await callTool({ name: 'run_retention', arguments: {} });
+      expect(result.isError).toBe(true);
+      expect(mockClient.storage.runRetention).not.toHaveBeenCalled();
+    });
+
+    it('run_retention starts the cleanup when confirmed', async () => {
+      mockClient.storage.runRetention.mockResolvedValue(
+        ok(mockStatus('running')),
       );
+      const result = await callTool({
+        name: 'run_retention',
+        arguments: { confirm: true },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(mockClient.storage.runRetention).toHaveBeenCalled();
+    });
+
+    it('update_retention is marked destructive', async () => {
+      const tools = await testEnv.mcpClient.listTools();
+      const tool = tools.tools.find((t: any) => t.name === 'update_retention');
       expect(tool?.annotations?.destructiveHint).toBe(true);
     });
   });

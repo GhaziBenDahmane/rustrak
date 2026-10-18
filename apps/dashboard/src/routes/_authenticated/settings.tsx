@@ -47,7 +47,7 @@ function SettingsLayout() {
         </aside>
 
         {/* Main content */}
-        <div className="flex-1 p-4 md:p-8">
+        <div className="min-w-0 flex-1 p-4 md:p-8">
           <Outlet />
         </div>
       </div>

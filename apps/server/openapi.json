@@ -8215,94 +8215,20 @@
         ]
       }
     },
-    "/api/storage/auto-cleanup": {
+    "/api/storage/age": {
       "get": {
         "tags": [
           "Storage"
         ],
-        "summary": "Configure storage routes.\nGET /api/storage/auto-cleanup",
-        "operationId": "get_auto_cleanup",
+        "summary": "GET /api/storage/age — rows per age bucket, per project and kind.",
+        "operationId": "get_age",
         "responses": {
           "200": {
-            "description": "Automatic cleanup settings, next run and last run",
+            "description": "How long ago each project's data arrived, per kind",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AutoCleanupResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Admin privileges required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer_auth": []
-          }
-        ]
-      },
-      "put": {
-        "tags": [
-          "Storage"
-        ],
-        "summary": "PUT /api/storage/auto-cleanup",
-        "operationId": "update_auto_cleanup",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutoCleanupSettings"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Saved; the new schedule applies within a minute",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoCleanupResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Settings that cannot run",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/StorageAge"
                 }
               }
             }
@@ -8498,14 +8424,26 @@
                       "spans_count",
                       "logs_count",
                       "source_maps_count",
-                      "estimated_bytes"
+                      "estimated_bytes",
+                      "events_bytes",
+                      "transactions_bytes",
+                      "logs_bytes"
                     ],
                     "properties": {
                       "estimated_bytes": {
                         "type": "integer",
+                        "format": "int64",
+                        "description": "`events_bytes + transactions_bytes + logs_bytes`."
+                      },
+                      "events_bytes": {
+                        "type": "integer",
                         "format": "int64"
                       },
                       "events_count": {
+                        "type": "integer",
+                        "format": "int64"
+                      },
+                      "logs_bytes": {
                         "type": "integer",
                         "format": "int64"
                       },
@@ -8528,6 +8466,11 @@
                         "type": "integer",
                         "format": "int64"
                       },
+                      "transactions_bytes": {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Transactions with their spans."
+                      },
                       "transactions_count": {
                         "type": "integer",
                         "format": "int64"
@@ -8540,6 +8483,228 @@
           },
           "403": {
             "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/storage/retention": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "GET /api/storage/retention",
+        "operationId": "get_retention",
+        "responses": {
+          "200": {
+            "description": "Retention settings, next cleanup and last cleanup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin privileges required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "PUT /api/storage/retention",
+        "operationId": "update_retention",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved; the new schedule applies within a minute",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Settings that cannot run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin privileges required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/storage/retention/preview": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "POST /api/storage/retention/preview — what saving these settings would\ndelete on the next cleanup, without saving or deleting anything.",
+        "operationId": "preview_retention",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run: rows enforcing these settings now would remove",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupCounts"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Settings that cannot run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin privileges required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/storage/retention/run": {
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "POST /api/storage/retention/run — enforces the saved retention now,\nwithout waiting for the schedule. Follow it with the cleanup status.",
+        "operationId": "run_retention",
+        "responses": {
+          "202": {
+            "description": "Cleanup started in the background; poll its status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Everything is kept forever: nothing to clean up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin privileges required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A cleanup is already running",
             "content": {
               "application/json": {
                 "schema": {
@@ -10494,116 +10659,6 @@
           }
         }
       },
-      "AutoCleanupResponse": {
-        "type": "object",
-        "required": [
-          "settings"
-        ],
-        "properties": {
-          "last_run": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/AutoCleanupRun"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "next_run_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time",
-            "description": "`null` while disabled, and for up to a minute after the settings change."
-          },
-          "settings": {
-            "$ref": "#/components/schemas/AutoCleanupSettings"
-          }
-        }
-      },
-      "AutoCleanupRun": {
-        "type": "object",
-        "description": "How the last automatic cleanup went.",
-        "required": [
-          "started_at",
-          "status"
-        ],
-        "properties": {
-          "error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "finished_at": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "removed": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/CleanupCounts"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "started_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "status": {
-            "type": "string",
-            "description": "`running`, `ok` or `error`."
-          }
-        }
-      },
-      "AutoCleanupSettings": {
-        "type": "object",
-        "description": "Automatic cleanup: delete data older than `older_than_days`, of the chosen\ncategories, on a schedule. Stored as the settings of the\n`storage_cleanup` scheduled job; a field left out takes its default.",
-        "properties": {
-          "enabled": {
-            "type": "boolean",
-            "default": false
-          },
-          "include_events": {
-            "type": "boolean",
-            "default": true
-          },
-          "include_logs": {
-            "type": "boolean",
-            "default": true
-          },
-          "include_transactions": {
-            "type": "boolean",
-            "default": true
-          },
-          "older_than_days": {
-            "type": "integer",
-            "format": "int64",
-            "default": 90,
-            "minimum": 1
-          },
-          "schedule": {
-            "$ref": "#/components/schemas/Schedule",
-            "default": {
-              "type": "crontab",
-              "value": "0 3 * * *"
-            }
-          },
-          "timezone": {
-            "type": "string",
-            "description": "IANA zone the schedule is read in.",
-            "default": "UTC"
-          }
-        }
-      },
       "BookmarkResponse": {
         "type": "object",
         "required": [
@@ -10799,6 +10854,11 @@
             "type": "integer",
             "format": "int64"
           },
+          "source_maps": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unused source maps deleted; only a retention cleanup removes them."
+          },
           "spans": {
             "type": "integer",
             "format": "int64"
@@ -10808,6 +10868,14 @@
             "format": "int64"
           }
         }
+      },
+      "CleanupFrequency": {
+        "type": "string",
+        "description": "How often the cleanup that enforces retention runs.",
+        "enum": [
+          "daily",
+          "weekly"
+        ]
       },
       "CleanupRequest": {
         "type": "object",
@@ -11945,6 +12013,30 @@
           }
         }
       },
+      "KindAge": {
+        "type": "object",
+        "description": "How long ago a kind of data arrived: rows per age bucket, and the oldest.",
+        "required": [
+          "counts"
+        ],
+        "properties": {
+          "counts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "One count per bucket, `AGE_BUCKET_DAYS.len() + 1` of them."
+          },
+          "oldest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "LinkGitHubIssue": {
         "type": "object",
         "required": [
@@ -12315,6 +12407,31 @@
           }
         }
       },
+      "ProjectAge": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "events",
+          "transactions",
+          "logs"
+        ],
+        "properties": {
+          "events": {
+            "$ref": "#/components/schemas/KindAge"
+          },
+          "logs": {
+            "$ref": "#/components/schemas/KindAge"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "transactions": {
+            "$ref": "#/components/schemas/KindAge",
+            "description": "Transactions; their spans are as old."
+          }
+        }
+      },
       "ProjectListStats": {
         "type": "object",
         "description": "The at-a-glance aggregates one row of the project-list table needs.\n\nDeliberately narrower than [`ProjectStatsSummary`]: that one answers \"how\nis this project doing\" for a page dedicated to a single project, this one\nanswers \"which of my projects should I look at first\" and must stay cheap\nenough to compute for every project on the page at once.",
@@ -12528,6 +12645,40 @@
           }
         }
       },
+      "ProjectRetention": {
+        "type": "object",
+        "description": "A project that keeps its data for other windows than the defaults. Every\nkind is set: an override replaces the defaults whole.",
+        "required": [
+          "project_id"
+        ],
+        "properties": {
+          "events_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "logs_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "transactions_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
       "ProjectStatsSummary": {
         "type": "object",
         "description": "Project-wide counters for the overview page, each with its previous-period\ncomparison.",
@@ -12571,14 +12722,26 @@
           "spans_count",
           "logs_count",
           "source_maps_count",
-          "estimated_bytes"
+          "estimated_bytes",
+          "events_bytes",
+          "transactions_bytes",
+          "logs_bytes"
         ],
         "properties": {
           "estimated_bytes": {
             "type": "integer",
+            "format": "int64",
+            "description": "`events_bytes + transactions_bytes + logs_bytes`."
+          },
+          "events_bytes": {
+            "type": "integer",
             "format": "int64"
           },
           "events_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "logs_bytes": {
             "type": "integer",
             "format": "int64"
           },
@@ -12600,6 +12763,11 @@
           "spans_count": {
             "type": "integer",
             "format": "int64"
+          },
+          "transactions_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Transactions with their spans."
           },
           "transactions_count": {
             "type": "integer",
@@ -12769,6 +12937,149 @@
           },
           "url": {
             "type": "string"
+          }
+        }
+      },
+      "RetentionResponse": {
+        "type": "object",
+        "required": [
+          "settings"
+        ],
+        "properties": {
+          "last_run": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RetentionRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_run_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "`null` while everything is kept forever, and for up to a minute after\nthe settings change."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/RetentionSettings"
+          }
+        }
+      },
+      "RetentionRun": {
+        "type": "object",
+        "description": "How the last retention cleanup went.",
+        "required": [
+          "started_at",
+          "status"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "removed": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CleanupCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "description": "`running`, `ok` or `error`."
+          }
+        }
+      },
+      "RetentionSettings": {
+        "type": "object",
+        "description": "Retention: how long each kind of data is kept, by default and per\nproject, and when the cleanup that enforces it runs. Stored as the\nsettings of the `storage_cleanup` scheduled job; a field left out takes\nits default. Keeping everything forever runs nothing.",
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/RetentionWindows",
+            "default": {
+              "events_days": null,
+              "logs_days": null,
+              "transactions_days": null
+            }
+          },
+          "frequency": {
+            "$ref": "#/components/schemas/CleanupFrequency",
+            "default": "daily"
+          },
+          "hour": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Hour of the day it runs, UTC.",
+            "default": 3,
+            "maximum": 23,
+            "minimum": 0
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectRetention"
+            },
+            "default": []
+          },
+          "weekday": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Day a weekly cleanup runs, 0 = Sunday.",
+            "default": 0,
+            "maximum": 6,
+            "minimum": 0
+          }
+        }
+      },
+      "RetentionWindows": {
+        "type": "object",
+        "description": "How long each kind of data is kept, in days. `None` keeps it forever.",
+        "properties": {
+          "events_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Error events, and the issues they leave empty.",
+            "default": null
+          },
+          "logs_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null
+          },
+          "transactions_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Transactions with their spans.",
+            "default": null
           }
         }
       },
@@ -13210,6 +13521,30 @@
         "properties": {
           "authorization_url": {
             "type": "string"
+          }
+        }
+      },
+      "StorageAge": {
+        "type": "object",
+        "description": "The age of everything the instance holds, by project and kind, keyed on\ningest time like retention.",
+        "required": [
+          "bucket_days",
+          "projects"
+        ],
+        "properties": {
+          "bucket_days": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "The buckets' upper bounds in days; the last bucket has none."
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProjectAge"
+            }
           }
         }
       },

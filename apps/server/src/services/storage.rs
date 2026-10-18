@@ -11,8 +11,9 @@ use chrono::Utc;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    CleanupCounts, CleanupFilter, CleanupState, CleanupStatus, ProjectStorage, SourceMapGcResult,
-    SourceMapStorage, StorageSummary,
+    CleanupCounts, CleanupFilter, CleanupState, CleanupStatus, KindAge, ProjectAge, ProjectStorage,
+    RetentionSettings, SourceMapGcResult, SourceMapStorage, StorageAge, StorageSummary,
+    AGE_BUCKET_DAYS,
 };
 use crate::services::sourcemap_store::SourceMapStore;
 
@@ -52,6 +53,25 @@ const SPANS_SAMPLE: &str = "SELECT COALESCE(SUM(length(CAST(data AS TEXT))), 0),
 const LOGS_SAMPLE: &str = "SELECT COALESCE(SUM(COALESCE(length(CAST(body AS TEXT)), 0) \
      + COALESCE(length(CAST(attributes AS TEXT)), 0)), 0), COUNT(*) \
      FROM (SELECT body, attributes FROM logs WHERE project_id = $1 ORDER BY ingested_at DESC LIMIT $2) AS sample";
+
+/// One table's rows per project newer than each of the six age cuts (`$1`
+/// to `$6`), its total and its oldest ingest time.
+macro_rules! age_sql {
+    ($table:literal) => {
+        concat!(
+            "SELECT project_id, ",
+            "SUM(CASE WHEN ingested_at >= $1 THEN 1 ELSE 0 END), ",
+            "SUM(CASE WHEN ingested_at >= $2 THEN 1 ELSE 0 END), ",
+            "SUM(CASE WHEN ingested_at >= $3 THEN 1 ELSE 0 END), ",
+            "SUM(CASE WHEN ingested_at >= $4 THEN 1 ELSE 0 END), ",
+            "SUM(CASE WHEN ingested_at >= $5 THEN 1 ELSE 0 END), ",
+            "SUM(CASE WHEN ingested_at >= $6 THEN 1 ELSE 0 END), ",
+            "COUNT(*), MIN(ingested_at) FROM ",
+            $table,
+            " GROUP BY project_id"
+        )
+    };
+}
 
 /// Transactions per project a span estimate reads. On production 1,000 put
 /// a 21M-span cleanup within 1% and took about a second; 200 was 16% off.
@@ -99,6 +119,21 @@ fn lock(status: &Mutex<CleanupStatus>) -> MutexGuard<'_, CleanupStatus> {
     status.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// What a cleanup deletes: one window, or the retention settings, each
+/// project for its own windows.
+enum CleanupPlan {
+    Window {
+        older_than_days: i64,
+        project_id: Option<i32>,
+        filter: CleanupFilter,
+    },
+    /// Also deletes the source maps no upload uses.
+    Retention {
+        settings: RetentionSettings,
+        store: Arc<dyn SourceMapStore>,
+    },
+}
+
 impl CleanupJob {
     pub fn status(&self) -> CleanupStatus {
         lock(&self.status).clone()
@@ -114,40 +149,59 @@ impl CleanupJob {
         project_id: Option<i32>,
         filter: CleanupFilter,
     ) -> AppResult<CleanupStatus> {
-        let started = self.begin(older_than_days)?;
+        validate_retention(older_than_days)?;
+        let started = self.begin()?;
         tokio::spawn(Self::execute(
             Arc::clone(&self.status),
             pool,
-            older_than_days,
-            project_id,
-            filter,
+            CleanupPlan::Window {
+                older_than_days,
+                project_id,
+                filter,
+            },
         ));
         Ok(started)
     }
 
-    /// Runs a cleanup of every project to the end, under the same one at a
+    /// Enforces the retention settings to the end, under the same one at a
     /// time rule as [`Self::start`]: the scheduled cleanup, which must never
     /// overlap a manual one.
-    pub async fn run(
+    pub async fn run_retention(
         &self,
         pool: DbPool,
-        older_than_days: i64,
-        filter: CleanupFilter,
+        settings: RetentionSettings,
+        store: Arc<dyn SourceMapStore>,
     ) -> AppResult<CleanupCounts> {
-        self.begin(older_than_days)?;
+        settings.validate()?;
+        self.begin()?;
         Self::execute(
             Arc::clone(&self.status),
             pool,
-            older_than_days,
-            None,
-            filter,
+            CleanupPlan::Retention { settings, store },
         )
         .await
     }
 
+    /// Enforces the retention settings now, in the background, as
+    /// [`Self::start`] does a window.
+    pub fn start_retention(
+        &self,
+        pool: DbPool,
+        settings: RetentionSettings,
+        store: Arc<dyn SourceMapStore>,
+    ) -> AppResult<CleanupStatus> {
+        settings.validate()?;
+        let started = self.begin()?;
+        tokio::spawn(Self::execute(
+            Arc::clone(&self.status),
+            pool,
+            CleanupPlan::Retention { settings, store },
+        ));
+        Ok(started)
+    }
+
     /// Marks the job `running`, or refuses with `Conflict` while it already is.
-    fn begin(&self, older_than_days: i64) -> AppResult<CleanupStatus> {
-        validate_retention(older_than_days)?;
+    fn begin(&self) -> AppResult<CleanupStatus> {
         let mut status = lock(&self.status);
         if status.state == CleanupState::Running {
             return Err(AppError::Conflict(
@@ -165,23 +219,44 @@ impl CleanupJob {
     async fn execute(
         shared: Arc<Mutex<CleanupStatus>>,
         pool: DbPool,
-        older_than_days: i64,
-        project_id: Option<i32>,
-        filter: CleanupFilter,
+        plan: CleanupPlan,
     ) -> AppResult<CleanupCounts> {
         let progress = Arc::clone(&shared);
         // Its own task so a panic inside surfaces here as a JoinError
         // instead of leaving the job `running` forever.
         let outcome = tokio::spawn(async move {
-            StorageService::execute_cleanup_in_batches(
-                &pool,
-                older_than_days,
-                project_id,
-                filter,
-                CLEANUP_BATCH_SIZE,
-                |counts| lock(&progress).removed = counts.clone(),
-            )
-            .await
+            let on_batch = |counts: &CleanupCounts| lock(&progress).removed = counts.clone();
+            match plan {
+                CleanupPlan::Window {
+                    older_than_days,
+                    project_id,
+                    filter,
+                } => {
+                    StorageService::execute_cleanup_in_batches(
+                        &pool,
+                        older_than_days,
+                        project_id,
+                        filter,
+                        CLEANUP_BATCH_SIZE,
+                        on_batch,
+                    )
+                    .await
+                }
+                CleanupPlan::Retention { settings, store } => {
+                    let mut counts = StorageService::apply_retention_in_batches(
+                        &pool,
+                        &settings,
+                        CLEANUP_BATCH_SIZE,
+                        on_batch,
+                    )
+                    .await?;
+                    counts.source_maps = StorageService::gc_source_maps(&pool, store.as_ref())
+                        .await?
+                        .files_removed;
+                    lock(&progress).removed = counts.clone();
+                    Ok(counts)
+                }
+            }
         })
         .await;
 
@@ -398,6 +473,63 @@ impl StorageService {
         )
         .await?;
         Ok(counts)
+    }
+
+    /// Dry-run of the retention settings: what enforcing them now would
+    /// delete, each project counted against its own windows. Mutates nothing.
+    pub async fn preview_retention(
+        pool: &DbPool,
+        settings: &RetentionSettings,
+    ) -> AppResult<CleanupCounts> {
+        settings.validate()?;
+        let now = Utc::now();
+        let mut counts = CleanupCounts::default();
+        for project_id in Self::project_ids(pool).await? {
+            for (days, filter) in settings.windows_for(project_id).steps() {
+                let cutoff = now - chrono::Duration::days(days);
+                counts += Self::count_cleanup(pool, cutoff, Some(project_id), filter).await?;
+            }
+        }
+        Ok(counts)
+    }
+
+    /// Enforces the retention settings: each project, each kind, deleted
+    /// past its own window, in batches as [`Self::execute_cleanup_in_batches`].
+    ///
+    /// ponytail: one purge per project and kind, so a few thousand projects
+    /// is a few thousand short scans. Group projects that share windows if
+    /// that ever shows up.
+    pub async fn apply_retention_in_batches(
+        pool: &DbPool,
+        settings: &RetentionSettings,
+        batch_size: i64,
+        mut on_batch: impl FnMut(&CleanupCounts),
+    ) -> AppResult<CleanupCounts> {
+        settings.validate()?;
+        let now = Utc::now();
+        let mut counts = CleanupCounts::default();
+        for project_id in Self::project_ids(pool).await? {
+            for (days, filter) in settings.windows_for(project_id).steps() {
+                let cutoff = now - chrono::Duration::days(days);
+                Self::purge(
+                    pool,
+                    cutoff,
+                    &[project_id],
+                    filter,
+                    batch_size,
+                    &mut counts,
+                    &mut on_batch,
+                )
+                .await?;
+            }
+        }
+        Ok(counts)
+    }
+
+    async fn project_ids(pool: &DbPool) -> AppResult<Vec<i32>> {
+        Ok(sqlx::query_scalar("SELECT id FROM projects ORDER BY id")
+            .fetch_all(pool)
+            .await?)
     }
 
     async fn purge(
@@ -688,6 +820,7 @@ impl StorageService {
             } else {
                 0
             },
+            source_maps: 0,
         })
     }
 
@@ -738,17 +871,14 @@ impl StorageService {
                     transactions_count,
                 )
                 .await?;
-            let estimated_bytes =
-                Self::estimate_bytes(pool, EVENTS_SAMPLE, project_id, events_count).await?
-                    + Self::estimate_bytes(
-                        pool,
-                        TRANSACTIONS_SAMPLE,
-                        project_id,
-                        transactions_count,
-                    )
+            let events_bytes =
+                Self::estimate_bytes(pool, EVENTS_SAMPLE, project_id, events_count).await?;
+            let transactions_bytes =
+                Self::estimate_bytes(pool, TRANSACTIONS_SAMPLE, project_id, transactions_count)
                     .await?
-                    + Self::estimate_bytes(pool, SPANS_SAMPLE, project_id, spans_count).await?
-                    + Self::estimate_bytes(pool, LOGS_SAMPLE, project_id, logs_count).await?;
+                    + Self::estimate_bytes(pool, SPANS_SAMPLE, project_id, spans_count).await?;
+            let logs_bytes =
+                Self::estimate_bytes(pool, LOGS_SAMPLE, project_id, logs_count).await?;
             breakdown.push(ProjectStorage {
                 project_id,
                 project_name,
@@ -757,7 +887,10 @@ impl StorageService {
                 spans_count,
                 logs_count,
                 source_maps_count,
-                estimated_bytes,
+                estimated_bytes: events_bytes + transactions_bytes + logs_bytes,
+                events_bytes,
+                transactions_bytes,
+                logs_bytes,
             });
         }
         Ok(breakdown)
@@ -812,6 +945,72 @@ impl StorageService {
             .fetch_one(pool)
             .await?;
         Ok(scale_sample(spans, sampled, SPAN_SAMPLE_ROWS, transactions))
+    }
+
+    /// How long ago each project's data arrived, per kind, in the
+    /// [`AGE_BUCKET_DAYS`] buckets. One grouped pass per table over its
+    /// `(project_id, ingested_at)` index.
+    pub async fn age_breakdown(pool: &DbPool) -> AppResult<StorageAge> {
+        let now = Utc::now();
+        let cuts: Vec<chrono::DateTime<Utc>> = AGE_BUCKET_DAYS
+            .iter()
+            .map(|d| now - chrono::Duration::days(*d))
+            .collect();
+        let mut projects: Vec<ProjectAge> = Self::project_ids(pool)
+            .await?
+            .into_iter()
+            .map(|project_id| ProjectAge {
+                project_id,
+                events: empty_age(),
+                transactions: empty_age(),
+                logs: empty_age(),
+            })
+            .collect();
+        for (table, sql) in [
+            ("events", age_sql!("events")),
+            ("transactions", age_sql!("transactions")),
+            ("logs", age_sql!("logs")),
+        ] {
+            // (project, newer than each cut, total, oldest)
+            type AgeRow = (
+                i32,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                Option<chrono::DateTime<Utc>>,
+            );
+            let mut query = sqlx::query_as::<_, AgeRow>(sql);
+            for cut in &cuts {
+                query = query.bind(*cut);
+            }
+            for (project_id, c0, c1, c2, c3, c4, c5, total, oldest) in query.fetch_all(pool).await?
+            {
+                let Some(row) = projects.iter_mut().find(|p| p.project_id == project_id) else {
+                    continue;
+                };
+                // Cumulative "newer than" counts, turned into one per bucket.
+                let newer = [c0, c1, c2, c3, c4, c5, total];
+                let counts = newer
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| if i == 0 { *n } else { n - newer[i - 1] })
+                    .collect();
+                let age = KindAge { counts, oldest };
+                match table {
+                    "events" => row.events = age,
+                    "transactions" => row.transactions = age,
+                    _ => row.logs = age,
+                }
+            }
+        }
+        Ok(StorageAge {
+            bucket_days: AGE_BUCKET_DAYS.to_vec(),
+            projects,
+        })
     }
 
     /// Instance-wide storage summary (row counts + DB size + source-map weight).
@@ -901,6 +1100,13 @@ impl StorageService {
             total_bytes: chunk_bytes + source_file_bytes,
             file_count,
         })
+    }
+}
+
+fn empty_age() -> KindAge {
+    KindAge {
+        counts: vec![0; AGE_BUCKET_DAYS.len() + 1],
+        oldest: None,
     }
 }
 

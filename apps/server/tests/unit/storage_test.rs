@@ -1367,6 +1367,7 @@ async fn test_execute_cleanup_in_small_batches_removes_everything_and_keeps_coun
             spans: 3,
             logs: 3,
             issues_removed: 2,
+            source_maps: 0,
         }
     );
     assert!(progress.len() > 3, "progress is reported batch by batch");

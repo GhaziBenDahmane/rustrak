@@ -1,14 +1,19 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { ShieldX } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'use-intl';
-import { SourceMapGc } from '@/features/storage/ui/components/source-map-gc';
-import { StorageProjectsTable } from '@/features/storage/ui/components/storage-projects-table';
-import { StorageSummaryCards } from '@/features/storage/ui/components/storage-summary-cards';
+import {
+  getRetention,
+  getStorageAge,
+  getStorageProjects,
+  getStorageSummary,
+} from '@/features/storage/api/queries';
+import { StorageSkeleton } from '@/features/storage/ui/components/storage-skeletons';
+import { StorageView } from '@/features/storage/ui/components/storage-view';
 import { translator } from '@/shared/i18n/intl';
+import { LoadFailure } from '@/shared/ui/components/load-failure';
 import { Card, CardContent } from '@/shared/ui/components/shadcn/card';
 import { useSessionUser } from '@/shared/ui/hooks/use-session-user';
-import { AutoCleanupPanel } from './-components/auto-cleanup-panel';
-import { StorageCleanupPanel } from './-components/storage-cleanup-panel';
 
 export const Route = createFileRoute('/_authenticated/settings/storage')({
   head: () => {
@@ -62,19 +67,83 @@ function StoragePage() {
     );
   }
 
-  // The page shell + header render immediately. Each data-heavy section owns
-  // its own query and its own skeleton, so they fill in independently instead
-  // of the whole page blocking on the slowest one.
-  return (
-    <>
-      <PageHeader />
-      <StorageSummaryCards />
-      <StorageProjectsTable />
-      <div className="space-y-6">
-        <AutoCleanupPanel />
-        <StorageCleanupPanel />
-        <SourceMapGc />
-      </div>
-    </>
+  // The header is the view's: its action, retention, needs the view's state.
+  return <StorageContent />;
+}
+
+/**
+ * Everything the page shows, read together. `version` reads it all again
+ * after a cleanup; the last answer stays on screen meanwhile.
+ */
+function StorageContent() {
+  const t = useTranslations('settings');
+  const [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
+  const [data, setData] = useState<Awaited<ReturnType<typeof load>> | null>(
+    null,
   );
+  // Not `useAsync`, which drops its answer while the next one loads. A
+  // newer read wins; an older one is dropped.
+  useEffect(() => {
+    let live = true;
+    void load(version).then((next) => live && setData(next));
+    return () => {
+      live = false;
+    };
+  }, [version]);
+
+  if (data === null) {
+    return (
+      <>
+        <PageHeader />
+        <StorageSkeleton />
+      </>
+    );
+  }
+  const [summary, projects, age, retention] = data;
+  if (
+    !summary.success ||
+    !projects.success ||
+    !age.success ||
+    !retention.success
+  ) {
+    const failed = [summary, projects, age, retention].find((r) => !r.success);
+    return (
+      <>
+        <PageHeader />
+        {failed && !failed.success && (
+          <LoadFailure
+            error={failed.error}
+            title={t('storage.loadFailed')}
+            notFoundOnMissing={false}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <StorageView
+      key={version}
+      title={t('storage.title')}
+      subtitle={t('storage.subtitle')}
+      data={{
+        summary: summary.data,
+        projects: projects.data,
+        age: age.data,
+        retention: retention.data,
+      }}
+      onChanged={reload}
+    />
+  );
+}
+
+/** `_version` only names the read, so a new one runs. */
+function load(_version: number) {
+  return Promise.all([
+    getStorageSummary(),
+    getStorageProjects(),
+    getStorageAge(),
+    getRetention(),
+  ]);
 }

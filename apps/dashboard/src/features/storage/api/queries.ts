@@ -1,8 +1,9 @@
 import type {
-  AutoCleanup,
   ProjectStorage,
   Result,
+  Retention,
   RustrakError,
+  StorageAge,
   StorageSummary,
 } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
@@ -32,10 +33,16 @@ export async function getStorageProjects(): Promise<
   return client.storage.getProjects();
 }
 
-/** Automatic cleanup: settings, next run and last run. */
-export async function getAutoCleanup(): Promise<
-  Result<AutoCleanup, RustrakError>
+/** Retention: settings, next cleanup and last cleanup. */
+export async function getRetention(): Promise<Result<Retention, RustrakError>> {
+  const client = await createClient();
+  return client.storage.getRetention();
+}
+
+/** How long ago each project's data arrived, per kind. */
+export async function getStorageAge(): Promise<
+  Result<StorageAge, RustrakError>
 > {
   const client = await createClient();
-  return client.storage.getAutoCleanup();
+  return client.storage.getAge();
 }

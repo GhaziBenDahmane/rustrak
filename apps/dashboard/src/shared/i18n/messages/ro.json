@@ -1168,98 +1168,130 @@
     }
   },
   "storage": {
-    "period": "Mai vechi de {count, plural, =1 {o zi} few {# zile} other {# de zile}}",
-    "type": {
+    "action": "Configurează retenția",
+    "cancel": "Anulează",
+    "kind": {
       "events": "Erori",
       "transactions": "Tranzacții",
-      "logs": "Jurnale"
+      "logs": "Loguri",
+      "sourceMaps": "Source maps"
     },
-    "line": {
-      "emptyIssues": "Probleme goale",
-      "spans": "Span-uri"
+    "overview": {
+      "title": "Spațiu folosit",
+      "rows": "{count, plural, =1 {# rând} other {{rows} rânduri}}",
+      "files": "{count, plural, =1 {# fișier} other {# fișiere}}",
+      "cleaning": "Se curăță acum: {parts}",
+      "starting": "începe…",
+      "off": "Nu se șterge nimic: toate datele se păstrează pentru totdeauna. Configurează retenția ca să eliberezi spațiu automat.",
+      "next": "Următoarea curățare {when} · va elibera ≈ {size}",
+      "scheduling": "Se programează următoarea curățare…"
     },
-    "allProjects": "Toate proiectele",
-    "retentionPeriodLabel": "Perioadă de retenție",
-    "projectScopeLabel": "Domeniu de aplicare",
-    "dataLabel": "Date",
-    "cleanup": {
-      "title": "Curăță datele vechi",
-      "description": "Șterge definitiv datele selectate mai vechi de perioada aleasă. Previzualizează întâi — ștergerea nu poate fi anulată."
+    "status": {
+      "lastRunRunning": "Ultima curățare rulează din {when}",
+      "lastRunFailed": "Ultima curățare ({when}) a eșuat: {error}",
+      "lastRunNothing": "Ultima curățare {when}: nimic de șters",
+      "lastRunRemoved": "Ultima curățare {when}: s-au șters {parts}",
+      "off": "Totul se păstrează pentru totdeauna",
+      "nextRun": "Următoarea curățare {when}",
+      "nextRunPending": "Se programează…"
     },
-    "working": "Se lucrează…",
-    "preview": "Previzualizare",
-    "nothingMatches": "Nimic nu corespunde acestei selecții {period} pentru {scope} — nu există nimic de șters.",
-    "wouldRemove": "Această curățare ar elimina",
-    "deleteTrigger": "Șterge definitiv",
-    "deleteRowsTitle": "Ștergi {count, plural, =1 {# rând} few {# rânduri} other {# de rânduri}}?",
-    "deleteRowsDescription": "Aceasta șterge definitiv datele selectate {period} pentru {scope}. Acțiunea nu poate fi anulată.",
-    "cancel": "Anulează",
-    "deleting": "Se șterge…",
-    "deleteAction": "Șterge definitiv",
-    "running": {
-      "title": "Curățare în curs",
-      "description": "Se șterge în loturi mici în fundal, astfel încât ingestia continuă să funcționeze. Poți părăsi această pagină: va continua să ruleze."
+    "age": {
+      "title": "Vechimea datelor",
+      "description": "Cât de demult a sosit fiecare octet. Partea hașurată se șterge la următoarea curățare.",
+      "age": "Vechime",
+      "bucket0": "< 7 zile",
+      "bucket1": "7–14 zile",
+      "bucket2": "14–30 zile",
+      "bucket3": "30–90 zile",
+      "bucket4": "90–180 zile",
+      "bucket5": "180 zile – 1 an",
+      "bucket6": "> 1 an",
+      "empty": "Încă nu există date.",
+      "goes": "Se șterge la următoarea curățare",
+      "goesInBucket": "{size} se șterg la următoarea curățare"
+    },
+    "projects": {
+      "title": "Proiecte",
+      "search": "Caută proiecte",
+      "project": "Proiect",
+      "size": "Dimensiune",
+      "retention": "Retenție",
+      "empty": "Încă nu există proiecte.",
+      "noMatch": "Niciun proiect nu se potrivește.",
+      "own": "Proprie",
+      "general": "Generală",
+      "change": "Schimbă retenția pentru {project}"
+    },
+    "keep": {
+      "forever": "Pentru totdeauna",
+      "days": "{count, plural, =1 {# zi} other {# zile}}"
+    },
+    "dialog": {
+      "title": "Retenție",
+      "description": "Cât timp se păstrează fiecare tip de date în toate proiectele. Ce este mai vechi se șterge la fiecare curățare.",
+      "runs": "Curățarea rulează",
+      "frequency": "Frecvență",
+      "weekday": "Ziua",
+      "hour": "Ora",
+      "at": "la",
+      "customProjects": "{count, plural, =1 {# proiect are retenție proprie; schimb-o din rândul lui.} other {# proiecte au retenție proprie; schimb-o din rândul lor.}}",
+      "counting": "Se numără ce s-ar șterge…",
+      "impact": "Următoarea curățare va șterge {parts} (≈ {size}).",
+      "noImpact": "Încă nu e nimic destul de vechi pentru a fi șters.",
+      "save": "Salvează",
+      "saveAndClean": "Salvează și curăță acum",
+      "saved": "Retenție salvată",
+      "saveFailed": "Nu s-a putut salva retenția",
+      "alreadyRunning": "O curățare rulează deja.",
+      "confirmTitle": "Ștergi ≈ {size} acum?",
+      "confirmDescription": "Șterge definitiv {parts} și source maps pe care niciun upload nu le folosește. Rulează în fundal și nu poate fi anulată.",
+      "confirmAction": "Șterge ≈ {size}",
+      "kindColumn": "Date",
+      "keepColumn": "Se păstrează",
+      "foreverHint": "Ce depășește perioada se șterge la fiecare curățare. „Pentru totdeauna” nu șterge niciodată acel tip."
+    },
+    "projectDialog": {
+      "title": "Retenția pentru {project}",
+      "description": "Folosește retenția generală sau păstrează datele acestui proiect pe alte perioade.",
+      "general": "Folosește retenția generală",
+      "own": "Retenție proprie",
+      "ownHint": "Alte perioade doar pentru acest proiect"
+    },
+    "schedule": {
+      "daily": "În fiecare zi",
+      "weekly": "În fiecare săptămână"
     },
     "toasts": {
-      "previewFailed": "Previzualizarea curățării nu a putut fi realizată",
       "cleanupFailed": "Curățarea a eșuat",
-      "removed": "S-au eliminat {parts}",
-      "nothingRemoved": "Nimic nu corespundea — nu s-a eliminat nicio dată",
-      "sourceMapPreviewFailed": "Previzualizarea curățării source map nu a putut fi realizată",
-      "gcFailed": "Curățarea source map a eșuat",
-      "sourceMapsRemoved": "{count, plural, =1 {S-a eliminat # source map orfan ({freed} eliberați)} few {S-au eliminat # source map-uri orfane ({freed} eliberați)} other {S-au eliminat # de source map-uri orfane ({freed} eliberați)}}"
+      "removed": "S-au șters {parts}",
+      "nothingRemoved": "Nimic de șters"
     },
     "unit": {
-      "errors": "{count, plural, =1 {# eroare} few {# erori} other {# de erori}}",
-      "transactions": "{count, plural, =1 {# tranzacție} few {# tranzacții} other {# de tranzacții}}",
-      "spans": "{count, plural, =1 {# span} few {# span-uri} other {# de span-uri}}",
-      "logs": "{count, plural, =1 {# jurnal} few {# jurnale} other {# de jurnale}}",
-      "emptyIssues": "{count, plural, =1 {# problemă goală} few {# probleme goale} other {# de probleme goale}}"
+      "errors": "{count, plural, =1 {# eroare} other {# erori}}",
+      "transactions": "{count, plural, =1 {# tranzacție} other {# tranzacții}}",
+      "spans": "{count, plural, =1 {# span} other {# spanuri}}",
+      "logs": "{count, plural, =1 {# log} other {# loguri}}",
+      "emptyIssues": "{count, plural, =1 {# issue gol} other {# issues goale}}",
+      "sourceMaps": "{count, plural, =1 {# source map nefolosit} other {# source maps nefolosite}}"
     },
-    "sourceMaps": {
-      "title": "Source map-uri orfane",
-      "description": "Elimină fișierele source map la care nu se mai referă nicio încărcare — de exemplu, fișiere rămase în urmă după ștergerea unui proiect. Previzualizează întâi; fișierele referențiate nu sunt niciodată atinse.",
-      "nothingToClean": "Niciun source map orfan — nimic de curățat.",
-      "wouldRemove": "Această curățare ar elimina:",
-      "fileCount": "{count, plural, =1 {# source map orfan} few {# source map-uri orfane} other {# de source map-uri orfane}}",
-      "freed": "{bytes} eliberați",
-      "removeAction": "Elimină source map-urile orfane",
-      "removeTitle": "Elimini {count, plural, =1 {# source map orfan} few {# source map-uri orfane} other {# de source map-uri orfane}}?",
-      "removeDescription": "Aceasta șterge definitiv {count, plural, =1 {# fișier source map} few {# fișiere source map} other {# de fișiere source map}} ({bytes}) la care nu se referă nicio încărcare, din baza de date și de pe disc. Fișierele referențiate nu sunt afectate."
+    "deleteAction": "Șterge date acum",
+    "kindHint": {
+      "events": "Evenimente de eroare și issues rămase fără niciunul",
+      "transactions": "Trasee de performanță cu spanurile lor",
+      "logs": "Linii de log structurate"
     },
-    "removing": "Se elimină…",
-    "remove": "Elimină",
-    "auto": {
-      "title": "Curățare automată",
-      "description": "Șterge datele vechi după o programare, ca stocarea să nu crească la nesfârșit. Sunt atinse doar tipurile alese.",
-      "enabled": "Curăță automat",
-      "enabledHint": "Rulează în fundal, în loturi mici, așa că ingestia continuă să funcționeze.",
-      "olderThan": "Șterge datele mai vechi de",
-      "days": "{count, plural, one {zi} few {zile} other {de zile}}",
-      "dataLabel": "Ce se curăță",
-      "eventsHint": "Evenimente de eroare și problemele pe care le lasă goale",
-      "transactionsHint": "Tranzacții și span-urile lor",
-      "logsHint": "Loguri structurate",
-      "scheduleLabel": "Când",
-      "timezone": "Fus orar",
-      "timezonePlaceholder": "Caută un fus",
-      "timezoneNoResults": "Niciun fus nu corespunde",
-      "save": "Salvează",
-      "saving": "Se salvează…",
-      "saved": "Curățarea automată a fost salvată",
-      "saveFailed": "Curățarea automată nu a putut fi salvată",
-      "loadFailed": "Curățarea automată nu a putut fi încărcată",
-      "pickOne": "Alege cel puțin un tip de date",
-      "daysMin": "Cel puțin 1 zi",
-      "crontabRequired": "Introdu un crontab",
-      "intervalMin": "Cel puțin 1",
-      "nextRun": "Următoarea rulare {when}",
-      "nextRunPending": "Se programează următoarea rulare…",
-      "off": "Dezactivată",
-      "lastRunRunning": "Rulează din {when}",
-      "lastRunFailed": "Ultima rulare {when} a eșuat: {error}",
-      "lastRunNothing": "Ultima rulare {when}: nimic de șters",
-      "lastRunRemoved": "Ultima rulare {when}: șterse {parts}"
+    "delete": {
+      "title": "Șterge date acum",
+      "description": "Șterge definitiv datele alese, fără să aștepte curățarea. Rulează în fundal și nu poate fi anulată.",
+      "what": "Ce se șterge",
+      "olderThan": "Mai vechi de",
+      "in": "În",
+      "allProjects": "Toate proiectele",
+      "pickOne": "Alege cel puțin un tip de date.",
+      "impact": "Șterge {parts} (≈ {size}).",
+      "nothing": "Nimic nu se potrivește: nu e nimic de șters.",
+      "action": "Șterge ≈ {size}",
+      "actionIdle": "Șterge"
     }
   },
   "errors": {
@@ -1661,26 +1693,9 @@
         "description": "Utilizarea stocării și retenția datelor"
       },
       "title": "Stocare",
-      "subtitle": "Vezi ce reține Rustrak și recuperează spațiu curățând datele vechi",
+      "subtitle": "Ce păstrează Rustrak și cât timp",
       "notAuthorizedDescription": "Doar administratorii instanței pot vedea utilizarea stocării și pot rula curățări. Contactează un admin dacă ai nevoie de acces.",
-      "loadSummaryFailed": "Utilizarea stocării nu a putut fi citită",
-      "dbSize": "Dimensiunea bazei de date",
-      "eventsCount": "{count} evenimente",
-      "transactions": "Tranzacții",
-      "spansCount": "{count} span-uri",
-      "spans": "Span-uri",
-      "spansSub": "indexate din tranzacții",
-      "logs": "Jurnale",
-      "logsSub": "înregistrări de jurnal structurate",
-      "sourceMaps": "Source map-uri",
-      "sourceMapsFiles": "{count} fișiere",
-      "loadBreakdownFailed": "Defalcarea per proiect nu a putut fi citită",
-      "byProject": "Pe proiect",
-      "byProjectDescription": "Numărători și ponderea estimată a datelor deținute de fiecare proiect",
-      "noProjects": "Încă nu există proiecte.",
-      "project": "Proiect",
-      "events": "Evenimente",
-      "estSize": "Dimens. estimată"
+      "loadFailed": "Nu s-a putut citi stocarea"
     },
     "account": {
       "meta": {
