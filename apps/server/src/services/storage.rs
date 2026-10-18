@@ -19,6 +19,19 @@ use crate::services::sourcemap_store::SourceMapStore;
 
 pub struct StorageService;
 
+/// What the storage page shows, read together by [`StorageService::snapshot`].
+pub struct StorageSnapshot {
+    pub summary: StorageSummary,
+    pub projects: Vec<ProjectStorage>,
+    pub age: StorageAge,
+}
+
+/// How long [`CleanupJob::snapshot`] reuses a snapshot.
+///
+/// ponytail: a cleanup through the job is the only change it notices. New
+/// data, a deleted project or a source-map GC show once this runs out.
+const SNAPSHOT_TTL_MINUTES: i64 = 5;
+
 /// Rows a cleanup deletes per transaction.
 ///
 /// Measured purging 750k of 1M ~5KB events (plus transactions, spans and logs)
@@ -86,12 +99,15 @@ const SPAN_SAMPLE_ROWS: i64 = 1_000;
 ///
 /// Spans are never counted outright: on a large instance `spans` is the
 /// biggest table by far, and no index answers a count over it without
-/// reading the table (37M rows took over 60s).
+/// reading the table (37M rows took over 60s). Hence one correlated count per
+/// sampled transaction, which only the `transaction_id` index can answer: as
+/// `transaction_id IN (sample)`, Postgres with stale statistics read all of
+/// `spans` instead (19M rows, 7s).
 const TRANSACTION_SPANS_SAMPLE: &str = "WITH sample AS ( \
      SELECT id FROM transactions WHERE project_id = $1 AND ingested_at < $2 \
      ORDER BY event_id LIMIT $3) \
-     SELECT (SELECT COUNT(*) FROM spans WHERE transaction_id IN (SELECT id FROM sample)), \
-            (SELECT COUNT(*) FROM sample)";
+     SELECT CAST(COALESCE(SUM((SELECT COUNT(*) FROM spans s WHERE s.transaction_id = sample.id)), 0) AS BIGINT), \
+            COUNT(*) FROM sample";
 
 /// Gives waiting writers a turn between cleanup batches. SQLite's busy
 /// handler retries a blocked writer at intervals of up to 100ms, so a pause
@@ -111,7 +127,11 @@ async fn pause_between_batches() {
 #[derive(Default)]
 pub struct CleanupJob {
     status: Arc<Mutex<CleanupStatus>>,
+    snapshot: Arc<tokio::sync::Mutex<Option<CachedSnapshot>>>,
 }
+
+/// A snapshot and when its read began.
+type CachedSnapshot = (chrono::DateTime<Utc>, Arc<StorageSnapshot>);
 
 /// The status is plain data, so a panic while it was locked leaves nothing
 /// half-written worth refusing to read.
@@ -137,6 +157,35 @@ enum CleanupPlan {
 impl CleanupJob {
     pub fn status(&self) -> CleanupStatus {
         lock(&self.status).clone()
+    }
+
+    /// The storage page's figures: the last snapshot, unless it is older than
+    /// [`SNAPSHOT_TTL_MINUTES`] or a cleanup has run since its read began.
+    ///
+    /// The read runs in its own task, so a client that gives up does not
+    /// cancel it and the next request finds it done. The lock makes requests
+    /// that arrive meanwhile wait for that read instead of starting their own.
+    pub async fn snapshot(&self, pool: &DbPool) -> AppResult<Arc<StorageSnapshot>> {
+        let cache = Arc::clone(&self.snapshot);
+        let status = Arc::clone(&self.status);
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            let mut cached = cache.lock().await;
+            let job = lock(&status).clone();
+            let now = Utc::now();
+            if let Some((read_at, snapshot)) = cached.as_ref() {
+                let cleaned = job.state == CleanupState::Running
+                    || job.finished_at.is_some_and(|f| f >= *read_at);
+                if !cleaned && now - *read_at < chrono::Duration::minutes(SNAPSHOT_TTL_MINUTES) {
+                    return Ok(Arc::clone(snapshot));
+                }
+            }
+            let snapshot = Arc::new(StorageService::snapshot(&pool).await?);
+            *cached = Some((now, Arc::clone(&snapshot)));
+            Ok(snapshot)
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("The storage read stopped unexpectedly: {e}")))?
     }
 
     /// Validates the window and starts the cleanup in the background,
@@ -833,26 +882,49 @@ impl StorageService {
         })
     }
 
+    /// Everything the storage page shows, each table read once: the age
+    /// breakdown's grouped pass is also every project's exact row count, and
+    /// the summary is the projects' sum. Reading the summary, the projects and
+    /// the age apart counted each table three times and estimated spans
+    /// twice, which on a large instance took longer than a client waits.
+    pub async fn snapshot(pool: &DbPool) -> AppResult<StorageSnapshot> {
+        let age = Self::age_breakdown(pool).await?;
+        let projects = Self::projects_from(pool, &age).await?;
+        let sum = |count: fn(&ProjectStorage) -> i64| projects.iter().map(count).sum();
+        let summary = StorageSummary {
+            total_db_size_bytes: Self::db_size_bytes(pool).await?,
+            events_count: sum(|p| p.events_count),
+            transactions_count: sum(|p| p.transactions_count),
+            spans_count: sum(|p| p.spans_count),
+            logs_count: sum(|p| p.logs_count),
+            source_maps: Self::source_map_storage(pool).await?,
+        };
+        Ok(StorageSnapshot {
+            summary,
+            projects,
+            age,
+        })
+    }
+
     /// Per-project storage breakdown (one row per project, including empty ones).
-    ///
-    /// Row counts are exact: correlated `COUNT(*)`s answered from each table's
-    /// `project_id` index. `estimated_bytes` is the JSON payload length the
-    /// project holds, estimated from a sample of its newest rows per table (see
-    /// [`Self::estimate_bytes`]); summing every payload meant reading the whole
-    /// database on each load of the storage page.
     pub async fn by_project(pool: &DbPool) -> AppResult<Vec<ProjectStorage>> {
-        // (id, name, events, transactions, spans, logs, source_maps)
-        type ProjectCountsRow = (i32, String, i64, i64, i64, i64, i64);
-        let rows: Vec<ProjectCountsRow> = sqlx::query_as(
+        Ok(Self::snapshot(pool).await?.projects)
+    }
+
+    /// The per-project breakdown over an age breakdown just read.
+    ///
+    /// Row counts are exact, the totals of `age`. `estimated_bytes` is the
+    /// JSON payload length the project holds, estimated from a sample of its
+    /// newest rows per table (see [`Self::estimate_bytes`]); summing every
+    /// payload meant reading the whole database on each load of the storage
+    /// page.
+    async fn projects_from(pool: &DbPool, age: &StorageAge) -> AppResult<Vec<ProjectStorage>> {
+        // (id, name, source_maps)
+        let rows: Vec<(i32, String, i64)> = sqlx::query_as(
             r#"
             SELECT
                 p.id,
                 p.name,
-                (SELECT COUNT(*) FROM events e        WHERE e.project_id = p.id) AS events_count,
-                (SELECT COUNT(*) FROM transactions t  WHERE t.project_id = p.id) AS transactions_count,
-                (SELECT COUNT(*) FROM spans s
-                    WHERE s.project_id = p.id AND s.transaction_id IS NULL) AS standalone_spans,
-                (SELECT COUNT(*) FROM logs lg         WHERE lg.project_id = p.id) AS logs_count,
                 (SELECT COUNT(*) FROM source_file_metadata m WHERE m.project_id = p.id) AS source_maps_count
             FROM projects p
             ORDER BY p.id
@@ -860,18 +932,30 @@ impl StorageService {
         )
         .fetch_all(pool)
         .await?;
+        // Grouped, one pass: no index answers it, and counted per project
+        // Postgres read all of `spans` once for each.
+        let standalone: Vec<(i32, i64)> = sqlx::query_as(
+            "SELECT project_id, COUNT(*) FROM spans WHERE transaction_id IS NULL GROUP BY project_id",
+        )
+        .fetch_all(pool)
+        .await?;
 
         let mut breakdown = Vec::with_capacity(rows.len());
-        for (
-            project_id,
-            project_name,
-            events_count,
-            transactions_count,
-            standalone_spans,
-            logs_count,
-            source_maps_count,
-        ) in rows
-        {
+        for (project_id, project_name, source_maps_count) in rows {
+            let standalone_spans = standalone
+                .iter()
+                .find(|(id, _)| *id == project_id)
+                .map_or(0, |(_, n)| *n);
+            // A project created after the age was read has no rows in it yet.
+            let total = |kind: fn(&ProjectAge) -> &KindAge| {
+                age.projects
+                    .iter()
+                    .find(|a| a.project_id == project_id)
+                    .map_or(0, |a| kind(a).counts.iter().sum())
+            };
+            let events_count = total(|a| &a.events);
+            let transactions_count = total(|a| &a.transactions);
+            let logs_count = total(|a| &a.logs);
             let spans_count = standalone_spans
                 + Self::estimate_transaction_spans(
                     pool,
@@ -1023,46 +1107,9 @@ impl StorageService {
     }
 
     /// Instance-wide storage summary (row counts + DB size + source-map weight).
-    /// Spans are the per-project estimate of [`Self::by_project`].
+    /// The counts are the projects' of [`Self::by_project`].
     pub async fn global_summary(pool: &DbPool) -> AppResult<StorageSummary> {
-        let (events_count, transactions_count, logs_count): (i64, i64, i64) = sqlx::query_as(
-            r#"
-            SELECT
-                (SELECT COUNT(*) FROM events)       AS events_count,
-                (SELECT COUNT(*) FROM transactions) AS transactions_count,
-                (SELECT COUNT(*) FROM logs)         AS logs_count
-            "#,
-        )
-        .fetch_one(pool)
-        .await?;
-
-        let projects: Vec<(i32, i64, i64)> = sqlx::query_as(
-            r#"
-            SELECT
-                p.id,
-                (SELECT COUNT(*) FROM transactions t WHERE t.project_id = p.id),
-                (SELECT COUNT(*) FROM spans s
-                    WHERE s.project_id = p.id AND s.transaction_id IS NULL)
-            FROM projects p
-            "#,
-        )
-        .fetch_all(pool)
-        .await?;
-        let mut spans_count = 0;
-        for (project_id, transactions, standalone) in projects {
-            spans_count += standalone
-                + Self::estimate_transaction_spans(pool, project_id, all_ingested(), transactions)
-                    .await?;
-        }
-
-        Ok(StorageSummary {
-            total_db_size_bytes: Self::db_size_bytes(pool).await?,
-            events_count,
-            transactions_count,
-            spans_count,
-            logs_count,
-            source_maps: Self::source_map_storage(pool).await?,
-        })
+        Ok(Self::snapshot(pool).await?.summary)
     }
 
     /// Whole-database size in bytes, reported by the backend. Best-effort: it's a
