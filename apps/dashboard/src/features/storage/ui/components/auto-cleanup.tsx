@@ -10,9 +10,9 @@ import { getAutoCleanup } from '@/features/storage/api/queries';
 import {
   type AutoCleanupFormData,
   autoCleanupFormSchema,
+  nextReadIn,
   runStatus,
   type StatusLine,
-  statusMayChange,
 } from '@/features/storage/model/auto-cleanup-form';
 import { applyServerFieldErrors } from '@/shared/lib/form-errors';
 import { cn } from '@/shared/lib/utils';
@@ -69,17 +69,24 @@ export function AutoCleanup({ initial }: { initial: AutoCleanupState }) {
     resolver: zodResolver(schema),
     defaultValues: initial.settings,
   });
-  // Polls only while the status is about to change, and only the status: the
-  // form keeps whatever is being typed.
-  const waiting = statusMayChange(state);
+  // One read per status, only of the status: the form keeps whatever is being
+  // typed. A newer status (a save, or this read) cancels the read still in
+  // flight, so an older answer never lands over a newer one.
   useEffect(() => {
-    if (!waiting) return;
-    const timer = setInterval(async () => {
+    const delay = nextReadIn(state, Date.now());
+    if (delay === null) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
       const result = await getAutoCleanup();
-      if (result.success) setState(result.data);
-    }, 15_000);
-    return () => clearInterval(timer);
-  }, [waiting]);
+      if (cancelled) return;
+      // A failed read retries: a fresh object schedules the next one.
+      setState((prev) => (result.success ? result.data : { ...prev }));
+    }, delay);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [state]);
 
   const [enabled, schedule, timezone] = useWatch({
     control: form.control,
@@ -249,13 +256,15 @@ export function AutoCleanup({ initial }: { initial: AutoCleanupState }) {
                         <FormLabel className={LABEL}>
                           {t('auto.timezone')}
                         </FormLabel>
-                        <TimeZoneCombobox
-                          value={field.value}
-                          onChange={(zone) => zone && field.onChange(zone)}
-                          placeholder={t('auto.timezonePlaceholder')}
-                          noResults={t('auto.timezoneNoResults')}
-                          disabled={isPending}
-                        />
+                        <FormControl>
+                          <TimeZoneCombobox
+                            value={field.value}
+                            onChange={(zone) => zone && field.onChange(zone)}
+                            placeholder={t('auto.timezonePlaceholder')}
+                            noResults={t('auto.timezoneNoResults')}
+                            disabled={isPending}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

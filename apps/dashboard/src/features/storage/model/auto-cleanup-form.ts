@@ -69,15 +69,22 @@ export interface StatusLine {
   values?: Record<string, string>;
 }
 
+/** How often the status is read while it is about to change. */
+const POLL_MS = 15_000;
+/** `setTimeout` overflows past this and fires at once. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 /**
- * Whether the saved status is about to change on its own: a save leaves the
- * next run for the scheduler's next tick, and a running cleanup finishes.
+ * When to read the saved status again, in ms, or `null` for never. It
+ * changes on its own: a save leaves the next run for the scheduler's next
+ * tick, a running cleanup finishes, and a scheduled one runs at its time.
  */
-export function statusMayChange(state: AutoCleanup): boolean {
-  return (
-    (state.settings.enabled && !state.next_run_at) ||
-    state.last_run?.status === 'running'
-  );
+export function nextReadIn(state: AutoCleanup, now: number): number | null {
+  if (state.last_run?.status === 'running') return POLL_MS;
+  if (!state.settings.enabled) return null;
+  if (!state.next_run_at) return POLL_MS;
+  const due = Date.parse(state.next_run_at) - now;
+  return Math.min(Math.max(due, POLL_MS), MAX_TIMEOUT_MS);
 }
 
 /** When automatic cleanup runs next, and how its last run went. */

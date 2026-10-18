@@ -326,13 +326,15 @@ function ScheduleFields({ disabled }: { disabled: boolean }) {
         render={({ field }) => (
           <FormItem className="max-w-xs">
             <FormLabel className={LABEL}>{t('form.timezone')}</FormLabel>
-            <TimeZoneCombobox
-              value={field.value}
-              onChange={(zone) => zone && field.onChange(zone)}
-              placeholder={t('form.timezonePlaceholder')}
-              noResults={t('form.timezoneNoResults')}
-              disabled={disabled}
-            />
+            <FormControl>
+              <TimeZoneCombobox
+                value={field.value}
+                onChange={(zone) => zone && field.onChange(zone)}
+                placeholder={t('form.timezonePlaceholder')}
+                noResults={t('form.timezoneNoResults')}
+                disabled={disabled}
+              />
+            </FormControl>
             <FormMessage />
           </FormItem>
         )}

@@ -7,9 +7,9 @@ import { describe, expect, it } from 'vitest';
 import type { Translate } from '@/shared/lib/error-copy';
 import {
   autoCleanupFormSchema,
+  nextReadIn,
   removedParts,
   runStatus,
-  statusMayChange,
 } from './auto-cleanup-form';
 
 const t: Translate = (key) => key;
@@ -160,7 +160,8 @@ describe('runStatus', () => {
   });
 });
 
-describe('statusMayChange', () => {
+describe('nextReadIn', () => {
+  const now = Date.parse('2026-01-02T02:00:00Z');
   const state = (patch: Partial<AutoCleanup>): AutoCleanup => ({
     settings,
     next_run_at: '2026-01-02T03:00:00Z',
@@ -168,11 +169,11 @@ describe('statusMayChange', () => {
     ...patch,
   });
 
-  it('waits for the scheduler to set the next run after a save', () => {
-    expect(statusMayChange(state({ next_run_at: null }))).toBe(true);
+  it('polls while the scheduler has yet to set the next run after a save', () => {
+    expect(nextReadIn(state({ next_run_at: null }), now)).toBe(15_000);
   });
 
-  it('waits for a running cleanup to finish', () => {
+  it('polls while a cleanup is running', () => {
     const last_run = {
       started_at: '2026-01-01T03:00:00Z',
       finished_at: null,
@@ -180,15 +181,22 @@ describe('statusMayChange', () => {
       removed: null,
       error: null,
     } as AutoCleanup['last_run'];
-    expect(statusMayChange(state({ last_run }))).toBe(true);
+    expect(nextReadIn(state({ last_run }), now)).toBe(15_000);
   });
 
-  it('is settled once scheduled and idle, or when off', () => {
-    expect(statusMayChange(state({}))).toBe(false);
+  it('reads again when the next run is due, so its result shows', () => {
+    expect(nextReadIn(state({}), now)).toBe(3_600_000);
     expect(
-      statusMayChange(
+      nextReadIn(state({ next_run_at: '2026-01-02T01:00:00Z' }), now),
+    ).toBe(15_000);
+  });
+
+  it('never reads when automatic cleanup is off', () => {
+    expect(
+      nextReadIn(
         state({ settings: { ...settings, enabled: false }, next_run_at: null }),
+        now,
       ),
-    ).toBe(false);
+    ).toBeNull();
   });
 });
