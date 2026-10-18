@@ -23,7 +23,8 @@ export function useRetentionDraft(
 ) {
   const t = useTranslations('storage');
   const [draft, setDraft] = useState(initial);
-  const [impact, setImpact] = useState<CleanupCounts | null>(null);
+  const [impact, setImpact] = useState<CleanupCounts | null | 'failed'>(null);
+  const [attempt, setAttempt] = useState(0);
   const [isPending, startTransition] = useTransition();
 
   const key = JSON.stringify(draft);
@@ -32,13 +33,13 @@ export function useRetentionDraft(
     setImpact(null);
     const timer = setTimeout(async () => {
       const result = await previewRetention(JSON.parse(key));
-      if (!cancelled && result.success) setImpact(result.data);
+      if (!cancelled) setImpact(result.success ? result.data : 'failed');
     }, 300);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [key]);
+  }, [key, attempt]);
 
   // Starts the cleanup the saved settings now enforce; `null` if it could
   // not start, already said with a toast.
@@ -63,5 +64,7 @@ export function useRetentionDraft(
       onDone(saved.data, cleanNow ? await startCleanup() : null);
     });
 
-  return { draft, setDraft, impact, isPending, save };
+  const retry = () => setAttempt((a) => a + 1);
+
+  return { draft, setDraft, impact, retry, isPending, save };
 }

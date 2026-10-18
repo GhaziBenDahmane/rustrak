@@ -889,6 +889,24 @@ async fn cleaning_up_now_enforces_the_saved_retention_in_the_background() {
     // Unused source maps go with every cleanup.
     assert_eq!(status["removed"]["source_maps"], 1);
     assert_eq!(project_log_count(&db.pool, project).await, 1);
+
+    // It is the last cleanup, as a scheduled one would be. Recorded just
+    // after the job finishes, so wait for it.
+    let mut last_run = Value::Null;
+    for _ in 0..100 {
+        let req = test::TestRequest::get()
+            .uri("/api/storage/retention")
+            .insert_header(bearer(&token))
+            .to_request();
+        let body: Value = test::call_and_read_body_json(&app, req).await;
+        last_run = body["last_run"].clone();
+        if last_run["status"] != "running" && !last_run.is_null() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(last_run["status"], "ok");
+    assert_eq!(last_run["removed"]["logs"], 1);
 }
 
 #[actix_web::test]
@@ -903,4 +921,22 @@ async fn cleaning_up_now_refuses_while_everything_is_kept_forever() {
         .insert_header(bearer(&token))
         .to_request();
     assert_eq!(test::call_service(&app, req).await.status(), 400);
+}
+
+#[actix_web::test]
+async fn the_retention_preview_counts_the_unused_source_maps_it_would_delete() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    insert_orphan_source_file(&db.pool, 2_048).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/preview")
+        .insert_header(bearer(&token))
+        .set_json(json!({"defaults": {"logs_days": 30}}))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+
+    assert_eq!(body["source_maps"], 1);
 }

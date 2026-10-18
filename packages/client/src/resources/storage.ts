@@ -172,7 +172,12 @@ export class StorageResource extends BaseResource {
    */
   async runRetention(): Promise<Result<CleanupStatus, RustrakError>> {
     return this.request(
-      () => this.http.post('api/storage/retention/run'),
+      () =>
+        this.http.post('api/storage/retention/run', {
+          // No retry, as for `executeCleanup`: a lost response after the
+          // cleanup started would be retried into a refused second run.
+          retry: 0,
+        }),
       cleanupStatusSchema,
     );
   }

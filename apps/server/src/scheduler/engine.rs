@@ -199,28 +199,46 @@ impl Scheduler {
             if let Err(e) = &outcome {
                 log::error!("Scheduled job {key} failed: {e}");
             }
-            let (status, result, error) = match outcome {
-                Ok(result) => ("ok", Some(Json(result)), None),
-                Err(e) => ("error", None, Some(e.to_string())),
-            };
-            if let Err(e) = sqlx::query(
-                r#"
-                UPDATE scheduled_jobs
-                SET last_finished_at = $2, last_status = $3, last_result = $4, last_error = $5
-                WHERE key = $1
-                "#,
-            )
-            .bind(key)
-            .bind(Utc::now())
-            .bind(status)
-            .bind(result)
-            .bind(error)
-            .execute(&pool)
-            .await
-            {
-                log::error!("Could not record the run of scheduled job {key}: {e}");
-            }
+            Self::record_finish(&pool, key, outcome).await;
         })
+    }
+
+    /// Records a run of `key` started outside the schedule (one asked for
+    /// now), so it is the job's last run like any other.
+    pub async fn record_start(pool: &DbPool, key: &str, at: DateTime<Utc>) -> AppResult<()> {
+        Self::ensure(pool, key).await?;
+        sqlx::query("UPDATE scheduled_jobs SET last_started_at = $2 WHERE key = $1")
+            .bind(key)
+            .bind(at)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Records how a run of `key` ended. A failure to record is logged: the
+    /// run itself already happened.
+    pub async fn record_finish(pool: &DbPool, key: &str, outcome: AppResult<Value>) {
+        let (status, result, error) = match outcome {
+            Ok(result) => ("ok", Some(Json(result)), None),
+            Err(e) => ("error", None, Some(e.to_string())),
+        };
+        if let Err(e) = sqlx::query(
+            r#"
+            UPDATE scheduled_jobs
+            SET last_finished_at = $2, last_status = $3, last_result = $4, last_error = $5
+            WHERE key = $1
+            "#,
+        )
+        .bind(key)
+        .bind(Utc::now())
+        .bind(status)
+        .bind(result)
+        .bind(error)
+        .execute(pool)
+        .await
+        {
+            log::error!("Could not record the run of scheduled job {key}: {e}");
+        }
     }
 
     /// A job's row, created with empty settings the first time it is asked

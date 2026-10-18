@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'use-intl';
 import {
   estimateBytes,
+  impactState,
   removedParts,
 } from '@/features/storage/model/retention';
 import { formatBytes } from '@/shared/lib/utils';
@@ -18,6 +19,7 @@ import {
 } from '@/shared/ui/components/shadcn/alert-dialog';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import { DialogFooter } from '@/shared/ui/components/shadcn/dialog';
+import { ImpactLine } from './impact-line';
 
 /**
  * What a retention draft deletes, and its three ways out: cancel, save for
@@ -25,12 +27,15 @@ import { DialogFooter } from '@/shared/ui/components/shadcn/dialog';
  */
 export function RetentionFooter({
   impact,
+  onRetry,
   projects,
   isPending,
   onCancel,
   onSave,
 }: {
-  impact: CleanupCounts | null;
+  impact: CleanupCounts | null | 'failed';
+  /** Asks for the count again after it failed. */
+  onRetry: () => void;
   projects: readonly ProjectStorage[];
   isPending: boolean;
   onCancel: () => void;
@@ -38,26 +43,22 @@ export function RetentionFooter({
 }) {
   const t = useTranslations('storage');
   const [confirming, setConfirming] = useState(false);
-  const parts = impact ? removedParts(impact, t) : [];
-  const size = impact ? formatBytes(estimateBytes(impact, projects)) : '';
+  const known = impact === null || impact === 'failed' ? null : impact;
+  const parts = known ? removedParts(known, t) : [];
+  const size = known ? formatBytes(estimateBytes(known, projects)) : '';
 
   return (
     <>
-      <p
-        className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
-        aria-live="polite"
-      >
-        {impact === null ? (
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            {t('dialog.counting')}
-          </span>
-        ) : parts.length > 0 ? (
-          t('dialog.impact', { parts: parts.join(', '), size })
-        ) : (
-          <span className="text-muted-foreground">{t('dialog.noImpact')}</span>
-        )}
-      </p>
+      <ImpactLine
+        state={impactState(impact)}
+        sentence={
+          parts.length > 0
+            ? t('dialog.impact', { parts: parts.join(', '), size })
+            : null
+        }
+        nothing={t('dialog.noImpact')}
+        onRetry={onRetry}
+      />
       <DialogFooter>
         <Button variant="ghost" onClick={onCancel} disabled={isPending}>
           {t('cancel')}

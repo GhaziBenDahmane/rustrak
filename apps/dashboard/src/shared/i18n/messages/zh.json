@@ -1248,7 +1248,9 @@
       "confirmAction": "删除约 {size}",
       "kindColumn": "数据",
       "keepColumn": "保留时长",
-      "foreverHint": "超过保留时长的数据会在每次清理时删除。选择“永久”则该类数据永不删除。"
+      "foreverHint": "超过保留时长的数据会在每次清理时删除。选择“永久”则该类数据永不删除。",
+      "countFailed": "无法统计将被删除的内容。",
+      "retry": "重试"
     },
     "projectDialog": {
       "title": "{project} 的保留期",
@@ -1264,7 +1266,8 @@
     "toasts": {
       "cleanupFailed": "清理失败",
       "removed": "已删除 {parts}",
-      "nothingRemoved": "没有可删除的内容"
+      "nothingRemoved": "没有可删除的内容",
+      "gcFailed": "无法删除未使用的 source map"
     },
     "unit": {
       "errors": "{count} 个错误",
@@ -1291,7 +1294,9 @@
       "impact": "将删除 {parts}（约 {size}）。",
       "nothing": "没有匹配项：没有可删除的内容。",
       "action": "删除约 {size}",
-      "actionIdle": "删除"
+      "actionIdle": "删除",
+      "sourceMaps": "未使用的 source map",
+      "sourceMapsHint": "已不再被任何上传引用的文件；被引用的文件永远不会被删除"
     }
   },
   "errors": {

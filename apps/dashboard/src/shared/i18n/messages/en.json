@@ -1248,7 +1248,9 @@
       "confirmAction": "Delete ≈ {size}",
       "kindColumn": "Data",
       "keepColumn": "Keep for",
-      "foreverHint": "Data older than the period is deleted at each cleanup. \"Forever\" never deletes that kind."
+      "foreverHint": "Data older than the period is deleted at each cleanup. \"Forever\" never deletes that kind.",
+      "countFailed": "Could not count what would be deleted.",
+      "retry": "Try again"
     },
     "projectDialog": {
       "title": "Retention of {project}",
@@ -1264,7 +1266,8 @@
     "toasts": {
       "cleanupFailed": "Cleanup failed",
       "removed": "Removed {parts}",
-      "nothingRemoved": "Nothing to delete"
+      "nothingRemoved": "Nothing to delete",
+      "gcFailed": "Could not delete the unused source maps"
     },
     "unit": {
       "errors": "{count, plural, =1 {# error} other {# errors}}",
@@ -1291,7 +1294,9 @@
       "impact": "Deletes {parts} (≈ {size}).",
       "nothing": "Nothing matches: there is nothing to delete.",
       "action": "Delete ≈ {size}",
-      "actionIdle": "Delete"
+      "actionIdle": "Delete",
+      "sourceMaps": "Unused source maps",
+      "sourceMapsHint": "Files no upload references any more; referenced ones are never touched"
     }
   },
   "errors": {

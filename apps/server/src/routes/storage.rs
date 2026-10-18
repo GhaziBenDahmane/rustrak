@@ -333,11 +333,29 @@ pub async fn run_retention(
             "Everything is kept forever: there is nothing to clean up".to_string(),
         ));
     }
-    let status = job.start_retention(
+    let (status, handle) = job.start_retention(
         pool.get_ref().clone(),
         settings,
         Arc::clone(store.get_ref()),
     )?;
+    // Recorded as the job's last run, like a scheduled one, so the page's
+    // "last cleanup" is this one.
+    let pool = pool.get_ref().clone();
+    Scheduler::record_start(
+        &pool,
+        StorageCleanupJob::KEY,
+        status.started_at.unwrap_or_else(chrono::Utc::now),
+    )
+    .await?;
+    tokio::spawn(async move {
+        let outcome = match handle.await {
+            Ok(result) => result.map(|removed| serde_json::to_value(removed).unwrap_or_default()),
+            Err(e) => Err(AppError::Internal(format!(
+                "The cleanup stopped unexpectedly: {e}"
+            ))),
+        };
+        Scheduler::record_finish(&pool, StorageCleanupJob::KEY, outcome).await;
+    });
     Ok(HttpResponse::Accepted().json(status))
 }
 

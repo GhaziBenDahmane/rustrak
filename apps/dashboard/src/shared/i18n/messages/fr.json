@@ -1248,7 +1248,9 @@
       "confirmAction": "Supprimer ≈ {size}",
       "kindColumn": "Données",
       "keepColumn": "Conservées pendant",
-      "foreverHint": "Ce qui dépasse cette durée est supprimé à chaque nettoyage. « Pour toujours » ne supprime jamais ce type."
+      "foreverHint": "Ce qui dépasse cette durée est supprimé à chaque nettoyage. « Pour toujours » ne supprime jamais ce type.",
+      "countFailed": "Impossible de compter ce qui serait supprimé.",
+      "retry": "Réessayer"
     },
     "projectDialog": {
       "title": "Rétention de {project}",
@@ -1264,7 +1266,8 @@
     "toasts": {
       "cleanupFailed": "Le nettoyage a échoué",
       "removed": "{parts} supprimés",
-      "nothingRemoved": "Rien à supprimer"
+      "nothingRemoved": "Rien à supprimer",
+      "gcFailed": "Impossible de supprimer les source maps inutilisées"
     },
     "unit": {
       "errors": "{count, plural, =1 {# erreur} other {# erreurs}}",
@@ -1291,7 +1294,9 @@
       "impact": "Supprime {parts} (≈ {size}).",
       "nothing": "Rien ne correspond : il n’y a rien à supprimer.",
       "action": "Supprimer ≈ {size}",
-      "actionIdle": "Supprimer"
+      "actionIdle": "Supprimer",
+      "sourceMaps": "Source maps inutilisées",
+      "sourceMapsHint": "Fichiers qu’aucun envoi ne référence plus ; ceux qui sont référencés ne sont jamais touchés"
     }
   },
   "errors": {

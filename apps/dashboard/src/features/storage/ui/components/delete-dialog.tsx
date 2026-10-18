@@ -1,7 +1,9 @@
 import type {
   CleanupCounts,
+  CleanupOptions,
   CleanupStatus,
   ProjectStorage,
+  SourceMapGcResult,
 } from '@rustrak/client';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
@@ -9,10 +11,13 @@ import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
 import {
   executeStorageCleanup,
+  gcStorageSourceMaps,
   previewStorageCleanup,
+  previewStorageSourceMapGc,
 } from '@/features/storage/api/mutations';
 import {
   estimateBytes,
+  impactState,
   KINDS,
   type Kind,
   removedParts,
@@ -36,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/ui/components/shadcn/select';
+import { ImpactLine } from './impact-line';
 
 const OLDER_THAN = [1, 7, 14, 30, 90, 180, 365] as const;
 const ALL = 'all';
@@ -50,11 +56,14 @@ export function DeleteDialog({
   onOpenChange,
   projects,
   onStarted,
+  onChanged,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projects: readonly ProjectStorage[];
   onStarted: (job: CleanupStatus) => void;
+  /** Reads the page again after a deletion that was not a job. */
+  onChanged: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   return (
@@ -68,8 +77,9 @@ export function DeleteDialog({
             projects={projects}
             isPending={isPending}
             startTransition={startTransition}
-            onStarted={(job) => {
-              onStarted(job);
+            onDone={(job) => {
+              if (job) onStarted(job);
+              else onChanged();
               onOpenChange(false);
             }}
           />
@@ -83,18 +93,31 @@ function Editor({
   projects,
   isPending,
   startTransition,
-  onStarted,
+  onDone,
 }: {
   projects: readonly ProjectStorage[];
   isPending: boolean;
   startTransition: (run: () => Promise<void>) => void;
-  onStarted: (job: CleanupStatus) => void;
+  /** With the started job, or `null` when only source maps went. */
+  onDone: (job: CleanupStatus | null) => void;
 }) {
   const t = useTranslations('storage');
   const [kinds, setKinds] = useState<Kind[]>([...KINDS]);
+  const [sourceMaps, setSourceMaps] = useState(true);
+  const [unused, setUnused] = useState<SourceMapGcResult | null>(null);
   const [days, setDays] = useState(90);
   const [project, setProject] = useState(ALL);
-  const [counts, setCounts] = useState<CleanupCounts | null>(null);
+
+  // Unused source maps belong to no project and have no age: one count.
+  useEffect(() => {
+    let cancelled = false;
+    previewStorageSourceMapGc().then((result) => {
+      if (!cancelled && result.success) setUnused(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const options = {
     older_than_days: days,
@@ -103,42 +126,21 @@ function Editor({
     include_transactions: kinds.includes('transactions'),
     include_logs: kinds.includes('logs'),
   };
-  const key = JSON.stringify(options);
 
-  // Counts what the choice deletes, as it changes.
-  useEffect(() => {
-    let cancelled = false;
-    setCounts(null);
-    const timer = setTimeout(async () => {
-      const result = await previewStorageCleanup(JSON.parse(key));
-      if (!cancelled && result.success) setCounts(result.data);
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [key]);
+  const { counts, retry } = useCount(options);
 
-  const rows = counts ? KINDS.reduce((sum, k) => sum + counts[k], 0) : 0;
-  const parts = counts ? removedParts(counts, t) : [];
-  const size = counts ? formatBytes(estimateBytes(counts, projects)) : '';
-  const byName = [...projects].sort((a, b) =>
-    a.project_name.localeCompare(b.project_name),
+  const { maps, rows, parts, size } = whatGoes(
+    counts,
+    sourceMaps ? unused : null,
+    projects,
+    t,
   );
+  const nothingChosen = kinds.length === 0 && !sourceMaps;
 
   const run = () =>
     startTransition(async () => {
-      const result = await executeStorageCleanup(options);
-      if (!result.success) {
-        toast.error(t('toasts.cleanupFailed'), {
-          description:
-            result.error.kind === 'conflict'
-              ? t('dialog.alreadyRunning')
-              : undefined,
-        });
-        return;
-      }
-      onStarted(result.data);
+      const done = await deleteNow(options, { maps, rows, parts }, t);
+      if (done !== undefined) onDone(done);
     });
 
   return (
@@ -155,98 +157,47 @@ function Editor({
           {t('delete.what')}
         </legend>
         {KINDS.map((kind) => (
-          <label
+          <Choice
             key={kind}
-            className="flex cursor-pointer items-start gap-3 rounded-md px-1 py-1.5"
-          >
-            <Checkbox
-              className="mt-0.5"
-              checked={kinds.includes(kind)}
-              onCheckedChange={(checked) =>
-                setKinds((ks) =>
-                  checked ? [...ks, kind] : ks.filter((k) => k !== kind),
-                )
-              }
-              disabled={isPending}
-            />
-            <span>
-              <span className="block text-sm">{t(`kind.${kind}`)}</span>
-              <span className="block text-xs text-muted-foreground">
-                {t(`kindHint.${kind}`)}
-              </span>
-            </span>
-          </label>
+            checked={kinds.includes(kind)}
+            onChange={(checked) =>
+              setKinds((ks) =>
+                checked ? [...ks, kind] : ks.filter((k) => k !== kind),
+              )
+            }
+            title={t(`kind.${kind}`)}
+            hint={t(`kindHint.${kind}`)}
+            disabled={isPending}
+          />
         ))}
+        <Choice
+          checked={sourceMaps}
+          onChange={setSourceMaps}
+          title={t('delete.sourceMaps')}
+          hint={t('delete.sourceMapsHint')}
+          disabled={isPending}
+        />
       </fieldset>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1.5 text-sm">
-          <span className="font-medium">{t('delete.olderThan')}</span>
-          <Select
-            value={String(days)}
-            onValueChange={(v) => v && setDays(Number(v))}
-            disabled={isPending}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue>
-                {(v: string) => t('keep.days', { count: Number(v) })}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {OLDER_THAN.map((d) => (
-                <SelectItem key={d} value={String(d)}>
-                  {t('keep.days', { count: d })}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-        <label className="space-y-1.5 text-sm">
-          <span className="font-medium">{t('delete.in')}</span>
-          <Select
-            value={project}
-            onValueChange={(v) => v && setProject(v)}
-            disabled={isPending}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue>
-                {(v: string) =>
-                  v === ALL
-                    ? t('delete.allProjects')
-                    : (byName.find((p) => String(p.project_id) === v)
-                        ?.project_name ?? v)
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>{t('delete.allProjects')}</SelectItem>
-              {byName.map((p) => (
-                <SelectItem key={p.project_id} value={String(p.project_id)}>
-                  {p.project_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </label>
-      </div>
+      <Scope
+        days={days}
+        onDays={setDays}
+        project={project}
+        onProject={setProject}
+        projects={projects}
+        disabled={isPending}
+      />
 
-      <p
-        className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
-        aria-live="polite"
-      >
-        {kinds.length === 0 ? (
-          <span className="text-muted-foreground">{t('delete.pickOne')}</span>
-        ) : counts === null ? (
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            {t('dialog.counting')}
-          </span>
-        ) : parts.length > 0 ? (
-          t('delete.impact', { parts: parts.join(', '), size })
-        ) : (
-          <span className="text-muted-foreground">{t('delete.nothing')}</span>
-        )}
-      </p>
+      <ImpactLine
+        state={nothingChosen ? 'ready' : impactState(counts)}
+        sentence={
+          !nothingChosen && parts.length > 0
+            ? t('delete.impact', { parts: parts.join(', '), size })
+            : null
+        }
+        nothing={t(nothingChosen ? 'delete.pickOne' : 'delete.nothing')}
+        onRetry={retry}
+      />
 
       <AlertDialogFooter>
         <AlertDialogCancel disabled={isPending}>
@@ -255,12 +206,185 @@ function Editor({
         <Button
           variant="destructive"
           onClick={run}
-          disabled={isPending || rows === 0 || kinds.length === 0}
+          disabled={isPending || (rows === 0 && maps === 0)}
         >
           {isPending && <Loader2 className="animate-spin" />}
-          {rows > 0 ? t('delete.action', { size }) : t('delete.actionIdle')}
+          {rows > 0 || maps > 0
+            ? t('delete.action', { size })
+            : t('delete.actionIdle')}
         </Button>
       </AlertDialogFooter>
     </>
   );
+}
+
+/** A kind to delete: a checkbox, its name and what it covers. */
+function Choice({
+  checked,
+  onChange,
+  title,
+  hint,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  title: string;
+  hint: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-md px-1 py-1.5">
+      <Checkbox
+        className="mt-0.5"
+        checked={checked}
+        onCheckedChange={(next) => onChange(next === true)}
+        disabled={disabled}
+      />
+      <span>
+        <span className="block text-sm">{title}</span>
+        <span className="block text-xs text-muted-foreground">{hint}</span>
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Deletes what was chosen: the unused source maps first (quick, no job),
+ * then the data in the background. Resolves to the started job, `null` when
+ * only source maps went, or `undefined` when it failed (already said with a
+ * toast).
+ */
+async function deleteNow(
+  options: CleanupOptions,
+  chosen: { maps: number; rows: number; parts: string[] },
+  t: (key: string, values?: Record<string, string | number>) => string,
+): Promise<CleanupStatus | null | undefined> {
+  if (chosen.maps > 0) {
+    const gc = await gcStorageSourceMaps();
+    if (!gc.success) {
+      toast.error(t('toasts.gcFailed'));
+      return undefined;
+    }
+  }
+  if (chosen.rows === 0) {
+    toast.success(t('toasts.removed', { parts: chosen.parts.join(', ') }));
+    return null;
+  }
+  const result = await executeStorageCleanup(options);
+  if (result.success) return result.data;
+  toast.error(t('toasts.cleanupFailed'), {
+    description:
+      result.error.kind === 'conflict' ? t('dialog.alreadyRunning') : undefined,
+  });
+  return undefined;
+}
+
+/** How old, and where: the two choices that narrow a deletion. */
+function Scope({
+  days,
+  onDays,
+  project,
+  onProject,
+  projects,
+  disabled,
+}: {
+  days: number;
+  onDays: (days: number) => void;
+  project: string;
+  onProject: (project: string) => void;
+  projects: readonly ProjectStorage[];
+  disabled?: boolean;
+}) {
+  const t = useTranslations('storage');
+  const byName = [...projects].sort((a, b) =>
+    a.project_name.localeCompare(b.project_name),
+  );
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="space-y-1.5 text-sm">
+        <span className="font-medium">{t('delete.olderThan')}</span>
+        <Select
+          value={String(days)}
+          onValueChange={(v) => v && onDays(Number(v))}
+          disabled={disabled}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {(v: string) => t('keep.days', { count: Number(v) })}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {OLDER_THAN.map((d) => (
+              <SelectItem key={d} value={String(d)}>
+                {t('keep.days', { count: d })}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </label>
+      <label className="space-y-1.5 text-sm">
+        <span className="font-medium">{t('delete.in')}</span>
+        <Select
+          value={project}
+          onValueChange={(v) => v && onProject(v)}
+          disabled={disabled}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {(v: string) =>
+                v === ALL
+                  ? t('delete.allProjects')
+                  : (byName.find((p) => String(p.project_id) === v)
+                      ?.project_name ?? v)
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>{t('delete.allProjects')}</SelectItem>
+            {byName.map((p) => (
+              <SelectItem key={p.project_id} value={String(p.project_id)}>
+                {p.project_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </label>
+    </div>
+  );
+}
+
+/** What a deletion would remove, counted as its options change. */
+function useCount(options: CleanupOptions) {
+  const [counts, setCounts] = useState<CleanupCounts | null | 'failed'>(null);
+  const [attempt, setAttempt] = useState(0);
+  const key = JSON.stringify(options);
+  useEffect(() => {
+    let cancelled = false;
+    setCounts(null);
+    const timer = setTimeout(async () => {
+      const result = await previewStorageCleanup(JSON.parse(key));
+      if (!cancelled) setCounts(result.success ? result.data : 'failed');
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [key, attempt]);
+  return { counts, retry: () => setAttempt((a) => a + 1) };
+}
+
+/** What a choice deletes: rows, unused source maps, as words and a size. */
+function whatGoes(
+  counts: CleanupCounts | null | 'failed',
+  unused: SourceMapGcResult | null,
+  projects: readonly ProjectStorage[],
+  t: (key: string, values?: Record<string, string | number>) => string,
+) {
+  const known = counts === null || counts === 'failed' ? null : counts;
+  const maps = unused?.files_removed ?? 0;
+  const rows = known ? KINDS.reduce((sum, k) => sum + known[k], 0) : 0;
+  const parts = known ? removedParts({ ...known, source_maps: maps }, t) : [];
+  const bytes =
+    (known ? estimateBytes(known, projects) : 0) + (unused?.bytes_freed ?? 0);
+  return { maps, rows, parts, size: formatBytes(bytes) };
 }

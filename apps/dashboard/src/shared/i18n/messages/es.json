@@ -1248,7 +1248,9 @@
       "confirmAction": "Borrar ≈ {size}",
       "kindColumn": "Dato",
       "keepColumn": "Se guarda durante",
-      "foreverHint": "Lo que supere ese periodo se borra en cada limpieza. \"Para siempre\" no borra nunca ese tipo de dato."
+      "foreverHint": "Lo que supere ese periodo se borra en cada limpieza. \"Para siempre\" no borra nunca ese tipo de dato.",
+      "countFailed": "No se pudo contar lo que se borraría.",
+      "retry": "Reintentar"
     },
     "projectDialog": {
       "title": "Retención de {project}",
@@ -1264,7 +1266,8 @@
     "toasts": {
       "cleanupFailed": "La limpieza falló",
       "removed": "Se borraron {parts}",
-      "nothingRemoved": "Nada que borrar"
+      "nothingRemoved": "Nada que borrar",
+      "gcFailed": "No se pudieron borrar los source maps sin usar"
     },
     "unit": {
       "errors": "{count, plural, =1 {# error} other {# errores}}",
@@ -1291,7 +1294,9 @@
       "impact": "Borra {parts} (≈ {size}).",
       "nothing": "Nada coincide: no hay nada que borrar.",
       "action": "Borrar ≈ {size}",
-      "actionIdle": "Borrar"
+      "actionIdle": "Borrar",
+      "sourceMaps": "Source maps sin usar",
+      "sourceMapsHint": "Archivos que ya no referencia ninguna subida; los referenciados nunca se tocan"
     }
   },
   "errors": {

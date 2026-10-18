@@ -1248,7 +1248,9 @@
       "confirmAction": "Șterge ≈ {size}",
       "kindColumn": "Date",
       "keepColumn": "Se păstrează",
-      "foreverHint": "Ce depășește perioada se șterge la fiecare curățare. „Pentru totdeauna” nu șterge niciodată acel tip."
+      "foreverHint": "Ce depășește perioada se șterge la fiecare curățare. „Pentru totdeauna” nu șterge niciodată acel tip.",
+      "countFailed": "Nu s-a putut număra ce s-ar șterge.",
+      "retry": "Încearcă din nou"
     },
     "projectDialog": {
       "title": "Retenția pentru {project}",
@@ -1264,7 +1266,8 @@
     "toasts": {
       "cleanupFailed": "Curățarea a eșuat",
       "removed": "S-au șters {parts}",
-      "nothingRemoved": "Nimic de șters"
+      "nothingRemoved": "Nimic de șters",
+      "gcFailed": "Nu s-au putut șterge source maps nefolosite"
     },
     "unit": {
       "errors": "{count, plural, =1 {# eroare} other {# erori}}",
@@ -1291,7 +1294,9 @@
       "impact": "Șterge {parts} (≈ {size}).",
       "nothing": "Nimic nu se potrivește: nu e nimic de șters.",
       "action": "Șterge ≈ {size}",
-      "actionIdle": "Șterge"
+      "actionIdle": "Șterge",
+      "sourceMaps": "Source maps nefolosite",
+      "sourceMapsHint": "Fișiere pe care niciun upload nu le mai referă; cele referite nu sunt atinse niciodată"
     }
   },
   "errors": {

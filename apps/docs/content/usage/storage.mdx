@@ -14,7 +14,7 @@ Go to **Settings → Storage** (visible only to admins).
 - **Age of the data**: bytes by how long ago they arrived (under 7 days, 7–14, 14–30, 30–90, 90–180, 180 days to a year, over a year), stacked by kind. What the next cleanup deletes is hatched.
 - **Projects**: what each one holds, largest first, its size per kind, and whether it uses the general retention or its own.
 
-Sizes are the length of the payloads Rustrak holds, estimated from a sample of each project's newest rows and scaled by how many it has, so the page stays fast however much data there is; row counts are exact. Ages are keyed on **ingestion time** (when Rustrak received the data), not on the client-supplied timestamp, like retention itself.
+Sizes of errors, transactions and logs are the length of the payloads Rustrak holds, estimated from a sample of each project's rows and scaled by how many it has, so the page stays fast however much data there is: the newest rows for errors, transactions and logs, and for spans a random sample of the project's transactions. Source-map sizes are exact, summed from the stored file sizes. Row counts are exact, except spans, which are estimated from that sample. Ages are keyed on **ingestion time** (when Rustrak received the data), not on the client-supplied timestamp, like retention itself.
 
 ## Retention
 
@@ -25,7 +25,7 @@ Both say what the next cleanup would delete with your changes before you save. *
 
 ### Deleting now
 
-**Delete data now**, beside **Configure retention**, deletes without waiting for the cleanup: pick the kinds (errors, transactions, logs), how old (older than 1 to 365 days) and where (every project or one). The dialog counts what goes as you choose, and the button says how much. It runs in the background like the cleanup, and only one of them runs at a time.
+**Delete data now**, beside **Configure retention**, deletes without waiting for the cleanup: pick the kinds (errors, transactions, logs), how old (older than 1 to 365 days) and where (every project or one). The dialog counts what goes as you choose, and the button says how much. It runs in the background like the cleanup, and only one of them runs at a time. It can also delete the source maps no upload uses. If the server restarts while it runs, what it already deleted stays deleted, but nothing picks the rest up: run it again (the cleanup, by contrast, finishes the rest on its next run).
 
 What a cleanup does:
 

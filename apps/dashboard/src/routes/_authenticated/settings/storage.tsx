@@ -79,14 +79,18 @@ function StorageContent() {
   const t = useTranslations('settings');
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
-  const [data, setData] = useState<Awaited<ReturnType<typeof load>> | null>(
-    null,
-  );
+  // The answer keeps the version it was read for: the view below is keyed
+  // by it, so it starts afresh from the new answer, not from the old one
+  // the moment a reload is asked for.
+  const [data, setData] = useState<{
+    version: number;
+    results: Awaited<ReturnType<typeof load>>;
+  } | null>(null);
   // Not `useAsync`, which drops its answer while the next one loads. A
   // newer read wins; an older one is dropped.
   useEffect(() => {
     let live = true;
-    void load(version).then((next) => live && setData(next));
+    void load().then((results) => live && setData({ version, results }));
     return () => {
       live = false;
     };
@@ -100,7 +104,7 @@ function StorageContent() {
       </>
     );
   }
-  const [summary, projects, age, retention] = data;
+  const [summary, projects, age, retention] = data.results;
   if (
     !summary.success ||
     !projects.success ||
@@ -124,7 +128,7 @@ function StorageContent() {
 
   return (
     <StorageView
-      key={version}
+      key={data.version}
       title={t('storage.title')}
       subtitle={t('storage.subtitle')}
       data={{
@@ -138,8 +142,7 @@ function StorageContent() {
   );
 }
 
-/** `_version` only names the read, so a new one runs. */
-function load(_version: number) {
+function load() {
   return Promise.all([
     getStorageSummary(),
     getStorageProjects(),

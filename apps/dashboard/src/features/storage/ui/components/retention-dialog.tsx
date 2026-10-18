@@ -75,7 +75,7 @@ function Editor({
   onCancel: () => void;
 }) {
   const t = useTranslations('storage');
-  const { draft, setDraft, impact, isPending, save } = useRetentionDraft(
+  const { draft, setDraft, impact, retry, isPending, save } = useRetentionDraft(
     retention.settings,
     onDone,
   );
@@ -143,6 +143,7 @@ function Editor({
 
       <RetentionFooter
         impact={impact}
+        onRetry={retry}
         projects={projects}
         isPending={isPending}
         onCancel={onCancel}

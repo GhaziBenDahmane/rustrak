@@ -66,17 +66,23 @@ export function deletesAnything(settings: RetentionSettings): boolean {
 }
 
 /**
- * Whether age bucket `index` lies wholly past a `days` window, so the next
- * cleanup deletes all of it. Bucket `i` starts at `bounds[i - 1]` days.
+ * The share of age bucket `index` past a `days` window, which the next
+ * cleanup deletes: 1 for a bucket wholly older, a fraction for one the
+ * window cuts (its rows taken as spread evenly over it). Bucket `i` spans
+ * `bounds[i - 1]` to `bounds[i]` days; the last has no end, so a window
+ * inside it counts nothing, a lower bound.
  */
 export function bucketGoes(
   index: number,
   days: number | null,
   bounds: readonly number[],
-): boolean {
-  if (days === null) return false;
+): number {
+  if (days === null) return 0;
   const start = index === 0 ? 0 : (bounds[index - 1] ?? 0);
-  return start >= days;
+  const end = bounds[index];
+  if (start >= days) return 1;
+  if (end === undefined || end <= days) return 0;
+  return (end - days) / (end - start);
 }
 
 /** Bytes per kind, in one age bucket. */
@@ -138,9 +144,10 @@ function addToBuckets(
       if (!bucket) return;
       const weight = Math.round(count * perRow);
       bucket[kind] += weight;
-      if (bucketGoes(i, windows[WINDOW_FIELD[kind]], data.age.bucket_days)) {
-        bucket.goes[kind] += weight;
-      }
+      bucket.goes[kind] += Math.round(
+        weight *
+          bucketGoes(i, windows[WINDOW_FIELD[kind]], data.age.bucket_days),
+      );
     });
   }
 }
@@ -295,4 +302,12 @@ export function nextReadIn(state: Retention, now: number): number | null {
   if (!state.next_run_at) return POLL_MS;
   const due = Date.parse(state.next_run_at) - now;
   return Math.min(Math.max(due, POLL_MS), MAX_TIMEOUT_MS);
+}
+
+/** How far a count of what goes has got: pending, failed, or in. */
+export function impactState(
+  impact: CleanupCounts | null | 'failed',
+): 'counting' | 'failed' | 'ready' {
+  if (impact === 'failed') return 'failed';
+  return impact === null ? 'counting' : 'ready';
 }

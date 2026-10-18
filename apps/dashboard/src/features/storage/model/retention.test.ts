@@ -123,12 +123,21 @@ describe('presetsWith', () => {
 });
 
 describe('bucketGoes', () => {
+  const bounds = [7, 14, 30, 90, 180, 365];
+
   it('deletes a bucket wholly older than the window', () => {
-    const bounds = [7, 14, 30, 90, 180, 365];
     // Under 7 days, and 7–14 days, against a 7-day window.
-    expect(bucketGoes(0, 7, bounds)).toBe(false);
-    expect(bucketGoes(1, 7, bounds)).toBe(true);
-    expect(bucketGoes(6, null, bounds)).toBe(false);
+    expect(bucketGoes(0, 7, bounds)).toBe(0);
+    expect(bucketGoes(1, 7, bounds)).toBe(1);
+    expect(bucketGoes(6, null, bounds)).toBe(0);
+  });
+
+  it('deletes the share of a bucket past a window inside it', () => {
+    // 30–90 days against 45: the oldest 45 of its 60 days go.
+    expect(bucketGoes(3, 45, bounds)).toBe(0.75);
+    // Over a year has no end: past 500 days, nothing is known to go.
+    expect(bucketGoes(6, 500, bounds)).toBe(0);
+    expect(bucketGoes(6, 365, bounds)).toBe(1);
   });
 });
 
@@ -158,6 +167,18 @@ describe('summarize', () => {
     expect(s.buckets[1]?.goes.logs).toBe(20);
     expect(s.buckets[3]?.goes.logs).toBe(0);
     expect(s.frees).toBe(520);
+  });
+
+  it('counts a custom window inside a bucket in proportion', () => {
+    const s = summarize({
+      ...data,
+      settings: {
+        ...settings,
+        defaults: { ...settings.defaults, logs_days: 45 },
+      },
+    });
+    // Project 1's 200 bytes of 30–90 day logs, three quarters past 45 days.
+    expect(s.buckets[3]?.goes.logs).toBe(150);
   });
 
   it('ranks projects by size, with their own retention when they have one', () => {

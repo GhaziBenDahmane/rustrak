@@ -183,21 +183,25 @@ impl CleanupJob {
     }
 
     /// Enforces the retention settings now, in the background, as
-    /// [`Self::start`] does a window.
+    /// [`Self::start`] does a window. The handle resolves to what it removed,
+    /// for whoever records the run.
     pub fn start_retention(
         &self,
         pool: DbPool,
         settings: RetentionSettings,
         store: Arc<dyn SourceMapStore>,
-    ) -> AppResult<CleanupStatus> {
+    ) -> AppResult<(
+        CleanupStatus,
+        tokio::task::JoinHandle<AppResult<CleanupCounts>>,
+    )> {
         settings.validate()?;
         let started = self.begin()?;
-        tokio::spawn(Self::execute(
+        let handle = tokio::spawn(Self::execute(
             Arc::clone(&self.status),
             pool,
             CleanupPlan::Retention { settings, store },
         ));
-        Ok(started)
+        Ok((started, handle))
     }
 
     /// Marks the job `running`, or refuses with `Conflict` while it already is.
@@ -490,6 +494,8 @@ impl StorageService {
                 counts += Self::count_cleanup(pool, cutoff, Some(project_id), filter).await?;
             }
         }
+        // Every retention cleanup deletes the source maps no upload uses.
+        counts.source_maps = Self::preview_source_map_gc(pool).await?.files_removed;
         Ok(counts)
     }
 

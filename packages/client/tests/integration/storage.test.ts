@@ -316,6 +316,21 @@ describe('StorageResource retention', () => {
     expect(job.state).toBe('running');
   });
 
+  it('does not retry cleaning up now, which would be refused as a second run', async () => {
+    let calls = 0;
+    server.use(
+      http.post(`${URL}/run`, () => {
+        calls += 1;
+        return HttpResponse.json(
+          { error: { type: 'InternalServerError', message: 'lost' } },
+          { status: 503 },
+        );
+      }),
+    );
+    expectErr(await client.storage.runRetention());
+    expect(calls).toBe(1);
+  });
+
   it("reads how old each project's data is", async () => {
     server.use(
       http.get('http://localhost:8080/api/storage/age', () =>

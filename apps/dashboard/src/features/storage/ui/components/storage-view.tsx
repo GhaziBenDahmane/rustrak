@@ -6,7 +6,7 @@ import type {
   StorageSummary,
 } from '@rustrak/client';
 import { Settings2, Trash2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useTranslations } from 'use-intl';
 import { getRetention } from '@/features/storage/api/queries';
 import {
@@ -63,6 +63,10 @@ export function StorageView({
   );
   const cleanup = useCleanupJob(onChanged);
 
+  // The page's data is read again through the latest `onChanged`, without
+  // the read below re-arming whenever its identity changes.
+  const changed = useEffectEvent(() => onChanged());
+
   // One read of the saved status per status: a save leaves the next run for
   // the scheduler's next tick, and a scheduled cleanup runs at its time.
   useEffect(() => {
@@ -72,7 +76,14 @@ export function StorageView({
     const timer = setTimeout(async () => {
       const result = await getRetention();
       if (cancelled) return;
+      // A cleanup this tab did not start (the schedule's) just finished:
+      // the figures below are from before it.
+      const finished =
+        retention.last_run?.status === 'running' &&
+        result.success &&
+        result.data.last_run?.status !== 'running';
       setRetention((prev) => (result.success ? result.data : { ...prev }));
+      if (finished) changed();
     }, delay);
     return () => {
       cancelled = true;
@@ -159,6 +170,7 @@ export function StorageView({
         onOpenChange={setDeleting}
         projects={data.projects}
         onStarted={cleanup.follow}
+        onChanged={onChanged}
       />
       <ProjectRetentionDialog
         project={project}
