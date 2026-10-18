@@ -5,7 +5,9 @@
 //! The arithmetic mirrors Sentry's `monitors/schedule.py`: crontabs through
 //! `croner`, intervals added on the wall clock as `dateutil.rrule` does.
 
-use chrono::{DateTime, Duration, DurationRound, Months, NaiveDateTime, TimeZone, Utc};
+use chrono::{
+    DateTime, Duration, DurationRound, LocalResult, Months, NaiveDateTime, TimeZone, Utc,
+};
 use chrono_tz::Tz;
 use croner::parser::{CronParser, Seconds, Year};
 use croner::Cron;
@@ -61,6 +63,12 @@ impl Schedule {
                     .map_err(|_| "crontab never matches a date".to_string())
             }
             Schedule::Interval { value: 0, .. } => Err("interval must be at least 1".to_string()),
+            // Past this the date arithmetic overflows and a run never advances.
+            Schedule::Interval { value, unit }
+                if approx_seconds(*value, *unit) > approx_seconds(100, IntervalUnit::Year) =>
+            {
+                Err("interval must be at most 100 years".to_string())
+            }
             Schedule::Interval { .. } => Ok(()),
         }
     }
@@ -154,18 +162,39 @@ fn step(tz: Tz, from: DateTime<Utc>, value: u32, unit: IntervalUnit, k: u32) -> 
         IntervalUnit::Hour => local.checked_add_signed(Duration::hours(n)),
         IntervalUnit::Day => local.checked_add_signed(Duration::days(n)),
         IntervalUnit::Week => local.checked_add_signed(Duration::weeks(n)),
-        IntervalUnit::Month => local.checked_add_months(Months::new(n as u32)),
-        IntervalUnit::Year => local.checked_add_months(Months::new((n * 12) as u32)),
+        IntervalUnit::Month => add_months(local, n),
+        IntervalUnit::Year => add_months(local, n * 12),
     };
     let Some(shifted) = shifted else {
         return from;
     };
-    // A wall time skipped by a DST jump does not exist; read it as UTC-offset
-    // naive time, which lands within the hour of the gap.
-    tz.from_local_datetime(&shifted)
-        .earliest()
-        .map(|t| t.with_timezone(&Utc))
-        .unwrap_or_else(|| Utc.from_utc_datetime(&shifted))
+    match tz.from_local_datetime(&shifted) {
+        LocalResult::Single(t) => t.with_timezone(&Utc),
+        // A wall time seen twice when clocks go back: the first one not
+        // before `from`, so runs never go backwards.
+        LocalResult::Ambiguous(first, second) => {
+            let first = first.with_timezone(&Utc);
+            if first >= from {
+                first
+            } else {
+                second.with_timezone(&Utc)
+            }
+        }
+        // A wall time skipped when clocks go forward: read it with the
+        // offset in force just before the jump, as dateutil does. Gaps run
+        // from half an hour to a whole day (Samoa, 2011).
+        LocalResult::None => (1..=24)
+            .find_map(|h| {
+                tz.from_local_datetime(&(shifted - Duration::hours(h)))
+                    .earliest()
+                    .map(|t| t.with_timezone(&Utc) + Duration::hours(h))
+            })
+            .unwrap_or(from),
+    }
+}
+
+fn add_months(local: NaiveDateTime, n: i64) -> Option<NaiveDateTime> {
+    local.checked_add_months(Months::new(u32::try_from(n).ok()?))
 }
 
 /// Schedules have minute granularity.

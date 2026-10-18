@@ -63,6 +63,9 @@ impl ScheduledJob for FakeJob {
     async fn run(&self, ctx: JobContext<'_>) -> AppResult<Value> {
         let settings = ctx.settings;
         self.runs.lock().unwrap().push(ctx.scheduled_for);
+        if settings["panic"] == json!(true) {
+            panic!("job panicked");
+        }
         if let Some(gate) = &self.gate {
             gate.notified().await;
         }
@@ -230,4 +233,28 @@ async fn a_run_still_going_is_not_started_twice() {
         handle.await.unwrap();
     }
     assert_eq!(job.runs().len(), 1);
+}
+
+#[actix_web::test]
+async fn a_panicking_run_does_not_block_the_next_one() {
+    let db = TestDb::new().await;
+    let job = FakeJob::new(Misfire::RunOnce);
+    let scheduler = Scheduler::new(vec![job.clone()]);
+    Scheduler::update_settings(
+        &db.pool,
+        "fake",
+        json!({"crontab": "* * * * *", "panic": true}),
+    )
+    .await
+    .unwrap();
+    tick(&scheduler, &db.pool, "2026-01-01T05:30:00Z").await;
+
+    for minute in ["05:31", "05:32"] {
+        let now = at(&format!("2026-01-01T{minute}:00Z"));
+        for handle in scheduler.tick(&db.pool, now).await.unwrap() {
+            assert!(handle.await.unwrap_err().is_panic());
+        }
+    }
+
+    assert_eq!(job.runs().len(), 2);
 }
