@@ -93,3 +93,21 @@ fn monitor_config_is_carried_for_upsert() {
     let config = c.monitor_config.unwrap();
     assert_eq!(config.checkin_margin, Some(5));
 }
+
+#[test]
+fn nul_characters_are_stripped_before_they_reach_the_database() {
+    // PostgreSQL rejects NUL in text; the HTTP endpoint skips the envelope's
+    // `\u0000` cleanup, so `?environment=prod%00` arrives here as is.
+    let c = CheckIn::new(
+        Uuid::nil(),
+        "m",
+        CheckInStatus::Ok,
+        Some("prod\0".to_string()),
+        None,
+        None,
+        Some("ab\0c".to_string()),
+    )
+    .unwrap();
+    assert_eq!(c.environment, "prod");
+    assert_eq!(c.trace_id.as_deref(), Some("abc"));
+}

@@ -81,14 +81,8 @@ impl MonitorService {
     ) -> AppResult<Vec<MonitorFailure>> {
         let mut tx = begin_write(pool).await?;
         // The reads below decide what to insert, and `Sentry.withMonitor`
-        // sends a run's start and result at once. SQLite's `BEGIN IMMEDIATE`
-        // already serializes them; on Postgres a lock per project does, in
-        // the two-key space so it never meets the digest's one-key lock.
-        #[cfg(feature = "postgres")]
-        sqlx::query("SELECT pg_advisory_xact_lock(1, $1)")
-            .bind(project_id)
-            .execute(&mut *tx)
-            .await?;
+        // sends a run's start and result at once.
+        lock_project(&mut tx, project_id).await?;
         let monitor = upsert_monitor(&mut tx, project_id, &check_in).await?;
         let env = ensure_environment(&mut tx, monitor.id, &check_in.environment).await?;
 
@@ -212,10 +206,11 @@ impl MonitorService {
         let now = now.duration_trunc(Duration::minutes(1)).unwrap_or(now);
         let mut failures = Vec::new();
 
-        let due: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        let due: Vec<(Uuid, Uuid, i32)> = sqlx::query_as(
             r#"
-            SELECT e.id, e.monitor_id
+            SELECT e.id, e.monitor_id, m.project_id
             FROM monitor_environments e
+            JOIN monitors m ON m.id = e.monitor_id
             WHERE e.next_checkin_latest <= $1
             "#,
         )
@@ -225,16 +220,16 @@ impl MonitorService {
         // Each environment commits on its own, so one that fails (deleted
         // mid-sweep) is logged and skipped instead of dropping the reports of
         // those already committed.
-        for (env_id, monitor_id) in due {
-            match sweep_missed(pool, env_id, monitor_id, now).await {
+        for (env_id, monitor_id, project_id) in due {
+            match sweep_missed(pool, project_id, env_id, monitor_id, now).await {
                 Ok(found) => failures.extend(found),
                 Err(e) => log::error!("Monitor sweep skipped environment {env_id}: {e}"),
             }
         }
 
-        let open: Vec<(Uuid, Uuid, Uuid)> = sqlx::query_as(
+        let open: Vec<(Uuid, Uuid, Uuid, i32)> = sqlx::query_as(
             r#"
-            SELECT id, monitor_id, monitor_environment_id
+            SELECT id, monitor_id, monitor_environment_id, project_id
             FROM monitor_checkins
             WHERE status = 'in_progress' AND timeout_at <= $1
             "#,
@@ -242,8 +237,8 @@ impl MonitorService {
         .bind(now)
         .fetch_all(pool)
         .await?;
-        for (checkin_id, monitor_id, env_id) in open {
-            match sweep_timeout(pool, checkin_id, monitor_id, env_id).await {
+        for (checkin_id, monitor_id, env_id, project_id) in open {
+            match sweep_timeout(pool, project_id, checkin_id, monitor_id, env_id, now).await {
                 Ok(found) => failures.extend(found),
                 Err(e) => log::error!("Monitor sweep skipped check-in {checkin_id}: {e}"),
             }
@@ -391,16 +386,32 @@ impl CheckInWithEnv {
     }
 }
 
+/// Serializes a project's monitor writes (check-ins and the sweep). SQLite's
+/// `BEGIN IMMEDIATE` already does; on Postgres an advisory lock in the
+/// two-key space, so it never meets the digest's one-key lock.
+async fn lock_project(tx: &mut Tx<'_>, project_id: i32) -> AppResult<()> {
+    #[cfg(feature = "postgres")]
+    sqlx::query("SELECT pg_advisory_xact_lock(1, $1)")
+        .bind(project_id)
+        .execute(&mut **tx)
+        .await?;
+    #[cfg(not(feature = "postgres"))]
+    let _ = (tx, project_id);
+    Ok(())
+}
+
 /// Records the missed check-in of one due environment.
 async fn sweep_missed(
     pool: &DbPool,
+    project_id: i32,
     env_id: Uuid,
     monitor_id: Uuid,
     now: DateTime<Utc>,
 ) -> AppResult<Vec<MonitorFailure>> {
     let mut tx = begin_write(pool).await?;
+    lock_project(&mut tx, project_id).await?;
     let env = reload_environment(&mut tx, env_id).await?;
-    // Re-checked under the write lock: another sweep may have moved it.
+    // Re-checked under the lock: a check-in or another sweep may have moved it.
     let (Some(expected), Some(latest)) = (env.next_checkin, env.next_checkin_latest) else {
         return Ok(Vec::new());
     };
@@ -441,20 +452,25 @@ async fn sweep_missed(
 /// Times out one check-in left open past its max runtime.
 async fn sweep_timeout(
     pool: &DbPool,
+    project_id: i32,
     checkin_id: Uuid,
     monitor_id: Uuid,
     env_id: Uuid,
+    now: DateTime<Utc>,
 ) -> AppResult<Vec<MonitorFailure>> {
     let mut tx = begin_write(pool).await?;
+    lock_project(&mut tx, project_id).await?;
+    // `timeout_at` again: a heartbeat since the scan can have pushed it out.
     let timed_out = sqlx::query_as::<_, CheckInRow>(
         r#"
         UPDATE monitor_checkins SET status = 'timeout'
-        WHERE id = $1 AND status = 'in_progress'
+        WHERE id = $1 AND status = 'in_progress' AND timeout_at <= $2
         RETURNING id, guid, monitor_environment_id, status, duration_ms,
                   date_added
         "#,
     )
     .bind(checkin_id)
+    .bind(now)
     .fetch_optional(&mut *tx)
     .await?;
     let Some(timed_out) = timed_out else {
