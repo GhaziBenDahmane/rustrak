@@ -129,14 +129,15 @@ impl Scheduler {
         for job in &self.jobs {
             let key = job.key();
             let state = Self::ensure(pool, key).await?;
-            let Some((schedule, tz)) = job.schedule(&state.settings) else {
+            let settings = &state.settings;
+            let Some((schedule, tz)) = job.schedule(settings) else {
                 if state.next_run_at.is_some() {
-                    set_next_run(pool, key, None).await?;
+                    set_next_run(pool, key, None, settings).await?;
                 }
                 continue;
             };
             let Some(due) = state.next_run_at else {
-                set_next_run(pool, key, Some(schedule.next_after(now, tz))).await?;
+                set_next_run(pool, key, Some(schedule.next_after(now, tz)), settings).await?;
                 continue;
             };
             if due > now || self.is_running(key) {
@@ -146,18 +147,25 @@ impl Scheduler {
             let next = schedule.next_after(now, tz);
             let late = now - due > ON_TIME;
             if late && job.misfire() == Misfire::Skip {
-                set_next_run(pool, key, Some(next)).await?;
+                set_next_run(pool, key, Some(next), settings).await?;
                 continue;
             }
 
-            sqlx::query(
-                "UPDATE scheduled_jobs SET next_run_at = $2, last_started_at = $3 WHERE key = $1",
+            let claimed = sqlx::query(
+                "UPDATE scheduled_jobs SET next_run_at = $2, last_started_at = $3 WHERE key = $1 AND settings = $4",
             )
             .bind(key)
             .bind(next)
             .bind(now)
+            .bind(Json(settings))
             .execute(pool)
-            .await?;
+            .await?
+            .rows_affected()
+                > 0;
+            if !claimed {
+                // Settings saved since the read: the next tick reschedules.
+                continue;
+            }
             lock(&self.running).insert(key);
             started.push(self.spawn(pool.clone(), Arc::clone(job), state.settings, due, now));
         }
@@ -176,8 +184,9 @@ impl Scheduler {
         scheduled_for: DateTime<Utc>,
         now: DateTime<Utc>,
     ) -> JoinHandle<()> {
-        let running = Arc::clone(&self.running);
+        let running = Running(Arc::clone(&self.running), job.key());
         tokio::spawn(async move {
+            let _running = running;
             let key = job.key();
             let outcome = job
                 .run(JobContext {
@@ -211,7 +220,6 @@ impl Scheduler {
             {
                 log::error!("Could not record the run of scheduled job {key}: {e}");
             }
-            lock(&running).remove(key);
         })
     }
 
@@ -254,13 +262,31 @@ impl Scheduler {
     }
 }
 
-async fn set_next_run(pool: &DbPool, key: &str, next: Option<DateTime<Utc>>) -> AppResult<()> {
-    sqlx::query("UPDATE scheduled_jobs SET next_run_at = $2 WHERE key = $1")
+/// Only while the settings are still the ones `next` was computed from, so a
+/// save racing a tick is not overwritten by the old schedule.
+async fn set_next_run(
+    pool: &DbPool,
+    key: &str,
+    next: Option<DateTime<Utc>>,
+    settings: &Value,
+) -> AppResult<()> {
+    sqlx::query("UPDATE scheduled_jobs SET next_run_at = $2 WHERE key = $1 AND settings = $3")
         .bind(key)
         .bind(next)
+        .bind(Json(settings))
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Takes a job out of the running set however its task ends: done, panicked
+/// or aborted.
+struct Running(Arc<Mutex<HashSet<&'static str>>>, &'static str);
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        lock(&self.0).remove(self.1);
+    }
 }
 
 /// The set is plain data; a panic while it was held leaves nothing torn.

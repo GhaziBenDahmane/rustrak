@@ -65,7 +65,15 @@ curl "$RUSTRAK_CRONS?status=in_progress"
 ./run-backup.sh && curl "$RUSTRAK_CRONS?status=ok" || curl "$RUSTRAK_CRONS?status=error"
 ```
 
-`GET` or `POST` both work. The query string takes `status` (required), `check_in_id`, `environment` and `duration` (seconds). To create the monitor from a check-in, `POST` a JSON body with a `monitor_config`. The endpoint answers `202 Accepted`. A check-in for a monitor that doesn't exist yet, sent without a `monitor_config`, gets a `404` explaining why.
+`GET` or `POST` both work. The query string takes `status` (required), `check_in_id`, `environment` and `duration` (seconds). To create the monitor from a check-in, `POST` a JSON body with a `monitor_config` and `Content-Type: application/json`; without that header the body is ignored and only the query string is read:
+
+```bash
+curl -X POST "$RUSTRAK_CRONS" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "ok", "monitor_config": {"schedule": {"type": "crontab", "value": "0 3 * * *"}}}'
+```
+
+The endpoint answers `202 Accepted`. A check-in for a monitor that doesn't exist yet, sent without a `monitor_config`, gets a `404` explaining why.
 
 `sentry-cli monitors run` wraps a command and reports its exit code:
 
