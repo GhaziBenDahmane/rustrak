@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { RustrakClient } from '@rustrak/client';
 import { z } from 'zod';
 import { mcpJson, mcpRefusal } from '../errors.js';
+import { scheduleSchema } from './schedules.js';
 
 export function registerStorageTools(
   server: McpServer,
@@ -195,6 +196,58 @@ export function registerStorageTools(
       }
       const result = await client.storage.gcSourceMaps();
       return mcpJson(result);
+    },
+  );
+
+  server.registerTool(
+    'get_auto_cleanup',
+    {
+      description:
+        'Get the automatic storage cleanup (admin only): whether it is on, its schedule, how old data must be to go, ' +
+        'which kinds (events, transactions with their spans, logs), when it runs next and how its last run went.',
+      inputSchema: {},
+    },
+    async () => mcpJson(await client.storage.getAutoCleanup()),
+  );
+
+  server.registerTool(
+    'update_auto_cleanup',
+    {
+      description:
+        'Turn the automatic storage cleanup on or off and set what it deletes (admin only). ' +
+        'Once enabled it permanently deletes data older than older_than_days, of the chosen kinds, on the schedule. ' +
+        'DESTRUCTIVE when enabled: you MUST set confirm=true to save enabled settings; without it the tool refuses. Turning it off needs no confirmation. ' +
+        'Send every field; check the schedule with preview_schedule first.',
+      inputSchema: {
+        enabled: z.boolean().describe('Run it on the schedule'),
+        schedule: scheduleSchema.describe('When it runs'),
+        timezone: z.string().describe('IANA zone the schedule is read in'),
+        older_than_days: z
+          .number()
+          .int()
+          .min(1)
+          .describe('Delete data older than this many days'),
+        include_events: z
+          .boolean()
+          .describe('Delete old error events (and issues left empty)'),
+        include_transactions: z
+          .boolean()
+          .describe('Delete old transactions and their spans'),
+        include_logs: z.boolean().describe('Delete old logs'),
+        confirm: z
+          .boolean()
+          .optional()
+          .describe('Must be true to save enabled settings'),
+      },
+      annotations: { destructiveHint: true },
+    },
+    async ({ confirm, ...settings }) => {
+      if (settings.enabled && confirm !== true) {
+        return mcpRefusal(
+          'update_auto_cleanup with enabled=true schedules permanent deletion and was not confirmed. Show the user the settings, then call again with confirm=true to proceed.',
+        );
+      }
+      return mcpJson(await client.storage.updateAutoCleanup(settings));
     },
   );
 }
