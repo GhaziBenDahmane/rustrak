@@ -435,7 +435,7 @@ async fn source_map_gc_is_admin_only() {
 }
 
 // =============================================================================
-// Automatic cleanup: GET/PUT /api/storage/auto-cleanup and its scheduled job
+// Retention: GET/PUT /api/storage/retention, its preview and its scheduled job
 // =============================================================================
 
 async fn seed_old_log(pool: &DbPool, project_id: i32, days_ago: i64) {
@@ -466,59 +466,132 @@ async fn log_count(pool: &DbPool) -> i64 {
         .unwrap()
 }
 
+fn test_store() -> Arc<dyn SourceMapStore> {
+    Arc::new(LocalSourceMapStore::new(
+        std::env::temp_dir().join("rustrak-storage-test"),
+    ))
+}
+
+/// An orphaned source map: a `source_file` row no upload references.
+async fn insert_orphan_source_file(pool: &DbPool, size: i64) {
+    // 40 characters, a SHA-1 like production's: Postgres pads `CHAR(40)`.
+    let checksum = format!("{}00000000", Uuid::new_v4().simple());
+    sqlx::query(
+        "INSERT INTO source_file (id, checksum, size, storage_path) VALUES ($1, $2, $3, $4)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(&checksum)
+    .bind(size)
+    .bind(&checksum)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn create_project(pool: &DbPool, name: &str) -> i32 {
+    ProjectService::create(
+        pool,
+        CreateProject {
+            name: name.to_string(),
+            slug: None,
+            platform: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id
+}
+
+async fn project_log_count(pool: &DbPool, project_id: i32) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM logs WHERE project_id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// Runs the scheduled retention job twice, a day apart: the first tick only
+/// schedules it, the second runs it.
+async fn run_retention_job(pool: &DbPool, cleanup: web::Data<CleanupJob>) {
+    use rustrak::scheduler::engine::Scheduler;
+    use rustrak::scheduler::jobs::StorageCleanupJob;
+
+    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob::new(
+        cleanup,
+        test_store(),
+    ))]);
+    let now = Utc::now();
+    for tick in [now, now + chrono::Duration::days(8)] {
+        for handle in scheduler.tick(pool, tick).await.unwrap() {
+            handle.await.unwrap();
+        }
+    }
+}
+
+async fn put_retention<S>(app: &S, token: &str, settings: &Value) -> actix_web::dev::ServiceResponse
+where
+    S: actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+{
+    let req = test::TestRequest::put()
+        .uri("/api/storage/retention")
+        .insert_header(bearer(token))
+        .set_json(settings)
+        .to_request();
+    test::call_service(app, req).await
+}
+
 #[actix_web::test]
-async fn auto_cleanup_is_off_by_default_with_sensible_settings() {
+async fn retention_keeps_everything_forever_by_default() {
     let db = TestDb::new().await;
     let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
     let token = token_for(&db.pool, admin.id).await;
     let app = build_app!(db.pool.clone(), create_test_config());
 
     let req = test::TestRequest::get()
-        .uri("/api/storage/auto-cleanup")
+        .uri("/api/storage/retention")
         .insert_header(bearer(&token))
         .to_request();
     let body: Value = test::call_and_read_body_json(&app, req).await;
 
-    assert_eq!(body["settings"]["enabled"], false);
     assert_eq!(
-        body["settings"]["schedule"],
-        json!({"type": "crontab", "value": "0 3 * * *"})
+        body["settings"],
+        json!({
+            "defaults": {"events_days": null, "transactions_days": null, "logs_days": null},
+            "overrides": [],
+            "frequency": "daily",
+            "hour": 3,
+            "weekday": 0,
+        })
     );
-    assert_eq!(body["settings"]["timezone"], "UTC");
-    assert_eq!(body["settings"]["older_than_days"], 90);
-    assert_eq!(body["settings"]["include_events"], true);
-    assert_eq!(body["settings"]["include_transactions"], true);
-    assert_eq!(body["settings"]["include_logs"], true);
     assert_eq!(body["next_run_at"], Value::Null);
     assert_eq!(body["last_run"], Value::Null);
 }
 
 #[actix_web::test]
-async fn auto_cleanup_settings_are_saved() {
+async fn retention_settings_are_saved() {
     let db = TestDb::new().await;
     let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
     let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "keep-longer").await;
     let app = build_app!(db.pool.clone(), create_test_config());
 
     let settings = json!({
-        "enabled": true,
-        "schedule": {"type": "crontab", "value": "30 4 * * 0"},
-        "timezone": "Europe/Madrid",
-        "older_than_days": 30,
-        "include_events": false,
-        "include_transactions": true,
-        "include_logs": true,
+        "defaults": {"events_days": 90, "transactions_days": 30, "logs_days": null},
+        "overrides": [
+            {"project_id": project, "events_days": 365, "transactions_days": null, "logs_days": 7}
+        ],
+        "frequency": "weekly",
+        "hour": 4,
+        "weekday": 6,
     });
-    let req = test::TestRequest::put()
-        .uri("/api/storage/auto-cleanup")
-        .insert_header(bearer(&token))
-        .set_json(&settings)
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 200);
+    assert_eq!(put_retention(&app, &token, &settings).await.status(), 200);
 
     let req = test::TestRequest::get()
-        .uri("/api/storage/auto-cleanup")
+        .uri("/api/storage/retention")
         .insert_header(bearer(&token))
         .to_request();
     let body: Value = test::call_and_read_body_json(&app, req).await;
@@ -526,46 +599,43 @@ async fn auto_cleanup_settings_are_saved() {
 }
 
 #[actix_web::test]
-async fn auto_cleanup_rejects_settings_that_cannot_run() {
+async fn retention_rejects_settings_that_cannot_run() {
     let db = TestDb::new().await;
     let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
     let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "twice").await;
     let app = build_app!(db.pool.clone(), create_test_config());
 
     let base = json!({
-        "enabled": true,
-        "schedule": {"type": "crontab", "value": "0 3 * * *"},
-        "timezone": "UTC",
-        "older_than_days": 30,
-        "include_events": true,
-        "include_transactions": true,
-        "include_logs": true,
+        "defaults": {"events_days": 30, "transactions_days": 30, "logs_days": 30},
+        "overrides": [],
+        "frequency": "daily",
+        "hour": 3,
+        "weekday": 0,
     });
+    let twice = json!([
+        {"project_id": project, "events_days": 1, "transactions_days": 1, "logs_days": 1},
+        {"project_id": project, "events_days": 2, "transactions_days": 2, "logs_days": 2},
+    ]);
     let cases = [
-        (
-            "schedule",
-            json!({"schedule": {"type": "crontab", "value": "nope"}}),
-        ),
-        ("timezone", json!({"timezone": "Mars/Olympus"})),
-        ("older_than_days", json!({"older_than_days": 0})),
-        // `Duration::days` panics past ~25 trillion years.
-        ("older_than_days", json!({"older_than_days": i64::MAX})),
-        (
-            "include_events",
-            json!({"include_events": false, "include_transactions": false, "include_logs": false}),
-        ),
+        ("events_days", json!({"defaults": {"events_days": 0}})),
+        ("logs_days", json!({"defaults": {"logs_days": i64::MAX}})),
+        ("hour", json!({"hour": 24})),
+        ("weekday", json!({"weekday": 7})),
+        ("overrides", json!({"overrides": twice})),
     ];
     for (field, patch) in cases {
         let mut body = base.clone();
         for (k, v) in patch.as_object().unwrap() {
-            body[k] = v.clone();
+            if k == "defaults" {
+                for (dk, dv) in v.as_object().unwrap() {
+                    body["defaults"][dk] = dv.clone();
+                }
+            } else {
+                body[k] = v.clone();
+            }
         }
-        let req = test::TestRequest::put()
-            .uri("/api/storage/auto-cleanup")
-            .insert_header(bearer(&token))
-            .set_json(&body)
-            .to_request();
-        let resp = test::call_service(&app, req).await;
+        let resp = put_retention(&app, &token, &body).await;
         assert_eq!(resp.status(), 400, "{field}");
         let err: Value = test::read_body_json(resp).await;
         assert_eq!(err["error"]["fields"][0]["field"], field);
@@ -573,108 +643,109 @@ async fn auto_cleanup_rejects_settings_that_cannot_run() {
 }
 
 #[actix_web::test]
-async fn auto_cleanup_is_admin_only() {
+async fn retention_is_admin_only() {
     let db = TestDb::new().await;
     let member = seed_user(&db.pool, "member@x.com", UserRole::Member).await;
     let token = token_for(&db.pool, member.id).await;
     let app = build_app!(db.pool.clone(), create_test_config());
 
-    let req = test::TestRequest::get()
-        .uri("/api/storage/auto-cleanup")
-        .insert_header(bearer(&token))
-        .to_request();
-    assert_eq!(test::call_service(&app, req).await.status(), 403);
-    let req = test::TestRequest::put()
-        .uri("/api/storage/auto-cleanup")
-        .insert_header(bearer(&token))
-        .set_json(json!({"enabled": true}))
-        .to_request();
-    assert_eq!(test::call_service(&app, req).await.status(), 403);
+    for req in [
+        test::TestRequest::get().uri("/api/storage/retention"),
+        test::TestRequest::put()
+            .uri("/api/storage/retention")
+            .set_json(json!({})),
+        test::TestRequest::post()
+            .uri("/api/storage/retention/preview")
+            .set_json(json!({})),
+    ] {
+        let req = req.insert_header(bearer(&token)).to_request();
+        assert_eq!(test::call_service(&app, req).await.status(), 403);
+    }
 }
 
 #[actix_web::test]
-async fn the_cleanup_job_purges_only_the_chosen_categories_on_schedule() {
-    use rustrak::scheduler::engine::Scheduler;
-    use rustrak::scheduler::jobs::StorageCleanupJob;
-
+async fn retention_preview_counts_what_each_project_would_lose_without_deleting() {
     let db = TestDb::new().await;
-    let project = ProjectService::create(
-        &db.pool,
-        CreateProject {
-            name: "auto-cleanup".to_string(),
-            slug: None,
-            platform: None,
-        },
-    )
-    .await
-    .unwrap();
-    seed_old_log(&db.pool, project.id, 40).await;
-    seed_old_log(&db.pool, project.id, 5).await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let default_project = create_project(&db.pool, "default").await;
+    let custom = create_project(&db.pool, "custom").await;
+    for project in [default_project, custom] {
+        seed_old_log(&db.pool, project, 40).await;
+        seed_old_log(&db.pool, project, 5).await;
+    }
+    let app = build_app!(db.pool.clone(), create_test_config());
 
-    Scheduler::update_settings(
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/preview")
+        .insert_header(bearer(&token))
+        .set_json(json!({
+            "defaults": {"events_days": null, "transactions_days": null, "logs_days": 30},
+            "overrides": [
+                {"project_id": custom, "events_days": null, "transactions_days": null, "logs_days": 1}
+            ],
+        }))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+
+    // The default project loses its 40-day-old log; the custom one both.
+    assert_eq!(body["logs"], 3);
+    assert_eq!(body["events"], 0);
+    assert_eq!(log_count(&db.pool).await, 4, "a preview deletes nothing");
+}
+
+#[actix_web::test]
+async fn the_retention_job_applies_each_projects_own_windows() {
+    let db = TestDb::new().await;
+    let default_project = create_project(&db.pool, "default").await;
+    let custom = create_project(&db.pool, "custom").await;
+    let forever = create_project(&db.pool, "forever").await;
+    for project in [default_project, custom, forever] {
+        seed_old_log(&db.pool, project, 40).await;
+        seed_old_log(&db.pool, project, 5).await;
+    }
+    rustrak::scheduler::engine::Scheduler::update_settings(
         &db.pool,
-        StorageCleanupJob::KEY,
+        rustrak::scheduler::jobs::StorageCleanupJob::KEY,
         json!({
-            "enabled": true,
-            "schedule": {"type": "interval", "value": 1, "unit": "day"},
-            "timezone": "UTC",
-            "older_than_days": 30,
-            "include_events": false,
-            "include_transactions": false,
-            "include_logs": true,
+            "defaults": {"events_days": null, "transactions_days": null, "logs_days": 30},
+            "overrides": [
+                {"project_id": custom, "events_days": null, "transactions_days": null, "logs_days": 1},
+                {"project_id": forever, "events_days": null, "transactions_days": null, "logs_days": null}
+            ],
         }),
     )
     .await
     .unwrap();
     let cleanup = web::Data::new(CleanupJob::default());
-    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob::new(cleanup.clone()))]);
-    let now = Utc::now();
-    for tick in [now, now + chrono::Duration::days(1)] {
-        for handle in scheduler.tick(&db.pool, tick).await.unwrap() {
-            handle.await.unwrap();
-        }
-    }
 
-    assert_eq!(log_count(&db.pool).await, 1, "only the 40-day-old log goes");
+    run_retention_job(&db.pool, cleanup.clone()).await;
+
+    assert_eq!(project_log_count(&db.pool, default_project).await, 1);
+    assert_eq!(project_log_count(&db.pool, custom).await, 0);
+    assert_eq!(project_log_count(&db.pool, forever).await, 2);
     // It ran through the manual cleanup's job, so the two never overlap.
     let status = cleanup.status();
     assert_eq!(status.state, rustrak::models::CleanupState::Completed);
-    assert_eq!(status.removed.logs, 1);
-    let state = Scheduler::job(&db.pool, StorageCleanupJob::KEY)
-        .await
-        .unwrap();
-    assert_eq!(state.last_result.unwrap()["logs"], 1);
+    assert_eq!(status.removed.logs, 3);
 }
 
 #[actix_web::test]
-async fn a_disabled_cleanup_job_deletes_nothing() {
-    use rustrak::scheduler::engine::Scheduler;
-    use rustrak::scheduler::jobs::StorageCleanupJob;
-
+async fn keeping_everything_forever_never_runs_the_job() {
     let db = TestDb::new().await;
-    let project = ProjectService::create(
+    let project = create_project(&db.pool, "forever").await;
+    seed_old_log(&db.pool, project, 400).await;
+
+    run_retention_job(&db.pool, web::Data::new(CleanupJob::default())).await;
+
+    assert_eq!(log_count(&db.pool).await, 1);
+    let state = rustrak::scheduler::engine::Scheduler::job(
         &db.pool,
-        CreateProject {
-            name: "auto-cleanup-off".to_string(),
-            slug: None,
-            platform: None,
-        },
+        rustrak::scheduler::jobs::StorageCleanupJob::KEY,
     )
     .await
     .unwrap();
-    seed_old_log(&db.pool, project.id, 400).await;
-
-    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob::new(web::Data::new(
-        CleanupJob::default(),
-    )))]);
-    let now = Utc::now();
-    for tick in [now, now + chrono::Duration::days(30)] {
-        for handle in scheduler.tick(&db.pool, tick).await.unwrap() {
-            handle.await.unwrap();
-        }
-    }
-
-    assert_eq!(log_count(&db.pool).await, 1);
+    assert_eq!(state.next_run_at, None);
 }
 
 #[actix_web::test]
@@ -685,9 +756,13 @@ async fn a_cleanup_cut_short_by_a_restart_is_not_shown_as_running() {
     let db = TestDb::new().await;
     let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
     let token = token_for(&db.pool, admin.id).await;
-    Scheduler::update_settings(&db.pool, StorageCleanupJob::KEY, json!({"enabled": true}))
-        .await
-        .unwrap();
+    Scheduler::update_settings(
+        &db.pool,
+        StorageCleanupJob::KEY,
+        json!({"defaults": {"logs_days": 30}}),
+    )
+    .await
+    .unwrap();
     // Started before a restart, never finished, and no task survives it.
     sqlx::query(if cfg!(feature = "postgres") {
         "UPDATE scheduled_jobs SET last_started_at = $1 WHERE key = $2"
@@ -702,7 +777,7 @@ async fn a_cleanup_cut_short_by_a_restart_is_not_shown_as_running() {
     let app = build_app!(db.pool.clone(), create_test_config());
 
     let req = test::TestRequest::get()
-        .uri("/api/storage/auto-cleanup")
+        .uri("/api/storage/retention")
         .insert_header(bearer(&token))
         .to_request();
     let body: Value = test::read_body_json(test::call_service(&app, req).await).await;
@@ -711,4 +786,175 @@ async fn a_cleanup_cut_short_by_a_restart_is_not_shown_as_running() {
         .as_str()
         .unwrap()
         .contains("restart"));
+}
+
+#[actix_web::test]
+async fn the_projects_breakdown_splits_its_size_by_kind() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "logs-only").await;
+    seed_old_log(&db.pool, project, 5).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::get()
+        .uri("/api/storage/projects")
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+    let row = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["project_id"] == project)
+        .unwrap();
+
+    assert_eq!(row["events_bytes"], 0);
+    assert_eq!(row["transactions_bytes"], 0);
+    assert!(row["logs_bytes"].as_i64().unwrap() > 0);
+    assert_eq!(row["estimated_bytes"], row["logs_bytes"]);
+}
+
+#[actix_web::test]
+async fn the_age_breakdown_buckets_each_kind_by_how_long_ago_it_arrived() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "aged").await;
+    for days in [5, 40, 400] {
+        seed_old_log(&db.pool, project, days).await;
+    }
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::get()
+        .uri("/api/storage/age")
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+
+    assert_eq!(body["bucket_days"], json!([7, 14, 30, 90, 180, 365]));
+    let row = body["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["project_id"] == project)
+        .unwrap();
+    // Under 7 days, 30–90 and over a year.
+    assert_eq!(row["logs"]["counts"], json!([1, 0, 0, 1, 0, 0, 1]));
+    assert_eq!(row["events"]["counts"], json!([0, 0, 0, 0, 0, 0, 0]));
+    assert_eq!(row["events"]["oldest"], Value::Null);
+    let oldest = chrono::DateTime::parse_from_rfc3339(row["logs"]["oldest"].as_str().unwrap())
+        .unwrap()
+        .with_timezone(&Utc);
+    assert!(Utc::now() - oldest > chrono::Duration::days(399));
+}
+
+#[actix_web::test]
+async fn the_age_breakdown_is_admin_only() {
+    let db = TestDb::new().await;
+    let member = seed_user(&db.pool, "member@x.com", UserRole::Member).await;
+    let token = token_for(&db.pool, member.id).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::get()
+        .uri("/api/storage/age")
+        .insert_header(bearer(&token))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 403);
+}
+
+#[actix_web::test]
+async fn cleaning_up_now_enforces_the_saved_retention_in_the_background() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "now").await;
+    seed_old_log(&db.pool, project, 40).await;
+    seed_old_log(&db.pool, project, 5).await;
+    insert_orphan_source_file(&db.pool, 2_048).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+    let settings =
+        json!({"defaults": {"events_days": null, "transactions_days": null, "logs_days": 30}});
+    assert_eq!(put_retention(&app, &token, &settings).await.status(), 200);
+
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/run")
+        .insert_header(bearer(&token))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 202);
+    let status = wait_for_cleanup(&app, &token).await;
+
+    assert_eq!(status["state"], "completed");
+    assert_eq!(status["removed"]["logs"], 1);
+    // Unused source maps go with every cleanup.
+    assert_eq!(status["removed"]["source_maps"], 1);
+    assert_eq!(project_log_count(&db.pool, project).await, 1);
+
+    // It is the last cleanup, as a scheduled one would be. Recorded just
+    // after the job finishes, so wait for it.
+    let mut last_run = Value::Null;
+    for _ in 0..100 {
+        let req = test::TestRequest::get()
+            .uri("/api/storage/retention")
+            .insert_header(bearer(&token))
+            .to_request();
+        let body: Value = test::call_and_read_body_json(&app, req).await;
+        last_run = body["last_run"].clone();
+        if last_run["status"] != "running" && !last_run.is_null() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(last_run["status"], "ok");
+    assert_eq!(last_run["removed"]["logs"], 1);
+}
+
+#[actix_web::test]
+async fn cleaning_up_now_refuses_while_everything_is_kept_forever() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/run")
+        .insert_header(bearer(&token))
+        .to_request();
+    assert_eq!(test::call_service(&app, req).await.status(), 400);
+}
+
+#[actix_web::test]
+async fn the_retention_preview_counts_the_unused_source_maps_it_would_delete() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    insert_orphan_source_file(&db.pool, 2_048).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/preview")
+        .insert_header(bearer(&token))
+        .set_json(json!({"defaults": {"logs_days": 30}}))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+
+    assert_eq!(body["source_maps"], 1);
+}
+
+#[actix_web::test]
+async fn keeping_everything_forever_previews_no_source_maps_since_no_cleanup_runs() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    insert_orphan_source_file(&db.pool, 2_048).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::post()
+        .uri("/api/storage/retention/preview")
+        .insert_header(bearer(&token))
+        .set_json(json!({}))
+        .to_request();
+    let body: Value = test::call_and_read_body_json(&app, req).await;
+
+    assert_eq!(body["source_maps"], 0);
 }

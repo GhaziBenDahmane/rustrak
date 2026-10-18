@@ -1168,98 +1168,135 @@
     }
   },
   "storage": {
-    "period": "Plus de {count, plural, =1 {# jour} other {# jours}}",
-    "type": {
+    "action": "Configurer la rétention",
+    "cancel": "Annuler",
+    "kind": {
       "events": "Erreurs",
       "transactions": "Transactions",
-      "logs": "Logs"
+      "logs": "Logs",
+      "sourceMaps": "Source maps"
     },
-    "line": {
-      "emptyIssues": "Problèmes vides",
-      "spans": "Spans"
+    "overview": {
+      "title": "Espace utilisé",
+      "rows": "{count, plural, =1 {# ligne} other {{rows} lignes}}",
+      "files": "{count, plural, =1 {# fichier} other {# fichiers}}",
+      "cleaning": "Nettoyage en cours : {parts}",
+      "starting": "démarrage…",
+      "off": "Rien n’est supprimé : toutes les données sont conservées toujours. Configurez la rétention pour libérer de l’espace automatiquement.",
+      "next": "Prochain nettoyage {when} · libérera ≈ {size}",
+      "scheduling": "Planification du prochain nettoyage…"
     },
-    "allProjects": "Tous les projets",
-    "retentionPeriodLabel": "Période de rétention",
-    "projectScopeLabel": "Portée du projet",
-    "dataLabel": "Données",
-    "cleanup": {
-      "title": "Nettoyer les anciennes données",
-      "description": "Supprime définitivement les données sélectionnées plus anciennes que la période choisie. Prévisualisez d’abord — c’est irréversible."
+    "status": {
+      "lastRunRunning": "Dernier nettoyage en cours depuis {when}",
+      "lastRunFailed": "Le dernier nettoyage ({when}) a échoué : {error}",
+      "lastRunNothing": "Dernier nettoyage {when} : rien à supprimer",
+      "lastRunRemoved": "Dernier nettoyage {when} : {parts} supprimés",
+      "off": "Tout est conservé toujours",
+      "nextRun": "Prochain nettoyage {when}",
+      "nextRunPending": "Planification…"
     },
-    "working": "Traitement…",
-    "preview": "Prévisualiser",
-    "nothingMatches": "Rien ne correspond à cette sélection ({period}) pour {scope} — il n’y a rien à supprimer.",
-    "wouldRemove": "Ce nettoyage supprimerait",
-    "deleteTrigger": "Supprimer définitivement",
-    "deleteRowsTitle": "Supprimer {count, plural, =1 {# ligne} other {# lignes}} ?",
-    "deleteRowsDescription": "Cette action supprime définitivement les données sélectionnées datant de {period} pour {scope}. Elle est irréversible.",
-    "cancel": "Annuler",
-    "deleting": "Suppression…",
-    "deleteAction": "Supprimer définitivement",
-    "running": {
-      "title": "Nettoyage en cours",
-      "description": "Suppression par petits lots en arrière-plan, pour que l'ingestion continue de fonctionner. Vous pouvez quitter cette page : il continue de s'exécuter."
+    "age": {
+      "title": "Ancienneté des données",
+      "description": "Depuis quand chaque octet est arrivé. La partie hachurée part au prochain nettoyage.",
+      "age": "Ancienneté",
+      "bucket0": "< 7 jours",
+      "bucket1": "7–14 jours",
+      "bucket2": "14–30 jours",
+      "bucket3": "30–90 jours",
+      "bucket4": "90–180 jours",
+      "bucket5": "180 jours – 1 an",
+      "bucket6": "> 1 an",
+      "empty": "Pas encore de données.",
+      "goes": "Supprimé au prochain nettoyage",
+      "goesInBucket": "{size} supprimés au prochain nettoyage"
+    },
+    "projects": {
+      "title": "Projets",
+      "search": "Rechercher des projets",
+      "project": "Projet",
+      "size": "Taille",
+      "retention": "Rétention",
+      "empty": "Aucun projet pour l’instant.",
+      "noMatch": "Aucun projet ne correspond.",
+      "own": "Propre",
+      "general": "Générale",
+      "change": "Modifier la rétention de {project}"
+    },
+    "keep": {
+      "forever": "Pour toujours",
+      "days": "{count, plural, =1 {# jour} other {# jours}}"
+    },
+    "dialog": {
+      "title": "Rétention",
+      "description": "Combien de temps chaque type de données est conservé dans tous les projets. Ce qui est plus ancien est supprimé à chaque nettoyage.",
+      "runs": "Le nettoyage s’exécute",
+      "frequency": "Fréquence",
+      "weekday": "Jour",
+      "hour": "Heure",
+      "at": "à",
+      "customProjects": "{count, plural, =1 {# projet a sa propre rétention ; modifiez-la depuis sa ligne.} other {# projets ont leur propre rétention ; modifiez-la depuis leur ligne.}}",
+      "counting": "Comptage de ce qui serait supprimé…",
+      "impact": "Le prochain nettoyage supprimera {parts} (≈ {size}).",
+      "noImpact": "Rien n’est encore assez ancien pour être supprimé.",
+      "save": "Enregistrer",
+      "saveAndClean": "Enregistrer et nettoyer maintenant",
+      "saved": "Rétention enregistrée",
+      "saveFailed": "Impossible d’enregistrer la rétention",
+      "alreadyRunning": "Un nettoyage est déjà en cours.",
+      "confirmTitle": "Supprimer ≈ {size} maintenant ?",
+      "confirmDescription": "Supprime définitivement {parts}, ainsi que les source maps qu’aucun envoi n’utilise. S’exécute en arrière-plan et est irréversible.",
+      "confirmAction": "Supprimer ≈ {size}",
+      "kindColumn": "Données",
+      "keepColumn": "Conservées pendant",
+      "foreverHint": "Ce qui dépasse cette durée est supprimé à chaque nettoyage. « Pour toujours » ne supprime jamais ce type.",
+      "countFailed": "Impossible de compter ce qui serait supprimé.",
+      "retry": "Réessayer"
+    },
+    "projectDialog": {
+      "title": "Rétention de {project}",
+      "description": "Utilisez la rétention générale, ou conservez les données de ce projet pendant d’autres durées.",
+      "general": "Utiliser la rétention générale",
+      "own": "Sa propre rétention",
+      "ownHint": "D’autres durées pour ce projet uniquement"
+    },
+    "schedule": {
+      "daily": "Chaque jour",
+      "weekly": "Chaque semaine"
     },
     "toasts": {
-      "previewFailed": "Impossible de prévisualiser le nettoyage",
-      "cleanupFailed": "Échec du nettoyage",
-      "removed": "Supprimé : {parts}",
-      "nothingRemoved": "Aucune correspondance — aucune donnée supprimée",
-      "sourceMapPreviewFailed": "Impossible de prévisualiser le nettoyage des source maps",
-      "gcFailed": "Échec du nettoyage des source maps",
-      "sourceMapsRemoved": "{count, plural, =1 {# source map orpheline supprimée ({freed} libérés)} other {# source maps orphelines supprimées ({freed} libérés)}}"
+      "cleanupFailed": "Le nettoyage a échoué",
+      "removed": "{parts} supprimés",
+      "nothingRemoved": "Rien à supprimer",
+      "gcFailed": "Impossible de supprimer les source maps inutilisées"
     },
     "unit": {
       "errors": "{count, plural, =1 {# erreur} other {# erreurs}}",
       "transactions": "{count, plural, =1 {# transaction} other {# transactions}}",
       "spans": "{count, plural, =1 {# span} other {# spans}}",
-      "logs": "{count, plural, =1 {# journal} other {# journaux}}",
-      "emptyIssues": "{count, plural, =1 {# problème vide} other {# problèmes vides}}"
+      "logs": "{count, plural, =1 {# log} other {# logs}}",
+      "emptyIssues": "{count, plural, =1 {# issue vide} other {# issues vides}}",
+      "sourceMaps": "{count, plural, =1 {# source map inutilisée} other {# source maps inutilisées}}"
     },
-    "sourceMaps": {
-      "title": "Source maps orphelines",
-      "description": "Supprime les fichiers de source map qu’aucun téléversement ne référence plus — par exemple, des fichiers restés en place après la suppression d’un projet. Prévisualisez d’abord ; les fichiers référencés ne sont jamais touchés.",
-      "nothingToClean": "Aucune source map orpheline — rien à nettoyer.",
-      "wouldRemove": "Ce nettoyage supprimerait :",
-      "fileCount": "{count, plural, =1 {# source map orpheline} other {# source maps orphelines}}",
-      "freed": "{bytes} libérés",
-      "removeAction": "Supprimer les source maps orphelines",
-      "removeTitle": "Supprimer {count, plural, =1 {# source map orpheline} other {# source maps orphelines}} ?",
-      "removeDescription": "Cette action supprime définitivement de la base de données et du disque {count, plural, =1 {# fichier de source map} other {# fichiers de source map}} ({bytes}) qu’aucun téléversement ne référence. Les fichiers référencés ne sont pas affectés."
+    "deleteAction": "Supprimer des données",
+    "kindHint": {
+      "events": "Événements d’erreur, et les issues qui n’en ont plus",
+      "transactions": "Traces de performance avec leurs spans",
+      "logs": "Lignes de log structurées"
     },
-    "removing": "Suppression…",
-    "remove": "Supprimer",
-    "auto": {
-      "title": "Nettoyage automatique",
-      "description": "Supprimez les anciennes données selon une planification pour que le stockage ne grossisse pas sans fin. Seuls les types choisis sont touchés.",
-      "enabled": "Nettoyer automatiquement",
-      "enabledHint": "S’exécute en arrière-plan par petits lots, l’ingestion continue donc de fonctionner.",
-      "olderThan": "Supprimer les données de plus de",
-      "days": "{count, plural, =1 {jour} other {jours}}",
-      "dataLabel": "Quoi nettoyer",
-      "eventsHint": "Événements d’erreur et les tickets qu’ils laissent vides",
-      "transactionsHint": "Transactions et leurs spans",
-      "logsHint": "Logs structurés",
-      "scheduleLabel": "Quand",
-      "timezone": "Fuseau horaire",
-      "timezonePlaceholder": "Rechercher un fuseau",
-      "timezoneNoResults": "Aucun fuseau correspondant",
-      "save": "Enregistrer",
-      "saving": "Enregistrement…",
-      "saved": "Nettoyage automatique enregistré",
-      "saveFailed": "Impossible d’enregistrer le nettoyage automatique",
-      "loadFailed": "Impossible de charger le nettoyage automatique",
-      "pickOne": "Choisissez au moins un type de données",
-      "daysMin": "Au moins 1 jour",
-      "crontabRequired": "Saisissez un crontab",
-      "intervalMin": "Au moins 1",
-      "nextRun": "Prochaine exécution {when}",
-      "nextRunPending": "Planification de la prochaine exécution…",
-      "off": "Désactivé",
-      "lastRunRunning": "En cours depuis {when}",
-      "lastRunFailed": "La dernière exécution {when} a échoué : {error}",
-      "lastRunNothing": "Dernière exécution {when} : rien à supprimer",
-      "lastRunRemoved": "Dernière exécution {when} : {parts} supprimés"
+    "delete": {
+      "title": "Supprimer des données maintenant",
+      "description": "Supprime définitivement les données choisies, sans attendre le nettoyage. S’exécute en arrière-plan et est irréversible.",
+      "what": "Quoi supprimer",
+      "olderThan": "Plus anciennes que",
+      "in": "Dans",
+      "allProjects": "Tous les projets",
+      "pickOne": "Choisissez au moins un type de données.",
+      "impact": "Supprime {parts} (≈ {size}).",
+      "nothing": "Rien ne correspond : il n’y a rien à supprimer.",
+      "action": "Supprimer ≈ {size}",
+      "actionIdle": "Supprimer",
+      "sourceMaps": "Source maps inutilisées",
+      "sourceMapsHint": "Fichiers qu’aucun envoi ne référence plus ; ceux qui sont référencés ne sont jamais touchés"
     }
   },
   "errors": {
@@ -1661,26 +1698,9 @@
         "description": "Utilisation du stockage et rétention des données"
       },
       "title": "Stockage",
-      "subtitle": "Voyez ce que Rustrak conserve et récupérez de l’espace en nettoyant les anciennes données",
+      "subtitle": "Ce que Rustrak conserve et pendant combien de temps",
       "notAuthorizedDescription": "Seuls les administrateurs de l’instance peuvent consulter l’utilisation du stockage et lancer des nettoyages. Contactez un admin si vous avez besoin d’y accéder.",
-      "loadSummaryFailed": "Impossible de lire l’utilisation du stockage",
-      "dbSize": "Taille de la base de données",
-      "eventsCount": "{count} événements",
-      "transactions": "Transactions",
-      "spansCount": "{count} spans",
-      "spans": "Spans",
-      "spansSub": "indexés à partir des transactions",
-      "logs": "Logs",
-      "logsSub": "enregistrements de journal structurés",
-      "sourceMaps": "Source maps",
-      "sourceMapsFiles": "{count} fichiers",
-      "loadBreakdownFailed": "Impossible de lire la répartition par projet",
-      "byProject": "Par projet",
-      "byProjectDescription": "Nombres et poids estimé des données détenues par chaque projet",
-      "noProjects": "Aucun projet pour le moment.",
-      "project": "Projet",
-      "events": "Événements",
-      "estSize": "Taille est."
+      "loadFailed": "Impossible de lire le stockage"
     },
     "account": {
       "meta": {

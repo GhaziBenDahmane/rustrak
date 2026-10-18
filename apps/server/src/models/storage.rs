@@ -97,6 +97,20 @@ pub struct CleanupCounts {
     pub spans: i64,
     pub logs: i64,
     pub issues_removed: i64,
+    /// Unused source maps deleted; only a retention cleanup removes them.
+    #[serde(default)]
+    pub source_maps: i64,
+}
+
+impl std::ops::AddAssign for CleanupCounts {
+    fn add_assign(&mut self, other: Self) {
+        self.events += other.events;
+        self.transactions += other.transactions;
+        self.spans += other.spans;
+        self.logs += other.logs;
+        self.issues_removed += other.issues_removed;
+        self.source_maps += other.source_maps;
+    }
 }
 
 /// Where the instance's cleanup job is. There is at most one at a time.
@@ -154,7 +168,46 @@ pub struct ProjectStorage {
     pub spans_count: i64,
     pub logs_count: i64,
     pub source_maps_count: i64,
+    /// `events_bytes + transactions_bytes + logs_bytes`.
     pub estimated_bytes: i64,
+    pub events_bytes: i64,
+    /// Transactions with their spans.
+    pub transactions_bytes: i64,
+    pub logs_bytes: i64,
+}
+
+/// Upper bounds, in days, of the age buckets: under 7 days, 7–14, 14–30,
+/// 30–90, 90–180, 180–365 and over a year. They are the retention presets, so
+/// what a preset deletes is whole buckets.
+pub const AGE_BUCKET_DAYS: [i64; 6] = [7, 14, 30, 90, 180, 365];
+
+/// How long ago a kind of data arrived: rows per age bucket, and the oldest.
+#[derive(Debug, Default, Serialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct KindAge {
+    /// One count per bucket, `AGE_BUCKET_DAYS.len() + 1` of them.
+    pub counts: Vec<i64>,
+    pub oldest: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Default, Serialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ProjectAge {
+    pub project_id: i32,
+    pub events: KindAge,
+    /// Transactions; their spans are as old.
+    pub transactions: KindAge,
+    pub logs: KindAge,
+}
+
+/// The age of everything the instance holds, by project and kind, keyed on
+/// ingest time like retention.
+#[derive(Debug, Default, Serialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct StorageAge {
+    /// The buckets' upper bounds in days; the last bucket has none.
+    pub bucket_days: Vec<i64>,
+    pub projects: Vec<ProjectAge>,
 }
 
 /// Exact source-map storage weight, summed from the `size` columns.
@@ -175,81 +228,181 @@ pub struct SourceMapStorage {
     pub file_count: i64,
 }
 
-/// Automatic cleanup: delete data older than `older_than_days`, of the chosen
-/// categories, on a schedule. Stored as the settings of the
-/// `storage_cleanup` scheduled job; a field left out takes its default.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// How long each kind of data is kept, in days. `None` keeps it forever.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(default)]
-pub struct AutoCleanupSettings {
-    pub enabled: bool,
-    pub schedule: crate::scheduler::schedule::Schedule,
-    /// IANA zone the schedule is read in.
-    pub timezone: String,
-    #[cfg_attr(feature = "openapi", schema(minimum = 1))]
-    pub older_than_days: i64,
-    pub include_events: bool,
-    pub include_transactions: bool,
-    pub include_logs: bool,
+pub struct RetentionWindows {
+    /// Error events, and the issues they leave empty.
+    pub events_days: Option<i64>,
+    /// Transactions with their spans.
+    pub transactions_days: Option<i64>,
+    pub logs_days: Option<i64>,
 }
 
-impl Default for AutoCleanupSettings {
-    /// Off, and when turned on: every night at 03:00 UTC, everything older
-    /// than 90 days.
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            schedule: crate::scheduler::schedule::Schedule::Crontab {
-                value: "0 3 * * *".to_string(),
-            },
-            timezone: "UTC".to_string(),
-            older_than_days: 90,
-            include_events: true,
-            include_transactions: true,
-            include_logs: true,
+impl RetentionWindows {
+    /// Whether anything is ever deleted.
+    pub fn deletes_anything(&self) -> bool {
+        self.events_days.is_some() || self.transactions_days.is_some() || self.logs_days.is_some()
+    }
+
+    /// One `(days, filter)` per kind with a window: each kind has its own
+    /// cutoff, so each is its own purge.
+    pub fn steps(&self) -> impl Iterator<Item = (i64, CleanupFilter)> {
+        let only = |events, transactions, logs| CleanupFilter {
+            include_events: events,
+            include_transactions: transactions,
+            include_logs: logs,
+        };
+        [
+            self.events_days.map(|d| (d, only(true, false, false))),
+            self.transactions_days
+                .map(|d| (d, only(false, true, false))),
+            self.logs_days.map(|d| (d, only(false, false, true))),
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    fn validate(&self) -> crate::error::AppResult<()> {
+        use crate::error::FieldErrorCode;
+        for (field, days) in [
+            ("events_days", self.events_days),
+            ("transactions_days", self.transactions_days),
+            ("logs_days", self.logs_days),
+        ] {
+            if let Some(days) = days {
+                crate::services::storage::validate_retention(days)
+                    .map_err(|e| e.with_field(field, FieldErrorCode::Invalid))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A project that keeps its data for other windows than the defaults. Every
+/// kind is set: an override replaces the defaults whole.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ProjectRetention {
+    pub project_id: i32,
+    pub events_days: Option<i64>,
+    pub transactions_days: Option<i64>,
+    pub logs_days: Option<i64>,
+}
+
+impl ProjectRetention {
+    pub fn windows(&self) -> RetentionWindows {
+        RetentionWindows {
+            events_days: self.events_days,
+            transactions_days: self.transactions_days,
+            logs_days: self.logs_days,
         }
     }
 }
 
-impl AutoCleanupSettings {
+/// How often the cleanup that enforces retention runs.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum CleanupFrequency {
+    #[default]
+    Daily,
+    Weekly,
+}
+
+/// Retention: how long each kind of data is kept, by default and per
+/// project, and when the cleanup that enforces it runs. Stored as the
+/// settings of the `storage_cleanup` scheduled job; a field left out takes
+/// its default. Keeping everything forever runs nothing.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(default)]
+pub struct RetentionSettings {
+    pub defaults: RetentionWindows,
+    pub overrides: Vec<ProjectRetention>,
+    pub frequency: CleanupFrequency,
+    /// Hour of the day it runs, UTC.
+    #[cfg_attr(feature = "openapi", schema(minimum = 0, maximum = 23))]
+    pub hour: u8,
+    /// Day a weekly cleanup runs, 0 = Sunday.
+    #[cfg_attr(feature = "openapi", schema(minimum = 0, maximum = 6))]
+    pub weekday: u8,
+}
+
+impl Default for RetentionSettings {
+    /// Everything kept forever; once a window is set, daily at 03:00 UTC.
+    fn default() -> Self {
+        Self {
+            defaults: RetentionWindows::default(),
+            overrides: Vec::new(),
+            frequency: CleanupFrequency::Daily,
+            hour: 3,
+            weekday: 0,
+        }
+    }
+}
+
+impl RetentionSettings {
     /// Whether these settings can run, naming the field that can't.
     pub fn validate(&self) -> crate::error::AppResult<()> {
         use crate::error::{AppError, FieldErrorCode};
-        let invalid = |message: String, field: &str| {
-            Err(AppError::Validation(message).with_field(field, FieldErrorCode::Invalid))
+        let invalid = |message: &str, field: &str| {
+            Err(AppError::Validation(message.to_string())
+                .with_field(field, FieldErrorCode::Invalid))
         };
-        if let Err(message) = self.schedule.validate() {
-            return invalid(format!("Invalid schedule: {message}"), "schedule");
+        self.defaults.validate()?;
+        let mut seen = std::collections::HashSet::new();
+        for project in &self.overrides {
+            if !seen.insert(project.project_id) {
+                return invalid("A project can have only one override", "overrides");
+            }
+            project
+                .windows()
+                .validate()
+                .map_err(|e| e.with_field("overrides", FieldErrorCode::Invalid))?;
         }
-        if let Err(message) = crate::scheduler::schedule::parse_timezone(&self.timezone) {
-            return invalid(message, "timezone");
+        if self.hour > 23 {
+            return invalid("hour must be between 0 and 23", "hour");
         }
-        if let Err(e) = crate::services::storage::validate_retention(self.older_than_days) {
-            return Err(e.with_field("older_than_days", FieldErrorCode::Invalid));
-        }
-        if self.enabled && !(self.include_events || self.include_transactions || self.include_logs)
-        {
-            return invalid(
-                "Choose at least one kind of data to clean up".to_string(),
-                "include_events",
-            );
+        if self.weekday > 6 {
+            return invalid("weekday must be between 0 (Sunday) and 6", "weekday");
         }
         Ok(())
     }
 
-    pub fn filter(&self) -> CleanupFilter {
-        CleanupFilter {
-            include_events: self.include_events,
-            include_transactions: self.include_transactions,
-            include_logs: self.include_logs,
-        }
+    /// Whether any project ever loses data, so the cleanup needs to run.
+    pub fn deletes_anything(&self) -> bool {
+        self.defaults.deletes_anything()
+            || self
+                .overrides
+                .iter()
+                .any(|o| o.windows().deletes_anything())
+    }
+
+    /// The windows a project keeps its data for.
+    pub fn windows_for(&self, project_id: i32) -> RetentionWindows {
+        self.overrides
+            .iter()
+            .find(|o| o.project_id == project_id)
+            .map(ProjectRetention::windows)
+            .unwrap_or(self.defaults)
+    }
+
+    /// When the cleanup runs, in UTC.
+    pub fn schedule(&self) -> crate::scheduler::schedule::Schedule {
+        let value = match self.frequency {
+            CleanupFrequency::Daily => format!("0 {} * * *", self.hour),
+            CleanupFrequency::Weekly => format!("0 {} * * {}", self.hour, self.weekday),
+        };
+        crate::scheduler::schedule::Schedule::Crontab { value }
     }
 }
 
-/// How the last automatic cleanup went.
+/// How the last retention cleanup went.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct AutoCleanupRun {
+pub struct RetentionRun {
     pub started_at: chrono::DateTime<chrono::Utc>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     /// `running`, `ok` or `error`.
@@ -260,9 +413,10 @@ pub struct AutoCleanupRun {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
-pub struct AutoCleanupResponse {
-    pub settings: AutoCleanupSettings,
-    /// `null` while disabled, and for up to a minute after the settings change.
+pub struct RetentionResponse {
+    pub settings: RetentionSettings,
+    /// `null` while everything is kept forever, and for up to a minute after
+    /// the settings change.
     pub next_run_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub last_run: Option<AutoCleanupRun>,
+    pub last_run: Option<RetentionRun>,
 }

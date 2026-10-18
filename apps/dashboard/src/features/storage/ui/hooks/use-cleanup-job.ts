@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
 import { getStorageCleanupStatus } from '@/features/storage/api/mutations';
-import { useRouter } from '@/shared/ui/hooks/use-router';
+import { removedParts } from '@/features/storage/model/retention';
 
 /** How often a running cleanup is asked for its progress. */
 const POLL_MS = 2000;
@@ -15,11 +15,10 @@ const POLL_MS = 2000;
  * instead of waiting on the request that started it. On mount it picks up a
  * cleanup already running (started before a reload, in another tab, or through
  * the MCP). `follow` hands it a job just started. The outcome is announced
- * once, with a toast, and the page data refreshed.
+ * once, with a toast, and `onSettled` called so the page reads its data again.
  */
-export function useCleanupJob() {
+export function useCleanupJob(onSettled: () => void) {
   const t = useTranslations('storage');
-  const router = useRouter();
   const [job, setJob] = useState<CleanupStatus | null>(null);
 
   useEffect(() => {
@@ -51,37 +50,29 @@ export function useCleanupJob() {
       setJob(status.data);
       if (status.data.state === 'completed') {
         toast.success(summarizeRemoved(status.data.removed, t));
-        router.refresh();
+        onSettled();
       } else if (status.data.state === 'failed') {
         toast.error(t('toasts.cleanupFailed'), {
           description: status.data.error ?? undefined,
         });
-        router.refresh();
+        onSettled();
       }
     }, POLL_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [job, router, t]);
+  }, [job, onSettled, t]);
 
   return { job, running: job?.state === 'running', follow: setJob };
 }
 
-/** Success toast text after a cleanup — categories the server reports as zero
- *  (spared or empty) simply don't show up. */
+/** Success toast text after a cleanup: what it removed, zeros left out. */
 function summarizeRemoved(
   counts: CleanupCounts,
   t: (key: string, values?: Record<string, string | number>) => string,
 ): string {
-  const parts: string[] = [];
-  if (counts.events) parts.push(t('unit.errors', { count: counts.events }));
-  if (counts.transactions)
-    parts.push(t('unit.transactions', { count: counts.transactions }));
-  if (counts.spans) parts.push(t('unit.spans', { count: counts.spans }));
-  if (counts.logs) parts.push(t('unit.logs', { count: counts.logs }));
-  if (counts.issues_removed)
-    parts.push(t('unit.emptyIssues', { count: counts.issues_removed }));
+  const parts = removedParts(counts, t);
   return parts.length > 0
     ? t('toasts.removed', { parts: parts.join(', ') })
     : t('toasts.nothingRemoved');

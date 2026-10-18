@@ -1168,98 +1168,135 @@
     }
   },
   "storage": {
-    "period": "Older than {count, plural, =1 {# day} other {# days}}",
-    "type": {
+    "action": "Configure retention",
+    "cancel": "Cancel",
+    "kind": {
       "events": "Errors",
       "transactions": "Transactions",
-      "logs": "Logs"
+      "logs": "Logs",
+      "sourceMaps": "Source maps"
     },
-    "line": {
-      "emptyIssues": "Empty issues",
-      "spans": "Spans"
+    "overview": {
+      "title": "Storage used",
+      "rows": "{count, plural, =1 {# row} other {{rows} rows}}",
+      "files": "{count, plural, =1 {# file} other {# files}}",
+      "cleaning": "Cleaning up now: {parts}",
+      "starting": "starting…",
+      "off": "Nothing is deleted: every kind of data is kept forever. Configure retention to free space automatically.",
+      "next": "Next cleanup {when} · frees ≈ {size}",
+      "scheduling": "Scheduling the next cleanup…"
     },
-    "allProjects": "All projects",
-    "retentionPeriodLabel": "Retention period",
-    "projectScopeLabel": "Project scope",
-    "dataLabel": "Data",
-    "cleanup": {
-      "title": "Clean up old data",
-      "description": "Permanently delete the selected data older than the chosen period. Preview first — this cannot be undone."
+    "status": {
+      "lastRunRunning": "Last cleanup running since {when}",
+      "lastRunFailed": "Last cleanup {when} failed: {error}",
+      "lastRunNothing": "Last cleanup {when}: nothing to delete",
+      "lastRunRemoved": "Last cleanup {when}: removed {parts}",
+      "off": "Everything is kept forever",
+      "nextRun": "Next cleanup {when}",
+      "nextRunPending": "Scheduling…"
     },
-    "working": "Working…",
-    "preview": "Preview",
-    "nothingMatches": "Nothing matches this selection {period} for {scope} — there's nothing to delete.",
-    "wouldRemove": "This cleanup would remove",
-    "deleteTrigger": "Delete permanently",
-    "deleteRowsTitle": "Delete {count, plural, =1 {# row} other {# rows}}?",
-    "deleteRowsDescription": "This permanently deletes the selected data {period} for {scope}. This action cannot be undone.",
-    "cancel": "Cancel",
-    "deleting": "Deleting…",
-    "deleteAction": "Delete permanently",
-    "running": {
-      "title": "Cleanup in progress",
-      "description": "Deleting in small batches in the background, so ingestion keeps working. You can leave this page: it keeps running."
+    "age": {
+      "title": "Age of the data",
+      "description": "How long ago each byte arrived. The hatched part goes at the next cleanup.",
+      "age": "Age",
+      "bucket0": "< 7 days",
+      "bucket1": "7–14 days",
+      "bucket2": "14–30 days",
+      "bucket3": "30–90 days",
+      "bucket4": "90–180 days",
+      "bucket5": "180 days – 1 year",
+      "bucket6": "> 1 year",
+      "empty": "No data yet.",
+      "goes": "Deleted at the next cleanup",
+      "goesInBucket": "{size} deleted at the next cleanup"
+    },
+    "projects": {
+      "title": "Projects",
+      "search": "Search projects",
+      "project": "Project",
+      "size": "Size",
+      "retention": "Retention",
+      "empty": "No projects yet.",
+      "noMatch": "No project matches.",
+      "own": "Own",
+      "general": "General",
+      "change": "Change the retention of {project}"
+    },
+    "keep": {
+      "forever": "Forever",
+      "days": "{count, plural, =1 {# day} other {# days}}"
+    },
+    "dialog": {
+      "title": "Retention",
+      "description": "How long each kind of data is kept in every project. What is older is deleted at each cleanup.",
+      "runs": "Cleanup runs",
+      "frequency": "Frequency",
+      "weekday": "Day",
+      "hour": "Hour",
+      "at": "at",
+      "customProjects": "{count, plural, =1 {# project keeps its own retention; change it from its row.} other {# projects keep their own retention; change it from their rows.}}",
+      "counting": "Counting what would be deleted…",
+      "impact": "The next cleanup will delete {parts} (≈ {size}).",
+      "noImpact": "Nothing is old enough to be deleted yet.",
+      "save": "Save",
+      "saveAndClean": "Save and clean up now",
+      "saved": "Retention saved",
+      "saveFailed": "Could not save retention",
+      "alreadyRunning": "A cleanup is already running.",
+      "confirmTitle": "Delete ≈ {size} now?",
+      "confirmDescription": "Permanently deletes {parts}, and the source maps no upload uses. It runs in the background and cannot be undone.",
+      "confirmAction": "Delete ≈ {size}",
+      "kindColumn": "Data",
+      "keepColumn": "Keep for",
+      "foreverHint": "Data older than the period is deleted at each cleanup. \"Forever\" never deletes that kind.",
+      "countFailed": "Could not count what would be deleted.",
+      "retry": "Try again"
+    },
+    "projectDialog": {
+      "title": "Retention of {project}",
+      "description": "Use the general retention, or keep this project's data for other periods.",
+      "general": "Use the general retention",
+      "own": "Its own retention",
+      "ownHint": "Other periods for this project only"
+    },
+    "schedule": {
+      "daily": "Every day",
+      "weekly": "Every week"
     },
     "toasts": {
-      "previewFailed": "Could not preview cleanup",
       "cleanupFailed": "Cleanup failed",
       "removed": "Removed {parts}",
-      "nothingRemoved": "Nothing matched — no data removed",
-      "sourceMapPreviewFailed": "Could not preview source-map cleanup",
-      "gcFailed": "Source-map cleanup failed",
-      "sourceMapsRemoved": "{count, plural, =1 {Removed # orphaned source map ({freed} freed)} other {Removed # orphaned source maps ({freed} freed)}}"
+      "nothingRemoved": "Nothing to delete",
+      "gcFailed": "Could not delete the unused source maps"
     },
     "unit": {
       "errors": "{count, plural, =1 {# error} other {# errors}}",
       "transactions": "{count, plural, =1 {# transaction} other {# transactions}}",
       "spans": "{count, plural, =1 {# span} other {# spans}}",
       "logs": "{count, plural, =1 {# log} other {# logs}}",
-      "emptyIssues": "{count, plural, =1 {# empty issue} other {# empty issues}}"
+      "emptyIssues": "{count, plural, =1 {# empty issue} other {# empty issues}}",
+      "sourceMaps": "{count, plural, =1 {# unused source map} other {# unused source maps}}"
     },
-    "sourceMaps": {
-      "title": "Orphaned source maps",
-      "description": "Remove source-map files no longer referenced by any upload — for example, files left behind when a project was deleted. Preview first; referenced files are never touched.",
-      "nothingToClean": "No orphaned source maps — nothing to clean up.",
-      "wouldRemove": "This cleanup would remove:",
-      "fileCount": "{count, plural, =1 {# orphaned source map} other {# orphaned source maps}}",
-      "freed": "{bytes} freed",
-      "removeAction": "Remove orphaned source maps",
-      "removeTitle": "Remove {count, plural, =1 {# orphaned source map} other {# orphaned source maps}}?",
-      "removeDescription": "This permanently deletes {count, plural, =1 {# source-map file} other {# source-map files}} ({bytes}) that no upload references, from the database and disk. Referenced files are not affected."
+    "deleteAction": "Delete data now",
+    "kindHint": {
+      "events": "Error events, and the issues left with none",
+      "transactions": "Performance traces with their spans",
+      "logs": "Structured log lines"
     },
-    "removing": "Removing…",
-    "remove": "Remove",
-    "auto": {
-      "title": "Automatic cleanup",
-      "description": "Delete old data on a schedule so storage doesn't keep growing. Only the kinds you pick are touched.",
-      "enabled": "Clean up automatically",
-      "enabledHint": "Runs in the background in small batches, so ingestion keeps working.",
-      "olderThan": "Delete data older than",
-      "days": "{count, plural, =1 {day} other {days}}",
-      "dataLabel": "What to clean up",
-      "eventsHint": "Error events, and the issues they leave empty",
-      "transactionsHint": "Transactions and their spans",
-      "logsHint": "Structured logs",
-      "scheduleLabel": "When",
-      "timezone": "Timezone",
-      "timezonePlaceholder": "Search a zone",
-      "timezoneNoResults": "No matching zone",
-      "save": "Save",
-      "saving": "Saving…",
-      "saved": "Automatic cleanup saved",
-      "saveFailed": "Could not save automatic cleanup",
-      "loadFailed": "Could not load automatic cleanup",
-      "pickOne": "Pick at least one kind of data",
-      "daysMin": "At least 1 day",
-      "crontabRequired": "Type a crontab",
-      "intervalMin": "At least 1",
-      "nextRun": "Next run {when}",
-      "nextRunPending": "Scheduling the next run…",
-      "off": "Off",
-      "lastRunRunning": "Running since {when}",
-      "lastRunFailed": "Last run {when} failed: {error}",
-      "lastRunNothing": "Last run {when}: nothing to delete",
-      "lastRunRemoved": "Last run {when}: removed {parts}"
+    "delete": {
+      "title": "Delete data now",
+      "description": "Permanently deletes the data you choose, without waiting for the cleanup. It runs in the background and cannot be undone.",
+      "what": "What to delete",
+      "olderThan": "Older than",
+      "in": "In",
+      "allProjects": "All projects",
+      "pickOne": "Choose at least one kind of data.",
+      "impact": "Deletes {parts} (≈ {size}).",
+      "nothing": "Nothing matches: there is nothing to delete.",
+      "action": "Delete ≈ {size}",
+      "actionIdle": "Delete",
+      "sourceMaps": "Unused source maps",
+      "sourceMapsHint": "Files no upload references any more; referenced ones are never touched"
     }
   },
   "errors": {
@@ -1661,26 +1698,9 @@
         "description": "Storage usage and data retention"
       },
       "title": "Storage",
-      "subtitle": "See what Rustrak is holding and reclaim space by cleaning up old data",
+      "subtitle": "See what Rustrak holds and how long it keeps it",
       "notAuthorizedDescription": "Only instance administrators can view storage usage and run cleanups. Contact an admin if you need access.",
-      "loadSummaryFailed": "Could not read storage usage",
-      "dbSize": "Database size",
-      "eventsCount": "{count} events",
-      "transactions": "Transactions",
-      "spansCount": "{count} spans",
-      "spans": "Spans",
-      "spansSub": "indexed from transactions",
-      "logs": "Logs",
-      "logsSub": "structured log records",
-      "sourceMaps": "Source maps",
-      "sourceMapsFiles": "{count} files",
-      "loadBreakdownFailed": "Could not read the per-project breakdown",
-      "byProject": "By project",
-      "byProjectDescription": "Counts and estimated weight of the data each project holds",
-      "noProjects": "No projects yet.",
-      "project": "Project",
-      "events": "Events",
-      "estSize": "Est. size"
+      "loadFailed": "Could not read storage"
     },
     "account": {
       "meta": {

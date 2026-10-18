@@ -1,10 +1,10 @@
 import type {
-  AutoCleanup,
-  AutoCleanupSettings,
   CleanupCounts,
   CleanupOptions,
   CleanupStatus,
   Result,
+  Retention,
+  RetentionSettings,
   RustrakError,
   SourceMapGcResult,
 } from '@rustrak/client';
@@ -15,9 +15,8 @@ import { createClient } from '@/shared/api/rustrak';
  *
  * The two `preview*` functions mutate nothing, so they read oddly in a file
  * named `mutations.ts`. They belong here all the same: the split is by **who
- * calls it**, not by what it does to the database. `storage-cleanup.tsx` and
- * `source-map-gc.tsx` are `'use client'` and invoke them from the browser, so
- * they need the directive -- a `server-only` module would not be reachable.
+ * calls it**, not by what it does to the database: the storage page calls
+ * them from event handlers, as the user edits.
  *
  * Both are POST on the server too, because a preview takes a `CleanupOptions`
  * body it has to compute against.
@@ -66,10 +65,26 @@ export async function gcStorageSourceMaps(): Promise<
   return client.storage.gcSourceMaps();
 }
 
-/** Saves the automatic cleanup settings. */
-export async function updateAutoCleanup(
-  settings: AutoCleanupSettings,
-): Promise<Result<AutoCleanup, RustrakError>> {
+/** Saves the retention settings. */
+export async function updateRetention(
+  settings: RetentionSettings,
+): Promise<Result<Retention, RustrakError>> {
   const client = await createClient();
-  return client.storage.updateAutoCleanup(settings);
+  return client.storage.updateRetention(settings);
+}
+
+/** Dry-run: what enforcing these settings now would delete. */
+export async function previewRetention(
+  settings: RetentionSettings,
+): Promise<Result<CleanupCounts, RustrakError>> {
+  const client = await createClient();
+  return client.storage.previewRetention(settings);
+}
+
+/** Enforces the saved retention now; follow it with the cleanup status. */
+export async function runRetention(): Promise<
+  Result<CleanupStatus, RustrakError>
+> {
+  const client = await createClient();
+  return client.storage.runRetention();
 }

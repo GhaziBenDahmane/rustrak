@@ -2,23 +2,25 @@ import { z } from 'zod';
 import type { RustrakError } from '../errors.js';
 import type { Result } from '../result.js';
 import {
-  autoCleanupSchema,
-  autoCleanupSettingsSchema,
   cleanupCountsSchema,
   cleanupOptionsSchema,
   cleanupStatusSchema,
   projectStorageSchema,
+  retentionSchema,
+  retentionSettingsSchema,
   sourceMapGcResultSchema,
+  storageAgeSchema,
   storageSummarySchema,
 } from '../schemas/index.js';
 import type {
-  AutoCleanup,
-  AutoCleanupSettings,
   CleanupCounts,
   CleanupOptions,
   CleanupStatus,
   ProjectStorage,
+  Retention,
+  RetentionSettings,
   SourceMapGcResult,
+  StorageAge,
   StorageSummary,
 } from '../types/index.js';
 import { BaseResource } from './base.js';
@@ -138,27 +140,73 @@ export class StorageResource extends BaseResource {
   }
 
   /**
-   * Automatic cleanup: what it deletes, its schedule, when it runs next and
-   * how its last run went.
+   * Retention: how long each kind of data is kept, by default and per
+   * project, when its cleanup runs next and how the last one went.
    */
-  async getAutoCleanup(): Promise<Result<AutoCleanup, RustrakError>> {
+  async getRetention(): Promise<Result<Retention, RustrakError>> {
     return this.request(
-      () => this.http.get('api/storage/auto-cleanup'),
-      autoCleanupSchema,
+      () => this.http.get('api/storage/retention'),
+      retentionSchema,
     );
   }
 
-  /** Replaces the automatic cleanup settings. Applies within a minute. */
-  async updateAutoCleanup(
-    settings: AutoCleanupSettings,
-  ): Promise<Result<AutoCleanup, RustrakError>> {
-    const validated = this.validateInput(settings, autoCleanupSettingsSchema);
+  /** Replaces the retention settings. A new schedule applies within a minute. */
+  async updateRetention(
+    settings: RetentionSettings,
+  ): Promise<Result<Retention, RustrakError>> {
+    const validated = this.validateInput(settings, retentionSettingsSchema);
     if (!validated.success) {
       return validated;
     }
     return this.request(
-      () => this.http.put('api/storage/auto-cleanup', { json: validated.data }),
-      autoCleanupSchema,
+      () => this.http.put('api/storage/retention', { json: validated.data }),
+      retentionSchema,
+    );
+  }
+
+  /**
+   * Enforces the saved retention now, without waiting for the schedule, and
+   * deletes unused source maps. Returns the started job; follow it with
+   * {@link getCleanupStatus}. A `validation` error while everything is kept
+   * forever, `conflict` while a cleanup runs.
+   */
+  async runRetention(): Promise<Result<CleanupStatus, RustrakError>> {
+    return this.request(
+      () =>
+        this.http.post('api/storage/retention/run', {
+          // No retry, as for `executeCleanup`: a lost response after the
+          // cleanup started would be retried into a refused second run.
+          retry: 0,
+        }),
+      cleanupStatusSchema,
+    );
+  }
+
+  /** How long ago each project's data arrived, per kind, in age buckets. */
+  async getAge(): Promise<Result<StorageAge, RustrakError>> {
+    return this.request(
+      () => this.http.get('api/storage/age'),
+      storageAgeSchema,
+    );
+  }
+
+  /**
+   * Dry-run: what enforcing these retention settings now would delete, each
+   * project against its own windows. Saves and deletes nothing.
+   */
+  async previewRetention(
+    settings: RetentionSettings,
+  ): Promise<Result<CleanupCounts, RustrakError>> {
+    const validated = this.validateInput(settings, retentionSettingsSchema);
+    if (!validated.success) {
+      return validated;
+    }
+    return this.request(
+      () =>
+        this.http.post('api/storage/retention/preview', {
+          json: validated.data,
+        }),
+      cleanupCountsSchema,
     );
   }
 }

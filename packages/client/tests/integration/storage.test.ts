@@ -203,23 +203,28 @@ describe('StorageResource', () => {
   });
 });
 
-describe('StorageResource auto-cleanup', () => {
-  const URL = 'http://localhost:8080/api/storage/auto-cleanup';
+describe('StorageResource retention', () => {
+  const URL = 'http://localhost:8080/api/storage/retention';
   const settings = {
-    enabled: true,
-    schedule: { type: 'crontab', value: '0 3 * * *' },
-    timezone: 'UTC',
-    older_than_days: 30,
-    include_events: false,
-    include_transactions: true,
-    include_logs: true,
+    defaults: { events_days: 90, transactions_days: 30, logs_days: null },
+    overrides: [
+      {
+        project_id: 7,
+        events_days: 365,
+        transactions_days: null,
+        logs_days: 7,
+      },
+    ],
+    frequency: 'weekly',
+    hour: 4,
+    weekday: 6,
   } as const;
   const client = new RustrakClient({
     baseUrl: 'http://localhost:8080',
     token: 'test-token',
   });
 
-  it('reads the settings, the next run and the last run', async () => {
+  it('reads the settings, the next cleanup and the last one', async () => {
     server.use(
       http.get(URL, () =>
         HttpResponse.json({
@@ -242,9 +247,10 @@ describe('StorageResource auto-cleanup', () => {
       ),
     );
 
-    const auto = expectOk(await client.storage.getAutoCleanup());
-    expect(auto.settings.include_events).toBe(false);
-    expect(auto.last_run?.removed?.logs).toBe(300);
+    const retention = expectOk(await client.storage.getRetention());
+    expect(retention.settings.defaults.logs_days).toBeNull();
+    expect(retention.settings.overrides[0]?.project_id).toBe(7);
+    expect(retention.last_run?.removed?.logs).toBe(300);
   });
 
   it('saves settings', async () => {
@@ -260,15 +266,103 @@ describe('StorageResource auto-cleanup', () => {
       }),
     );
 
-    expectOk(await client.storage.updateAutoCleanup(settings));
+    expectOk(await client.storage.updateRetention(settings));
     expect(body).toEqual(settings);
   });
 
-  it('refuses a retention under one day before sending it', async () => {
+  it('previews what the settings would delete', async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${URL}/preview`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({
+          events: 3,
+          transactions: 0,
+          spans: 0,
+          logs: 9,
+          issues_removed: 1,
+        });
+      }),
+    );
+
+    const counts = expectOk(await client.storage.previewRetention(settings));
+    expect(counts.logs).toBe(9);
+    expect(body).toEqual(settings);
+  });
+
+  it('cleans up now and returns the started job', async () => {
+    server.use(
+      http.post(`${URL}/run`, () =>
+        HttpResponse.json(
+          {
+            state: 'running',
+            removed: {
+              events: 0,
+              transactions: 0,
+              spans: 0,
+              logs: 0,
+              issues_removed: 0,
+              source_maps: 0,
+            },
+            started_at: '2026-01-01T03:00:00Z',
+            finished_at: null,
+            error: null,
+          },
+          { status: 202 },
+        ),
+      ),
+    );
+    const job = expectOk(await client.storage.runRetention());
+    expect(job.state).toBe('running');
+  });
+
+  it('does not retry cleaning up now, which would be refused as a second run', async () => {
+    let calls = 0;
+    server.use(
+      http.post(`${URL}/run`, () => {
+        calls += 1;
+        return HttpResponse.json(
+          { error: { type: 'InternalServerError', message: 'lost' } },
+          { status: 503 },
+        );
+      }),
+    );
+    expectErr(await client.storage.runRetention());
+    expect(calls).toBe(1);
+  });
+
+  it("reads how old each project's data is", async () => {
+    server.use(
+      http.get('http://localhost:8080/api/storage/age', () =>
+        HttpResponse.json({
+          bucket_days: [7, 14, 30, 90, 180, 365],
+          projects: [
+            {
+              project_id: 1,
+              events: {
+                counts: [1, 0, 0, 0, 0, 0, 2],
+                oldest: '2025-01-01T00:00:00Z',
+              },
+              transactions: { counts: [0, 0, 0, 0, 0, 0, 0], oldest: null },
+              logs: {
+                counts: [5, 0, 0, 0, 0, 0, 0],
+                oldest: '2026-01-01T00:00:00Z',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const age = expectOk(await client.storage.getAge());
+    expect(age.projects[0]?.events.counts[6]).toBe(2);
+    expect(age.projects[0]?.transactions.oldest).toBeNull();
+  });
+
+  it('refuses a window under one day before sending it', async () => {
     const error = expectErr(
-      await client.storage.updateAutoCleanup({
+      await client.storage.updateRetention({
         ...settings,
-        older_than_days: 0,
+        defaults: { ...settings.defaults, events_days: 0 },
       }),
     );
     expect(error.kind).toBe('invalid_request');
@@ -288,7 +382,7 @@ describe('StorageResource auto-cleanup', () => {
         ),
       ),
     );
-    expect(expectErr(await client.storage.getAutoCleanup()).kind).toBe(
+    expect(expectErr(await client.storage.getRetention()).kind).toBe(
       'forbidden',
     );
   });

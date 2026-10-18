@@ -6,17 +6,18 @@
 use std::sync::Arc;
 
 use actix_web::{web, HttpResponse};
+use chrono::DurationRound;
 
 use crate::auth::ApiActor;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
-use crate::models::{
-    AutoCleanupResponse, AutoCleanupRun, AutoCleanupSettings, CleanupRequest, CleanupState,
-};
 #[cfg(feature = "openapi")]
 use crate::models::{
     CleanupCounts, CleanupStatus, ProjectStorage, SourceMapGcResult, SourceMapStorage,
     StorageSummary,
+};
+use crate::models::{
+    CleanupRequest, CleanupState, RetentionResponse, RetentionRun, RetentionSettings,
 };
 use crate::scheduler::engine::{JobRunStatus, Scheduler};
 use crate::scheduler::jobs::StorageCleanupJob;
@@ -201,13 +202,22 @@ pub async fn gc_source_maps(
         get_cleanup_status,
         preview_source_map_gc,
         gc_source_maps,
-        get_auto_cleanup,
-        update_auto_cleanup
+        get_retention,
+        update_retention,
+        preview_retention,
+        run_retention,
+        get_age
     ),
     components(schemas(
-        AutoCleanupSettings,
-        AutoCleanupResponse,
-        AutoCleanupRun,
+        RetentionSettings,
+        crate::models::RetentionWindows,
+        crate::models::ProjectRetention,
+        crate::models::CleanupFrequency,
+        RetentionResponse,
+        RetentionRun,
+        crate::models::StorageAge,
+        crate::models::ProjectAge,
+        crate::models::KindAge,
         StorageSummary,
         SourceMapStorage,
         ProjectStorage,
@@ -220,47 +230,46 @@ pub async fn gc_source_maps(
 )]
 pub struct StorageApi;
 
-/// Configure storage routes.
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
-    path = "/api/storage/auto-cleanup",
+    path = "/api/storage/retention",
     tag = "Storage",
     responses(
-        (status = 200, description = "Automatic cleanup settings, next run and last run", body = AutoCleanupResponse),
+        (status = 200, description = "Retention settings, next cleanup and last cleanup", body = RetentionResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Admin privileges required", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
 ))]
-/// GET /api/storage/auto-cleanup
-pub async fn get_auto_cleanup(
+/// GET /api/storage/retention
+pub async fn get_retention(
     pool: web::Data<DbPool>,
     job: web::Data<CleanupJob>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(HttpResponse::Ok().json(auto_cleanup_response(pool.get_ref(), &job).await?))
+    Ok(HttpResponse::Ok().json(retention_response(pool.get_ref(), &job).await?))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
-    path = "/api/storage/auto-cleanup",
+    path = "/api/storage/retention",
     tag = "Storage",
-    request_body = AutoCleanupSettings,
+    request_body = RetentionSettings,
     responses(
-        (status = 200, description = "Saved; the new schedule applies within a minute", body = AutoCleanupResponse),
+        (status = 200, description = "Saved; the new schedule applies within a minute", body = RetentionResponse),
         (status = 400, description = "Settings that cannot run", body = crate::error::ErrorResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Admin privileges required", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
 ))]
-/// PUT /api/storage/auto-cleanup
-pub async fn update_auto_cleanup(
+/// PUT /api/storage/retention
+pub async fn update_retention(
     pool: web::Data<DbPool>,
     job: web::Data<CleanupJob>,
     actor: ApiActor,
-    body: web::Json<AutoCleanupSettings>,
+    body: web::Json<RetentionSettings>,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
     let settings = body.into_inner();
@@ -271,18 +280,115 @@ pub async fn update_auto_cleanup(
         serde_json::to_value(&settings).unwrap_or_default(),
     )
     .await?;
-    Ok(HttpResponse::Ok().json(auto_cleanup_response(pool.get_ref(), &job).await?))
+    Ok(HttpResponse::Ok().json(retention_response(pool.get_ref(), &job).await?))
 }
 
-async fn auto_cleanup_response(pool: &DbPool, job: &CleanupJob) -> AppResult<AutoCleanupResponse> {
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/storage/retention/preview",
+    tag = "Storage",
+    request_body = RetentionSettings,
+    responses(
+        (status = 200, description = "Dry-run: rows enforcing these settings now would remove", body = CleanupCounts),
+        (status = 400, description = "Settings that cannot run", body = crate::error::ErrorResponse),
+        (status = 403, description = "Admin privileges required", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST /api/storage/retention/preview — what saving these settings would
+/// delete on the next cleanup, without saving or deleting anything.
+pub async fn preview_retention(
+    pool: web::Data<DbPool>,
+    actor: ApiActor,
+    body: web::Json<RetentionSettings>,
+) -> AppResult<HttpResponse> {
+    require_admin(&actor)?;
+    let counts = StorageService::preview_retention(pool.get_ref(), &body).await?;
+    Ok(HttpResponse::Ok().json(counts))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/storage/retention/run",
+    tag = "Storage",
+    responses(
+        (status = 202, description = "Cleanup started in the background; poll its status", body = CleanupStatus),
+        (status = 400, description = "Everything is kept forever: nothing to clean up", body = crate::error::ErrorResponse),
+        (status = 403, description = "Admin privileges required", body = crate::error::ErrorResponse),
+        (status = 409, description = "A cleanup is already running", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST /api/storage/retention/run — enforces the saved retention now,
+/// without waiting for the schedule. Follow it with the cleanup status.
+pub async fn run_retention(
+    pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
+    store: web::Data<Arc<dyn SourceMapStore>>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    require_admin(&actor)?;
+    let settings = retention_response(pool.get_ref(), &job).await?.settings;
+    if !settings.deletes_anything() {
+        return Err(AppError::Validation(
+            "Everything is kept forever: there is nothing to clean up".to_string(),
+        ));
+    }
+    let (status, handle) = job.start_retention(
+        pool.get_ref().clone(),
+        settings,
+        Arc::clone(store.get_ref()),
+    )?;
+    // Recorded as the job's last run, like a scheduled one, so the page's
+    // "last cleanup" is this one. Milliseconds, so the finish matches the
+    // start on every backend (Postgres keeps microseconds). The cleanup has
+    // already started: failing to record it is logged, not answered.
+    let pool = pool.get_ref().clone();
+    let started = status
+        .started_at
+        .unwrap_or_else(chrono::Utc::now)
+        .duration_trunc(chrono::Duration::milliseconds(1))
+        .unwrap_or_else(|_| chrono::Utc::now());
+    if let Err(e) = Scheduler::record_start(&pool, StorageCleanupJob::KEY, started).await {
+        log::error!("Could not record the start of a retention cleanup: {e}");
+    }
+    tokio::spawn(async move {
+        let outcome = match handle.await {
+            Ok(result) => result.map(|removed| serde_json::to_value(removed).unwrap_or_default()),
+            Err(e) => Err(AppError::Internal(format!(
+                "The cleanup stopped unexpectedly: {e}"
+            ))),
+        };
+        Scheduler::record_finish(&pool, StorageCleanupJob::KEY, started, outcome).await;
+    });
+    Ok(HttpResponse::Accepted().json(status))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/storage/age",
+    tag = "Storage",
+    responses(
+        (status = 200, description = "How long ago each project's data arrived, per kind", body = crate::models::StorageAge),
+        (status = 403, description = "Admin privileges required", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/storage/age — rows per age bucket, per project and kind.
+pub async fn get_age(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+    require_admin(&actor)?;
+    Ok(HttpResponse::Ok().json(StorageService::age_breakdown(pool.get_ref()).await?))
+}
+
+async fn retention_response(pool: &DbPool, job: &CleanupJob) -> AppResult<RetentionResponse> {
     let state = match Scheduler::job(pool, StorageCleanupJob::KEY).await {
         Ok(state) => Some(state),
         Err(AppError::NotFound(_)) => None,
         Err(e) => return Err(e),
     };
     let Some(state) = state else {
-        return Ok(AutoCleanupResponse {
-            settings: AutoCleanupSettings::default(),
+        return Ok(RetentionResponse {
+            settings: RetentionSettings::default(),
             next_run_at: None,
             last_run: None,
         });
@@ -291,7 +397,7 @@ async fn auto_cleanup_response(pool: &DbPool, job: &CleanupJob) -> AppResult<Aut
     let running = job.status().state == CleanupState::Running;
     let last_run = state.last_started_at.map(|started_at| {
         let finished = state.last_finished_at.filter(|f| *f >= started_at);
-        AutoCleanupRun {
+        RetentionRun {
             started_at,
             finished_at: finished,
             status: match (finished, state.last_status) {
@@ -310,7 +416,7 @@ async fn auto_cleanup_response(pool: &DbPool, job: &CleanupJob) -> AppResult<Aut
             },
         }
     });
-    Ok(AutoCleanupResponse {
+    Ok(RetentionResponse {
         settings: StorageCleanupJob::settings(&state.settings),
         next_run_at: state.next_run_at,
         last_run,
@@ -325,8 +431,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/cleanup/preview", web::post().to(preview_cleanup))
             .route("/cleanup", web::post().to(execute_cleanup))
             .route("/cleanup/status", web::get().to(get_cleanup_status))
-            .route("/auto-cleanup", web::get().to(get_auto_cleanup))
-            .route("/auto-cleanup", web::put().to(update_auto_cleanup))
+            .route("/retention", web::get().to(get_retention))
+            .route("/retention", web::put().to(update_retention))
+            .route("/retention/preview", web::post().to(preview_retention))
+            .route("/retention/run", web::post().to(run_retention))
+            .route("/age", web::get().to(get_age))
             .route(
                 "/source-maps/gc/preview",
                 web::post().to(preview_source_map_gc),

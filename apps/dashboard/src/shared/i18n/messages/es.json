@@ -1168,98 +1168,135 @@
     }
   },
   "storage": {
-    "period": "Más de {count, plural, =1 {# día} other {# días}}",
-    "type": {
+    "action": "Configurar retención",
+    "cancel": "Cancelar",
+    "kind": {
       "events": "Errores",
       "transactions": "Transacciones",
-      "logs": "Logs"
+      "logs": "Logs",
+      "sourceMaps": "Source maps"
     },
-    "line": {
-      "emptyIssues": "Problemas vacíos",
-      "spans": "Spans"
+    "overview": {
+      "title": "Espacio usado",
+      "rows": "{count, plural, =1 {# fila} other {{rows} filas}}",
+      "files": "{count, plural, =1 {# archivo} other {# archivos}}",
+      "cleaning": "Limpiando ahora: {parts}",
+      "starting": "empezando…",
+      "off": "No se borra nada: todos los datos se guardan siempre. Configura la retención para liberar espacio automáticamente.",
+      "next": "Próxima limpieza {when} · liberará ≈ {size}",
+      "scheduling": "Programando la próxima limpieza…"
     },
-    "allProjects": "Todos los proyectos",
-    "retentionPeriodLabel": "Período de retención",
-    "projectScopeLabel": "Ámbito del proyecto",
-    "dataLabel": "Datos",
-    "cleanup": {
-      "title": "Limpiar datos antiguos",
-      "description": "Elimina definitivamente los datos seleccionados más antiguos que el período elegido. Previsualiza primero — esto no se puede deshacer."
+    "status": {
+      "lastRunRunning": "Última limpieza en marcha desde {when}",
+      "lastRunFailed": "La última limpieza ({when}) falló: {error}",
+      "lastRunNothing": "Última limpieza {when}: nada que borrar",
+      "lastRunRemoved": "Última limpieza {when}: se borraron {parts}",
+      "off": "Todo se guarda siempre",
+      "nextRun": "Próxima limpieza {when}",
+      "nextRunPending": "Programando…"
     },
-    "working": "Trabajando…",
-    "preview": "Previsualizar",
-    "nothingMatches": "Nada coincide con esta selección ({period}) para {scope} — no hay nada que eliminar.",
-    "wouldRemove": "Esta limpieza eliminaría",
-    "deleteTrigger": "Eliminar definitivamente",
-    "deleteRowsTitle": "¿Eliminar {count, plural, =1 {# fila} other {# filas}}?",
-    "deleteRowsDescription": "Esto elimina definitivamente los datos seleccionados ({period}) para {scope}. La acción no se puede deshacer.",
-    "cancel": "Cancelar",
-    "deleting": "Eliminando…",
-    "deleteAction": "Eliminar definitivamente",
-    "running": {
-      "title": "Limpieza en curso",
-      "description": "Borrando en lotes pequeños en segundo plano, para que la ingesta siga funcionando. Puedes salir de esta página: seguirá ejecutándose."
+    "age": {
+      "title": "Antigüedad de los datos",
+      "description": "Hace cuánto llegó cada byte. Lo rayado se borra en la próxima limpieza.",
+      "age": "Antigüedad",
+      "bucket0": "< 7 días",
+      "bucket1": "7–14 días",
+      "bucket2": "14–30 días",
+      "bucket3": "30–90 días",
+      "bucket4": "90–180 días",
+      "bucket5": "180 días – 1 año",
+      "bucket6": "> 1 año",
+      "empty": "Aún no hay datos.",
+      "goes": "Se borra en la próxima limpieza",
+      "goesInBucket": "{size} se borran en la próxima limpieza"
+    },
+    "projects": {
+      "title": "Proyectos",
+      "search": "Buscar proyectos",
+      "project": "Proyecto",
+      "size": "Tamaño",
+      "retention": "Retención",
+      "empty": "Aún no hay proyectos.",
+      "noMatch": "Ningún proyecto coincide.",
+      "own": "Propia",
+      "general": "General",
+      "change": "Cambiar la retención de {project}"
+    },
+    "keep": {
+      "forever": "Para siempre",
+      "days": "{count, plural, =1 {# día} other {# días}}"
+    },
+    "dialog": {
+      "title": "Retención",
+      "description": "Cuánto tiempo se guarda cada tipo de dato en todos los proyectos. Lo más antiguo se borra en cada limpieza.",
+      "runs": "La limpieza se ejecuta",
+      "frequency": "Frecuencia",
+      "weekday": "Día",
+      "hour": "Hora",
+      "at": "a las",
+      "customProjects": "{count, plural, =1 {# proyecto tiene su propia retención; cámbiala desde su fila.} other {# proyectos tienen su propia retención; cámbiala desde su fila.}}",
+      "counting": "Contando lo que se borraría…",
+      "impact": "La próxima limpieza borrará {parts} (≈ {size}).",
+      "noImpact": "Todavía no hay nada tan antiguo como para borrarlo.",
+      "save": "Guardar",
+      "saveAndClean": "Guardar y limpiar ahora",
+      "saved": "Retención guardada",
+      "saveFailed": "No se pudo guardar la retención",
+      "alreadyRunning": "Ya hay una limpieza en marcha.",
+      "confirmTitle": "¿Borrar ≈ {size} ahora?",
+      "confirmDescription": "Borra para siempre {parts}, y los source maps que ninguna subida usa. Se ejecuta en segundo plano y no se puede deshacer.",
+      "confirmAction": "Borrar ≈ {size}",
+      "kindColumn": "Dato",
+      "keepColumn": "Se guarda durante",
+      "foreverHint": "Lo que supere ese periodo se borra en cada limpieza. \"Para siempre\" no borra nunca ese tipo de dato.",
+      "countFailed": "No se pudo contar lo que se borraría.",
+      "retry": "Reintentar"
+    },
+    "projectDialog": {
+      "title": "Retención de {project}",
+      "description": "Usa la retención general o guarda los datos de este proyecto durante otros periodos.",
+      "general": "Usar la retención general",
+      "own": "Retención propia",
+      "ownHint": "Otros periodos solo para este proyecto"
+    },
+    "schedule": {
+      "daily": "Cada día",
+      "weekly": "Cada semana"
     },
     "toasts": {
-      "previewFailed": "No se pudo previsualizar la limpieza",
       "cleanupFailed": "La limpieza falló",
-      "removed": "Eliminado: {parts}",
-      "nothingRemoved": "Nada coincidió — no se eliminaron datos",
-      "sourceMapPreviewFailed": "No se pudo previsualizar la limpieza de source maps",
-      "gcFailed": "Falló la limpieza de source maps",
-      "sourceMapsRemoved": "{count, plural, =1 {Se eliminó # source map huérfana ({freed} liberados)} other {Se eliminaron # source maps huérfanas ({freed} liberados)}}"
+      "removed": "Se borraron {parts}",
+      "nothingRemoved": "Nada que borrar",
+      "gcFailed": "No se pudieron borrar los source maps sin usar"
     },
     "unit": {
       "errors": "{count, plural, =1 {# error} other {# errores}}",
       "transactions": "{count, plural, =1 {# transacción} other {# transacciones}}",
       "spans": "{count, plural, =1 {# span} other {# spans}}",
-      "logs": "{count, plural, =1 {# registro} other {# registros}}",
-      "emptyIssues": "{count, plural, =1 {# problema vacío} other {# problemas vacíos}}"
+      "logs": "{count, plural, =1 {# log} other {# logs}}",
+      "emptyIssues": "{count, plural, =1 {# issue vacía} other {# issues vacías}}",
+      "sourceMaps": "{count, plural, =1 {# source map sin usar} other {# source maps sin usar}}"
     },
-    "sourceMaps": {
-      "title": "Source maps huérfanas",
-      "description": "Elimina archivos de source map a los que ya no haga referencia ninguna carga — por ejemplo, archivos que quedaron tras eliminar un proyecto. Previsualiza primero; los archivos referenciados nunca se tocan.",
-      "nothingToClean": "No hay source maps huérfanas — nada que limpiar.",
-      "wouldRemove": "Esta limpieza eliminaría:",
-      "fileCount": "{count, plural, =1 {# source map huérfana} other {# source maps huérfanas}}",
-      "freed": "{bytes} liberados",
-      "removeAction": "Eliminar source maps huérfanas",
-      "removeTitle": "¿Eliminar {count, plural, =1 {# source map huérfana} other {# source maps huérfanas}}?",
-      "removeDescription": "Esto elimina definitivamente de la base de datos y del disco {count, plural, =1 {# archivo de source map} other {# archivos de source map}} ({bytes}) a los que no hace referencia ninguna carga. Los archivos referenciados no se ven afectados."
+    "deleteAction": "Borrar datos ahora",
+    "kindHint": {
+      "events": "Eventos de error, y las issues que se queden sin ninguno",
+      "transactions": "Trazas de rendimiento con sus spans",
+      "logs": "Líneas de log estructuradas"
     },
-    "removing": "Eliminando…",
-    "remove": "Eliminar",
-    "auto": {
-      "title": "Limpieza automática",
-      "description": "Borra datos antiguos según una programación para que el almacenamiento no crezca sin control. Solo se tocan los tipos que elijas.",
-      "enabled": "Limpiar automáticamente",
-      "enabledHint": "Se ejecuta en segundo plano en lotes pequeños, así que la ingesta sigue funcionando.",
-      "olderThan": "Borrar datos con más de",
-      "days": "{count, plural, =1 {día} other {días}}",
-      "dataLabel": "Qué limpiar",
-      "eventsHint": "Eventos de error y las incidencias que se queden vacías",
-      "transactionsHint": "Transacciones y sus spans",
-      "logsHint": "Logs estructurados",
-      "scheduleLabel": "Cuándo",
-      "timezone": "Zona horaria",
-      "timezonePlaceholder": "Busca una zona",
-      "timezoneNoResults": "Ninguna zona coincide",
-      "save": "Guardar",
-      "saving": "Guardando…",
-      "saved": "Limpieza automática guardada",
-      "saveFailed": "No se pudo guardar la limpieza automática",
-      "loadFailed": "No se pudo cargar la limpieza automática",
-      "pickOne": "Elige al menos un tipo de dato",
-      "daysMin": "Como mínimo 1 día",
-      "crontabRequired": "Escribe un crontab",
-      "intervalMin": "Como mínimo 1",
-      "nextRun": "Próxima ejecución {when}",
-      "nextRunPending": "Programando la próxima ejecución…",
-      "off": "Desactivada",
-      "lastRunRunning": "En ejecución desde {when}",
-      "lastRunFailed": "La última ejecución {when} falló: {error}",
-      "lastRunNothing": "Última ejecución {when}: nada que borrar",
-      "lastRunRemoved": "Última ejecución {when}: borrados {parts}"
+    "delete": {
+      "title": "Borrar datos ahora",
+      "description": "Borra para siempre los datos que elijas, sin esperar a la limpieza. Se ejecuta en segundo plano y no se puede deshacer.",
+      "what": "Qué borrar",
+      "olderThan": "Más antiguos que",
+      "in": "En",
+      "allProjects": "Todos los proyectos",
+      "pickOne": "Elige al menos un tipo de dato.",
+      "impact": "Borra {parts} (≈ {size}).",
+      "nothing": "Nada coincide: no hay nada que borrar.",
+      "action": "Borrar ≈ {size}",
+      "actionIdle": "Borrar",
+      "sourceMaps": "Source maps sin usar",
+      "sourceMapsHint": "Archivos que ya no referencia ninguna subida; los referenciados nunca se tocan"
     }
   },
   "errors": {
@@ -1661,26 +1698,9 @@
         "description": "Uso de almacenamiento y retención de datos"
       },
       "title": "Almacenamiento",
-      "subtitle": "Consulta qué guarda Rustrak y recupera espacio limpiando datos antiguos",
+      "subtitle": "Qué guarda Rustrak y cuánto tiempo lo guarda",
       "notAuthorizedDescription": "Solo los administradores de la instancia pueden ver el uso de almacenamiento y ejecutar limpiezas. Contacta con un admin si necesitas acceso.",
-      "loadSummaryFailed": "No se pudo leer el uso de almacenamiento",
-      "dbSize": "Tamaño de la base de datos",
-      "eventsCount": "{count} eventos",
-      "transactions": "Transacciones",
-      "spansCount": "{count} spans",
-      "spans": "Spans",
-      "spansSub": "indexados a partir de transacciones",
-      "logs": "Logs",
-      "logsSub": "registros estructurados",
-      "sourceMaps": "Source maps",
-      "sourceMapsFiles": "{count} archivos",
-      "loadBreakdownFailed": "No se pudo leer el desglose por proyecto",
-      "byProject": "Por proyecto",
-      "byProjectDescription": "Recuentos y peso estimado de los datos que guarda cada proyecto",
-      "noProjects": "Aún no hay proyectos.",
-      "project": "Proyecto",
-      "events": "Eventos",
-      "estSize": "Tamaño estimado"
+      "loadFailed": "No se pudo leer el almacenamiento"
     },
     "account": {
       "meta": {

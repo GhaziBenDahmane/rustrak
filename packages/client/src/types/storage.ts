@@ -1,14 +1,17 @@
 import type { z } from 'zod';
 import type {
-  autoCleanupRunSchema,
-  autoCleanupSchema,
-  autoCleanupSettingsSchema,
   cleanupCountsSchema,
   cleanupOptionsSchema,
   cleanupStatusSchema,
+  projectRetentionSchema,
   projectStorageSchema,
+  retentionRunSchema,
+  retentionSchema,
+  retentionSettingsSchema,
+  retentionWindowsSchema,
   sourceMapGcResultSchema,
   sourceMapStorageSchema,
+  storageAgeSchema,
   storageSummarySchema,
 } from '../schemas/storage.js';
 
@@ -34,11 +37,20 @@ export type SourceMapGcResult = z.infer<typeof sourceMapGcResultSchema>;
  * optionally scoped to one project (omit for all projects). */
 export type CleanupOptions = z.infer<typeof cleanupOptionsSchema>;
 
-/** What automatic cleanup deletes, and when. */
-export type AutoCleanupSettings = z.infer<typeof autoCleanupSettingsSchema>;
+/** How long each kind of data is kept; `null` keeps it forever. */
+export type RetentionWindows = z.infer<typeof retentionWindowsSchema>;
 
-/** How the last automatic cleanup went. */
-export type AutoCleanupRun = z.infer<typeof autoCleanupRunSchema>;
+/** A project kept for other windows than the defaults. */
+export type ProjectRetention = z.infer<typeof projectRetentionSchema>;
 
-/** Automatic cleanup: settings, next run, last run. */
-export type AutoCleanup = z.infer<typeof autoCleanupSchema>;
+/** Retention by default and per project, and when its cleanup runs. */
+export type RetentionSettings = z.infer<typeof retentionSettingsSchema>;
+
+/** How the last retention cleanup went. */
+export type RetentionRun = z.infer<typeof retentionRunSchema>;
+
+/** How long ago each project's data arrived, per kind. */
+export type StorageAge = z.infer<typeof storageAgeSchema>;
+
+/** Retention: settings, next cleanup, last cleanup. */
+export type Retention = z.infer<typeof retentionSchema>;

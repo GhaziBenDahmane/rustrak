@@ -2440,6 +2440,9 @@ export const handlers = [
         logs_count: 200,
         source_maps_count: 2,
         estimated_bytes: 524288,
+        events_bytes: 262144,
+        transactions_bytes: 196608,
+        logs_bytes: 65536,
       },
       {
         project_id: 2,
@@ -2450,6 +2453,9 @@ export const handlers = [
         logs_count: 0,
         source_maps_count: 0,
         estimated_bytes: 0,
+        events_bytes: 0,
+        transactions_bytes: 0,
+        logs_bytes: 0,
       },
     ]);
   }),

@@ -59,6 +59,12 @@ pub trait ScheduledJob: Send + Sync {
 
     fn misfire(&self) -> Misfire;
 
+    /// Busy with work started outside the schedule. A due run waits for it
+    /// like it waits for its own last run, leaving that work's history alone.
+    fn busy(&self) -> bool {
+        false
+    }
+
     /// Does the work. The returned value is stored as the run's result.
     async fn run(&self, ctx: JobContext<'_>) -> AppResult<Value>;
 }
@@ -140,7 +146,7 @@ impl Scheduler {
                 set_next_run(pool, key, Some(schedule.next_after(now, tz)), settings).await?;
                 continue;
             };
-            if due > now || self.is_running(key) {
+            if due > now || self.is_running(key) || job.busy() {
                 continue;
             }
 
@@ -199,28 +205,53 @@ impl Scheduler {
             if let Err(e) = &outcome {
                 log::error!("Scheduled job {key} failed: {e}");
             }
-            let (status, result, error) = match outcome {
-                Ok(result) => ("ok", Some(Json(result)), None),
-                Err(e) => ("error", None, Some(e.to_string())),
-            };
-            if let Err(e) = sqlx::query(
-                r#"
-                UPDATE scheduled_jobs
-                SET last_finished_at = $2, last_status = $3, last_result = $4, last_error = $5
-                WHERE key = $1
-                "#,
-            )
-            .bind(key)
-            .bind(Utc::now())
-            .bind(status)
-            .bind(result)
-            .bind(error)
-            .execute(&pool)
-            .await
-            {
-                log::error!("Could not record the run of scheduled job {key}: {e}");
-            }
+            Self::record_finish(&pool, key, now, outcome).await;
         })
+    }
+
+    /// Records a run of `key` started outside the schedule (one asked for
+    /// now), so it is the job's last run like any other.
+    pub async fn record_start(pool: &DbPool, key: &str, at: DateTime<Utc>) -> AppResult<()> {
+        Self::ensure(pool, key).await?;
+        sqlx::query("UPDATE scheduled_jobs SET last_started_at = $2 WHERE key = $1")
+            .bind(key)
+            .bind(at)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Records how the run of `key` started at `started_at` ended, unless a
+    /// later run has started since (its own finish will be recorded). A
+    /// failure to record is logged: the run itself already happened.
+    pub async fn record_finish(
+        pool: &DbPool,
+        key: &str,
+        started_at: DateTime<Utc>,
+        outcome: AppResult<Value>,
+    ) {
+        let (status, result, error) = match outcome {
+            Ok(result) => ("ok", Some(Json(result)), None),
+            Err(e) => ("error", None, Some(e.to_string())),
+        };
+        if let Err(e) = sqlx::query(
+            r#"
+            UPDATE scheduled_jobs
+            SET last_finished_at = $2, last_status = $3, last_result = $4, last_error = $5
+            WHERE key = $1 AND last_started_at = $6
+            "#,
+        )
+        .bind(key)
+        .bind(Utc::now())
+        .bind(status)
+        .bind(result)
+        .bind(error)
+        .bind(started_at)
+        .execute(pool)
+        .await
+        {
+            log::error!("Could not record the run of scheduled job {key}: {e}");
+        }
     }
 
     /// A job's row, created with empty settings the first time it is asked
