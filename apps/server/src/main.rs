@@ -289,7 +289,9 @@ async fn main() -> std::io::Result<()> {
         Arc::new(rustrak::scheduler::jobs::MonitorSweepJob::new(
             processors_data.clone(),
         )),
-        Arc::new(rustrak::scheduler::jobs::StorageCleanupJob),
+        Arc::new(rustrak::scheduler::jobs::StorageCleanupJob::new(
+            cleanup_job_data.clone(),
+        )),
     ]);
     let scheduler_pool = db_pool.clone();
     tokio::spawn(async move {

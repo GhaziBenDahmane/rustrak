@@ -10,11 +10,13 @@ use actix_web::{web, HttpResponse};
 use crate::auth::ApiActor;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
-use crate::models::{AutoCleanupResponse, AutoCleanupRun, AutoCleanupSettings, CleanupRequest};
+use crate::models::{
+    AutoCleanupResponse, AutoCleanupRun, AutoCleanupSettings, CleanupRequest, CleanupState,
+};
 #[cfg(feature = "openapi")]
 use crate::models::{
-    CleanupCounts, CleanupState, CleanupStatus, ProjectStorage, SourceMapGcResult,
-    SourceMapStorage, StorageSummary,
+    CleanupCounts, CleanupStatus, ProjectStorage, SourceMapGcResult, SourceMapStorage,
+    StorageSummary,
 };
 use crate::scheduler::engine::{JobRunStatus, Scheduler};
 use crate::scheduler::jobs::StorageCleanupJob;
@@ -231,9 +233,13 @@ pub struct StorageApi;
     security(("bearer_auth" = [])),
 ))]
 /// GET /api/storage/auto-cleanup
-pub async fn get_auto_cleanup(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+pub async fn get_auto_cleanup(
+    pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(HttpResponse::Ok().json(auto_cleanup_response(pool.get_ref()).await?))
+    Ok(HttpResponse::Ok().json(auto_cleanup_response(pool.get_ref(), &job).await?))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -252,6 +258,7 @@ pub async fn get_auto_cleanup(pool: web::Data<DbPool>, actor: ApiActor) -> AppRe
 /// PUT /api/storage/auto-cleanup
 pub async fn update_auto_cleanup(
     pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
     actor: ApiActor,
     body: web::Json<AutoCleanupSettings>,
 ) -> AppResult<HttpResponse> {
@@ -264,10 +271,10 @@ pub async fn update_auto_cleanup(
         serde_json::to_value(&settings).unwrap_or_default(),
     )
     .await?;
-    Ok(HttpResponse::Ok().json(auto_cleanup_response(pool.get_ref()).await?))
+    Ok(HttpResponse::Ok().json(auto_cleanup_response(pool.get_ref(), &job).await?))
 }
 
-async fn auto_cleanup_response(pool: &DbPool) -> AppResult<AutoCleanupResponse> {
+async fn auto_cleanup_response(pool: &DbPool, job: &CleanupJob) -> AppResult<AutoCleanupResponse> {
     let state = match Scheduler::job(pool, StorageCleanupJob::KEY).await {
         Ok(state) => Some(state),
         Err(AppError::NotFound(_)) => None,
@@ -280,21 +287,27 @@ async fn auto_cleanup_response(pool: &DbPool) -> AppResult<AutoCleanupResponse> 
             last_run: None,
         });
     };
+    // An unfinished run with no cleanup running was cut short by a restart.
+    let running = job.status().state == CleanupState::Running;
     let last_run = state.last_started_at.map(|started_at| {
         let finished = state.last_finished_at.filter(|f| *f >= started_at);
         AutoCleanupRun {
             started_at,
             finished_at: finished,
             status: match (finished, state.last_status) {
-                (None, _) => "running",
+                (None, _) if running => "running",
                 (Some(_), Some(JobRunStatus::Ok)) => "ok",
-                (Some(_), _) => "error",
+                _ => "error",
             }
             .to_string(),
             removed: finished
                 .and(state.last_result.clone())
                 .and_then(|r| serde_json::from_value(r).ok()),
-            error: finished.and(state.last_error.clone()),
+            error: match finished {
+                Some(_) => state.last_error.clone(),
+                None if running => None,
+                None => Some("Interrupted by a server restart".to_string()),
+            },
         }
     });
     Ok(AutoCleanupResponse {

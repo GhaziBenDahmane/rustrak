@@ -10,7 +10,7 @@ use crate::error::AppResult;
 use crate::models::AutoCleanupSettings;
 use crate::scheduler::engine::{JobContext, Misfire, ScheduledJob};
 use crate::scheduler::schedule::{parse_timezone, IntervalUnit, Schedule};
-use crate::services::StorageService;
+use crate::services::CleanupJob;
 
 /// Cron monitors: marks the check-ins that were missed or ran past their max
 /// runtime, once a minute, the granularity of every monitor schedule.
@@ -56,11 +56,18 @@ impl ScheduledJob for MonitorSweepJob {
 }
 
 /// Automatic storage cleanup, on the schedule and for the categories an
-/// admin chose in Settings → Storage. Off until turned on.
-pub struct StorageCleanupJob;
+/// admin chose in Settings → Storage. Off until turned on. Runs through the
+/// manual cleanup's [`CleanupJob`], so the two never overlap.
+pub struct StorageCleanupJob {
+    cleanup: web::Data<CleanupJob>,
+}
 
 impl StorageCleanupJob {
     pub const KEY: &'static str = "storage_cleanup";
+
+    pub fn new(cleanup: web::Data<CleanupJob>) -> Self {
+        Self { cleanup }
+    }
 
     /// Stored settings, with defaults for anything missing or unreadable.
     pub fn settings(stored: &Value) -> AutoCleanupSettings {
@@ -91,13 +98,14 @@ impl ScheduledJob for StorageCleanupJob {
 
     async fn run(&self, ctx: JobContext<'_>) -> AppResult<Value> {
         let settings = Self::settings(ctx.settings);
-        let removed = StorageService::execute_cleanup(
-            ctx.pool,
-            settings.older_than_days,
-            None,
-            settings.filter(),
-        )
-        .await?;
+        let removed = self
+            .cleanup
+            .run(
+                ctx.pool.clone(),
+                settings.older_than_days,
+                settings.filter(),
+            )
+            .await?;
         Ok(serde_json::to_value(removed).unwrap_or_default())
     }
 }

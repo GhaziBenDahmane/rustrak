@@ -548,6 +548,8 @@ async fn auto_cleanup_rejects_settings_that_cannot_run() {
         ),
         ("timezone", json!({"timezone": "Mars/Olympus"})),
         ("older_than_days", json!({"older_than_days": 0})),
+        // `Duration::days` panics past ~25 trillion years.
+        ("older_than_days", json!({"older_than_days": i64::MAX})),
         (
             "include_events",
             json!({"include_events": false, "include_transactions": false, "include_logs": false}),
@@ -624,7 +626,8 @@ async fn the_cleanup_job_purges_only_the_chosen_categories_on_schedule() {
     )
     .await
     .unwrap();
-    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob)]);
+    let cleanup = web::Data::new(CleanupJob::default());
+    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob::new(cleanup.clone()))]);
     let now = Utc::now();
     for tick in [now, now + chrono::Duration::days(1)] {
         for handle in scheduler.tick(&db.pool, tick).await.unwrap() {
@@ -633,6 +636,10 @@ async fn the_cleanup_job_purges_only_the_chosen_categories_on_schedule() {
     }
 
     assert_eq!(log_count(&db.pool).await, 1, "only the 40-day-old log goes");
+    // It ran through the manual cleanup's job, so the two never overlap.
+    let status = cleanup.status();
+    assert_eq!(status.state, rustrak::models::CleanupState::Completed);
+    assert_eq!(status.removed.logs, 1);
     let state = Scheduler::job(&db.pool, StorageCleanupJob::KEY)
         .await
         .unwrap();
@@ -657,7 +664,9 @@ async fn a_disabled_cleanup_job_deletes_nothing() {
     .unwrap();
     seed_old_log(&db.pool, project.id, 400).await;
 
-    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob)]);
+    let scheduler = Scheduler::new(vec![Arc::new(StorageCleanupJob::new(web::Data::new(
+        CleanupJob::default(),
+    )))]);
     let now = Utc::now();
     for tick in [now, now + chrono::Duration::days(30)] {
         for handle in scheduler.tick(&db.pool, tick).await.unwrap() {
@@ -666,4 +675,40 @@ async fn a_disabled_cleanup_job_deletes_nothing() {
     }
 
     assert_eq!(log_count(&db.pool).await, 1);
+}
+
+#[actix_web::test]
+async fn a_cleanup_cut_short_by_a_restart_is_not_shown_as_running() {
+    use rustrak::scheduler::engine::Scheduler;
+    use rustrak::scheduler::jobs::StorageCleanupJob;
+
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    Scheduler::update_settings(&db.pool, StorageCleanupJob::KEY, json!({"enabled": true}))
+        .await
+        .unwrap();
+    // Started before a restart, never finished, and no task survives it.
+    sqlx::query(if cfg!(feature = "postgres") {
+        "UPDATE scheduled_jobs SET last_started_at = $1 WHERE key = $2"
+    } else {
+        "UPDATE scheduled_jobs SET last_started_at = ? WHERE key = ?"
+    })
+    .bind(Utc::now())
+    .bind(StorageCleanupJob::KEY)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let req = test::TestRequest::get()
+        .uri("/api/storage/auto-cleanup")
+        .insert_header(bearer(&token))
+        .to_request();
+    let body: Value = test::read_body_json(test::call_service(&app, req).await).await;
+    assert_eq!(body["last_run"]["status"], "error");
+    assert!(body["last_run"]["error"]
+        .as_str()
+        .unwrap()
+        .contains("restart"));
 }
