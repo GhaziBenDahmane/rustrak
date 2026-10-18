@@ -1,5 +1,6 @@
 import type { CheckIn } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
+import { checkInFill } from '@/features/monitor/lib/check-in-fill';
 import { formatRunDuration } from '@/features/monitor/lib/duration';
 import { cn } from '@/shared/lib/utils';
 import {
@@ -8,7 +9,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/shared/ui/components/shadcn/tooltip';
-import { checkInFill } from './check-in-status';
 
 /**
  * The last runs of one environment, oldest on the left, one tick per

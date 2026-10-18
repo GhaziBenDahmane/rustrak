@@ -42,7 +42,8 @@ export function useSchedulePreview(
       return;
     }
     let cancelled = false;
-    setState((prev) => ({ ...prev, pending: true }));
+    // The previous schedule's runs would show under the new one's label.
+    setState({ ...IDLE, pending: true });
     const timer = setTimeout(async () => {
       const client = await createClient();
       const result = await client.schedules.preview(JSON.parse(key));

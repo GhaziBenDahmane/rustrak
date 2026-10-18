@@ -82,13 +82,14 @@ curl "$RUSTRAK_CRONS?status=in_progress"`;
 
 ${start}
 
-# Execute your scheduled task here...
-
-# 🟢 Notify Rustrak your job has completed successfully:
-curl "$RUSTRAK_CRONS?status=ok"
-
-# 🔴 Or notify Rustrak your job has failed:
-curl "$RUSTRAK_CRONS?status=error"`;
+# Execute your scheduled task here, then report exactly one result:
+if ./run-your-task.sh; then
+  # 🟢 Notify Rustrak your job has completed successfully:
+  curl "$RUSTRAK_CRONS?status=ok"
+else
+  # 🔴 Notify Rustrak your job has failed:
+  curl "$RUSTRAK_CRONS?status=error"
+fi`;
 }
 
 function cli({ dsn, slug, schedule }: GuideInput): string {

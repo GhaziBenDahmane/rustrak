@@ -50,6 +50,10 @@ describe('cronGuide', () => {
     expect(code).toContain('?status=in_progress');
     expect(code).toContain('?status=ok');
     expect(code).toContain('?status=error');
+    // One final status per run: the snippet runs top to bottom when pasted.
+    expect(code).toMatch(
+      /if [\s\S]*then[\s\S]*status=ok[\s\S]*else[\s\S]*status=error[\s\S]*fi/,
+    );
   });
 
   it('upserts the monitor when a schedule is given', () => {

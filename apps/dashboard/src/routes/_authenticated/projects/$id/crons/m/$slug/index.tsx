@@ -20,7 +20,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 const PER_PAGE = 25;
 
 export const Route = createFileRoute(
-  '/_authenticated/projects/$id/crons/$slug/',
+  '/_authenticated/projects/$id/crons/m/$slug/',
 )({
   validateSearch: (search: Record<string, unknown>) => ({
     page: searchPage(search.page),

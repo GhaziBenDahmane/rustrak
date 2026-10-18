@@ -1,6 +1,7 @@
 import type { Monitor } from '@rustrak/client';
 import { BellOff } from 'lucide-react';
 import { useFormatter, useTranslations } from 'use-intl';
+import { monitorHref } from '@/features/monitor/lib/href';
 import { lastCheckIn, nextCheckIn } from '@/features/monitor/lib/status';
 import { Link } from '@/shared/ui/components/link';
 import { ScheduleText } from '@/shared/ui/components/schedule-text';
@@ -41,7 +42,7 @@ export function MonitorsTable({
         {monitors.map((monitor) => (
           <Link
             key={monitor.id}
-            href={`/projects/${projectId}/crons/${encodeURIComponent(monitor.slug)}`}
+            href={monitorHref(projectId, monitor.slug)}
             className="group flex items-center gap-4 px-4 py-3.5 text-sm transition-colors hover:bg-muted/30"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
 import { deleteMonitor, updateMonitor } from '@/features/monitor/api/mutations';
+import { monitorHref } from '@/features/monitor/lib/href';
 import { Link } from '@/shared/ui/components/link';
 import {
   AlertDialog,
@@ -38,7 +39,7 @@ export function MonitorActions({
   const [isPending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
   const base = `/projects/${projectId}/crons`;
-  const href = `${base}/${encodeURIComponent(monitor.slug)}`;
+  const href = monitorHref(projectId, monitor.slug);
 
   const toggleMute = () =>
     startTransition(async () => {
