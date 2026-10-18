@@ -31,6 +31,8 @@ import { Route as AuthenticatedProjectsIdLogsRouteImport } from './routes/_authe
 import { Route as AuthenticatedProjectsIdSettingsRouteImport } from './routes/_authenticated/projects/$id/settings';
 import { Route as AuthenticatedProjectsIdAgentsIndexRouteImport } from './routes/_authenticated/projects/$id/agents/index';
 import { Route as AuthenticatedProjectsIdAgentsTraceIdRouteImport } from './routes/_authenticated/projects/$id/agents/$traceId';
+import { Route as AuthenticatedProjectsIdCronsIndexRouteImport } from './routes/_authenticated/projects/$id/crons/index';
+import { Route as AuthenticatedProjectsIdCronsNewRouteImport } from './routes/_authenticated/projects/$id/crons/new';
 import { Route as AuthenticatedProjectsIdIssuesIndexRouteImport } from './routes/_authenticated/projects/$id/issues/index';
 import { Route as AuthenticatedProjectsIdPerformanceIndexRouteImport } from './routes/_authenticated/projects/$id/performance/index';
 import { Route as AuthenticatedProjectsIdPerformanceTxnIdRouteImport } from './routes/_authenticated/projects/$id/performance/$txnId';
@@ -44,6 +46,8 @@ import { Route as AuthenticatedProjectsIdSettingsGeneralRouteImport } from './ro
 import { Route as AuthenticatedProjectsIdSettingsGithubRouteImport } from './routes/_authenticated/projects/$id/settings/github';
 import { Route as AuthenticatedProjectsIdSettingsMembersRouteImport } from './routes/_authenticated/projects/$id/settings/members';
 import { Route as AuthenticatedProjectsIdIssuesIssueIdIndexRouteImport } from './routes/_authenticated/projects/$id/issues/$issueId/index';
+import { Route as AuthenticatedProjectsIdCronsMSlugIndexRouteImport } from './routes/_authenticated/projects/$id/crons/m/$slug/index';
+import { Route as AuthenticatedProjectsIdCronsMSlugEditRouteImport } from './routes/_authenticated/projects/$id/crons/m/$slug/edit';
 import { Route as AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRouteImport } from './routes/_authenticated/projects/$id/issues/$issueId/events/$eventId';
 import { Route as AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRouteImport } from './routes/_authenticated/projects/$id/issues/$issueId/events/empty';
 
@@ -171,6 +175,18 @@ const AuthenticatedProjectsIdAgentsTraceIdRoute =
     path: '/agents/$traceId',
     getParentRoute: () => AuthenticatedProjectsIdRoute,
   } as any);
+const AuthenticatedProjectsIdCronsIndexRoute =
+  AuthenticatedProjectsIdCronsIndexRouteImport.update({
+    id: '/crons/',
+    path: '/crons/',
+    getParentRoute: () => AuthenticatedProjectsIdRoute,
+  } as any);
+const AuthenticatedProjectsIdCronsNewRoute =
+  AuthenticatedProjectsIdCronsNewRouteImport.update({
+    id: '/crons/new',
+    path: '/crons/new',
+    getParentRoute: () => AuthenticatedProjectsIdRoute,
+  } as any);
 const AuthenticatedProjectsIdIssuesIndexRoute =
   AuthenticatedProjectsIdIssuesIndexRouteImport.update({
     id: '/issues/',
@@ -249,6 +265,18 @@ const AuthenticatedProjectsIdIssuesIssueIdIndexRoute =
     path: '/issues/$issueId/',
     getParentRoute: () => AuthenticatedProjectsIdRoute,
   } as any);
+const AuthenticatedProjectsIdCronsMSlugIndexRoute =
+  AuthenticatedProjectsIdCronsMSlugIndexRouteImport.update({
+    id: '/crons/m/$slug/',
+    path: '/crons/m/$slug/',
+    getParentRoute: () => AuthenticatedProjectsIdRoute,
+  } as any);
+const AuthenticatedProjectsIdCronsMSlugEditRoute =
+  AuthenticatedProjectsIdCronsMSlugEditRouteImport.update({
+    id: '/crons/m/$slug/edit',
+    path: '/crons/m/$slug/edit',
+    getParentRoute: () => AuthenticatedProjectsIdRoute,
+  } as any);
 const AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute =
   AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRouteImport.update({
     id: '/issues/$issueId/events/$eventId',
@@ -283,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/projects/$id/settings': typeof AuthenticatedProjectsIdSettingsRouteWithChildren;
   '/projects/$id/': typeof AuthenticatedProjectsIdIndexRoute;
   '/projects/$id/agents/$traceId': typeof AuthenticatedProjectsIdAgentsTraceIdRoute;
+  '/projects/$id/crons/new': typeof AuthenticatedProjectsIdCronsNewRoute;
   '/projects/$id/performance/$txnId': typeof AuthenticatedProjectsIdPerformanceTxnIdRoute;
   '/projects/$id/performance/summary': typeof AuthenticatedProjectsIdPerformanceSummaryRoute;
   '/projects/$id/releases/$release': typeof AuthenticatedProjectsIdReleasesReleaseRoute;
@@ -292,13 +321,16 @@ export interface FileRoutesByFullPath {
   '/projects/$id/settings/github': typeof AuthenticatedProjectsIdSettingsGithubRoute;
   '/projects/$id/settings/members': typeof AuthenticatedProjectsIdSettingsMembersRoute;
   '/projects/$id/agents/': typeof AuthenticatedProjectsIdAgentsIndexRoute;
+  '/projects/$id/crons/': typeof AuthenticatedProjectsIdCronsIndexRoute;
   '/projects/$id/issues/': typeof AuthenticatedProjectsIdIssuesIndexRoute;
   '/projects/$id/performance/': typeof AuthenticatedProjectsIdPerformanceIndexRoute;
   '/projects/$id/releases/': typeof AuthenticatedProjectsIdReleasesIndexRoute;
   '/projects/$id/settings/': typeof AuthenticatedProjectsIdSettingsIndexRoute;
   '/projects/$id/issues/$issueId/': typeof AuthenticatedProjectsIdIssuesIssueIdIndexRoute;
+  '/projects/$id/crons/m/$slug/edit': typeof AuthenticatedProjectsIdCronsMSlugEditRoute;
   '/projects/$id/issues/$issueId/events/$eventId': typeof AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute;
   '/projects/$id/issues/$issueId/events/empty': typeof AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute;
+  '/projects/$id/crons/m/$slug/': typeof AuthenticatedProjectsIdCronsMSlugIndexRoute;
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute;
@@ -318,6 +350,7 @@ export interface FileRoutesByTo {
   '/projects/$id/logs': typeof AuthenticatedProjectsIdLogsRoute;
   '/projects/$id': typeof AuthenticatedProjectsIdIndexRoute;
   '/projects/$id/agents/$traceId': typeof AuthenticatedProjectsIdAgentsTraceIdRoute;
+  '/projects/$id/crons/new': typeof AuthenticatedProjectsIdCronsNewRoute;
   '/projects/$id/performance/$txnId': typeof AuthenticatedProjectsIdPerformanceTxnIdRoute;
   '/projects/$id/performance/summary': typeof AuthenticatedProjectsIdPerformanceSummaryRoute;
   '/projects/$id/releases/$release': typeof AuthenticatedProjectsIdReleasesReleaseRoute;
@@ -327,13 +360,16 @@ export interface FileRoutesByTo {
   '/projects/$id/settings/github': typeof AuthenticatedProjectsIdSettingsGithubRoute;
   '/projects/$id/settings/members': typeof AuthenticatedProjectsIdSettingsMembersRoute;
   '/projects/$id/agents': typeof AuthenticatedProjectsIdAgentsIndexRoute;
+  '/projects/$id/crons': typeof AuthenticatedProjectsIdCronsIndexRoute;
   '/projects/$id/issues': typeof AuthenticatedProjectsIdIssuesIndexRoute;
   '/projects/$id/performance': typeof AuthenticatedProjectsIdPerformanceIndexRoute;
   '/projects/$id/releases': typeof AuthenticatedProjectsIdReleasesIndexRoute;
   '/projects/$id/settings': typeof AuthenticatedProjectsIdSettingsIndexRoute;
   '/projects/$id/issues/$issueId': typeof AuthenticatedProjectsIdIssuesIssueIdIndexRoute;
+  '/projects/$id/crons/m/$slug/edit': typeof AuthenticatedProjectsIdCronsMSlugEditRoute;
   '/projects/$id/issues/$issueId/events/$eventId': typeof AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute;
   '/projects/$id/issues/$issueId/events/empty': typeof AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute;
+  '/projects/$id/crons/m/$slug': typeof AuthenticatedProjectsIdCronsMSlugIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -358,6 +394,7 @@ export interface FileRoutesById {
   '/_authenticated/projects/$id/settings': typeof AuthenticatedProjectsIdSettingsRouteWithChildren;
   '/_authenticated/projects/$id/': typeof AuthenticatedProjectsIdIndexRoute;
   '/_authenticated/projects/$id/agents/$traceId': typeof AuthenticatedProjectsIdAgentsTraceIdRoute;
+  '/_authenticated/projects/$id/crons/new': typeof AuthenticatedProjectsIdCronsNewRoute;
   '/_authenticated/projects/$id/performance/$txnId': typeof AuthenticatedProjectsIdPerformanceTxnIdRoute;
   '/_authenticated/projects/$id/performance/summary': typeof AuthenticatedProjectsIdPerformanceSummaryRoute;
   '/_authenticated/projects/$id/releases/$release': typeof AuthenticatedProjectsIdReleasesReleaseRoute;
@@ -367,13 +404,16 @@ export interface FileRoutesById {
   '/_authenticated/projects/$id/settings/github': typeof AuthenticatedProjectsIdSettingsGithubRoute;
   '/_authenticated/projects/$id/settings/members': typeof AuthenticatedProjectsIdSettingsMembersRoute;
   '/_authenticated/projects/$id/agents/': typeof AuthenticatedProjectsIdAgentsIndexRoute;
+  '/_authenticated/projects/$id/crons/': typeof AuthenticatedProjectsIdCronsIndexRoute;
   '/_authenticated/projects/$id/issues/': typeof AuthenticatedProjectsIdIssuesIndexRoute;
   '/_authenticated/projects/$id/performance/': typeof AuthenticatedProjectsIdPerformanceIndexRoute;
   '/_authenticated/projects/$id/releases/': typeof AuthenticatedProjectsIdReleasesIndexRoute;
   '/_authenticated/projects/$id/settings/': typeof AuthenticatedProjectsIdSettingsIndexRoute;
   '/_authenticated/projects/$id/issues/$issueId/': typeof AuthenticatedProjectsIdIssuesIssueIdIndexRoute;
+  '/_authenticated/projects/$id/crons/m/$slug/edit': typeof AuthenticatedProjectsIdCronsMSlugEditRoute;
   '/_authenticated/projects/$id/issues/$issueId/events/$eventId': typeof AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute;
   '/_authenticated/projects/$id/issues/$issueId/events/empty': typeof AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute;
+  '/_authenticated/projects/$id/crons/m/$slug/': typeof AuthenticatedProjectsIdCronsMSlugIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -398,6 +438,7 @@ export interface FileRouteTypes {
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/agents/$traceId'
+    | '/projects/$id/crons/new'
     | '/projects/$id/performance/$txnId'
     | '/projects/$id/performance/summary'
     | '/projects/$id/releases/$release'
@@ -407,13 +448,16 @@ export interface FileRouteTypes {
     | '/projects/$id/settings/github'
     | '/projects/$id/settings/members'
     | '/projects/$id/agents/'
+    | '/projects/$id/crons/'
     | '/projects/$id/issues/'
     | '/projects/$id/performance/'
     | '/projects/$id/releases/'
     | '/projects/$id/settings/'
     | '/projects/$id/issues/$issueId/'
+    | '/projects/$id/crons/m/$slug/edit'
     | '/projects/$id/issues/$issueId/events/$eventId'
-    | '/projects/$id/issues/$issueId/events/empty';
+    | '/projects/$id/issues/$issueId/events/empty'
+    | '/projects/$id/crons/m/$slug/';
   fileRoutesByTo: FileRoutesByTo;
   to:
     | '/'
@@ -433,6 +477,7 @@ export interface FileRouteTypes {
     | '/projects/$id/logs'
     | '/projects/$id'
     | '/projects/$id/agents/$traceId'
+    | '/projects/$id/crons/new'
     | '/projects/$id/performance/$txnId'
     | '/projects/$id/performance/summary'
     | '/projects/$id/releases/$release'
@@ -442,13 +487,16 @@ export interface FileRouteTypes {
     | '/projects/$id/settings/github'
     | '/projects/$id/settings/members'
     | '/projects/$id/agents'
+    | '/projects/$id/crons'
     | '/projects/$id/issues'
     | '/projects/$id/performance'
     | '/projects/$id/releases'
     | '/projects/$id/settings'
     | '/projects/$id/issues/$issueId'
+    | '/projects/$id/crons/m/$slug/edit'
     | '/projects/$id/issues/$issueId/events/$eventId'
-    | '/projects/$id/issues/$issueId/events/empty';
+    | '/projects/$id/issues/$issueId/events/empty'
+    | '/projects/$id/crons/m/$slug';
   id:
     | '__root__'
     | '/'
@@ -472,6 +520,7 @@ export interface FileRouteTypes {
     | '/_authenticated/projects/$id/settings'
     | '/_authenticated/projects/$id/'
     | '/_authenticated/projects/$id/agents/$traceId'
+    | '/_authenticated/projects/$id/crons/new'
     | '/_authenticated/projects/$id/performance/$txnId'
     | '/_authenticated/projects/$id/performance/summary'
     | '/_authenticated/projects/$id/releases/$release'
@@ -481,13 +530,16 @@ export interface FileRouteTypes {
     | '/_authenticated/projects/$id/settings/github'
     | '/_authenticated/projects/$id/settings/members'
     | '/_authenticated/projects/$id/agents/'
+    | '/_authenticated/projects/$id/crons/'
     | '/_authenticated/projects/$id/issues/'
     | '/_authenticated/projects/$id/performance/'
     | '/_authenticated/projects/$id/releases/'
     | '/_authenticated/projects/$id/settings/'
     | '/_authenticated/projects/$id/issues/$issueId/'
+    | '/_authenticated/projects/$id/crons/m/$slug/edit'
     | '/_authenticated/projects/$id/issues/$issueId/events/$eventId'
-    | '/_authenticated/projects/$id/issues/$issueId/events/empty';
+    | '/_authenticated/projects/$id/issues/$issueId/events/empty'
+    | '/_authenticated/projects/$id/crons/m/$slug/';
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -654,6 +706,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsIdAgentsTraceIdRouteImport;
       parentRoute: typeof AuthenticatedProjectsIdRoute;
     };
+    '/_authenticated/projects/$id/crons/': {
+      id: '/_authenticated/projects/$id/crons/';
+      path: '/crons';
+      fullPath: '/projects/$id/crons/';
+      preLoaderRoute: typeof AuthenticatedProjectsIdCronsIndexRouteImport;
+      parentRoute: typeof AuthenticatedProjectsIdRoute;
+    };
+    '/_authenticated/projects/$id/crons/new': {
+      id: '/_authenticated/projects/$id/crons/new';
+      path: '/crons/new';
+      fullPath: '/projects/$id/crons/new';
+      preLoaderRoute: typeof AuthenticatedProjectsIdCronsNewRouteImport;
+      parentRoute: typeof AuthenticatedProjectsIdRoute;
+    };
     '/_authenticated/projects/$id/issues/': {
       id: '/_authenticated/projects/$id/issues/';
       path: '/issues';
@@ -745,6 +811,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsIdIssuesIssueIdIndexRouteImport;
       parentRoute: typeof AuthenticatedProjectsIdRoute;
     };
+    '/_authenticated/projects/$id/crons/m/$slug/': {
+      id: '/_authenticated/projects/$id/crons/m/$slug/';
+      path: '/crons/m/$slug';
+      fullPath: '/projects/$id/crons/m/$slug/';
+      preLoaderRoute: typeof AuthenticatedProjectsIdCronsMSlugIndexRouteImport;
+      parentRoute: typeof AuthenticatedProjectsIdRoute;
+    };
+    '/_authenticated/projects/$id/crons/m/$slug/edit': {
+      id: '/_authenticated/projects/$id/crons/m/$slug/edit';
+      path: '/crons/m/$slug/edit';
+      fullPath: '/projects/$id/crons/m/$slug/edit';
+      preLoaderRoute: typeof AuthenticatedProjectsIdCronsMSlugEditRouteImport;
+      parentRoute: typeof AuthenticatedProjectsIdRoute;
+    };
     '/_authenticated/projects/$id/issues/$issueId/events/$eventId': {
       id: '/_authenticated/projects/$id/issues/$issueId/events/$eventId';
       path: '/issues/$issueId/events/$eventId';
@@ -825,16 +905,20 @@ interface AuthenticatedProjectsIdRouteChildren {
   AuthenticatedProjectsIdSettingsRoute: typeof AuthenticatedProjectsIdSettingsRouteWithChildren;
   AuthenticatedProjectsIdIndexRoute: typeof AuthenticatedProjectsIdIndexRoute;
   AuthenticatedProjectsIdAgentsTraceIdRoute: typeof AuthenticatedProjectsIdAgentsTraceIdRoute;
+  AuthenticatedProjectsIdCronsNewRoute: typeof AuthenticatedProjectsIdCronsNewRoute;
   AuthenticatedProjectsIdPerformanceTxnIdRoute: typeof AuthenticatedProjectsIdPerformanceTxnIdRoute;
   AuthenticatedProjectsIdPerformanceSummaryRoute: typeof AuthenticatedProjectsIdPerformanceSummaryRoute;
   AuthenticatedProjectsIdReleasesReleaseRoute: typeof AuthenticatedProjectsIdReleasesReleaseRoute;
   AuthenticatedProjectsIdAgentsIndexRoute: typeof AuthenticatedProjectsIdAgentsIndexRoute;
+  AuthenticatedProjectsIdCronsIndexRoute: typeof AuthenticatedProjectsIdCronsIndexRoute;
   AuthenticatedProjectsIdIssuesIndexRoute: typeof AuthenticatedProjectsIdIssuesIndexRoute;
   AuthenticatedProjectsIdPerformanceIndexRoute: typeof AuthenticatedProjectsIdPerformanceIndexRoute;
   AuthenticatedProjectsIdReleasesIndexRoute: typeof AuthenticatedProjectsIdReleasesIndexRoute;
   AuthenticatedProjectsIdIssuesIssueIdIndexRoute: typeof AuthenticatedProjectsIdIssuesIssueIdIndexRoute;
+  AuthenticatedProjectsIdCronsMSlugEditRoute: typeof AuthenticatedProjectsIdCronsMSlugEditRoute;
   AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute: typeof AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute;
   AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute: typeof AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute;
+  AuthenticatedProjectsIdCronsMSlugIndexRoute: typeof AuthenticatedProjectsIdCronsMSlugIndexRoute;
 }
 
 const AuthenticatedProjectsIdRouteChildren: AuthenticatedProjectsIdRouteChildren =
@@ -845,6 +929,7 @@ const AuthenticatedProjectsIdRouteChildren: AuthenticatedProjectsIdRouteChildren
     AuthenticatedProjectsIdIndexRoute: AuthenticatedProjectsIdIndexRoute,
     AuthenticatedProjectsIdAgentsTraceIdRoute:
       AuthenticatedProjectsIdAgentsTraceIdRoute,
+    AuthenticatedProjectsIdCronsNewRoute: AuthenticatedProjectsIdCronsNewRoute,
     AuthenticatedProjectsIdPerformanceTxnIdRoute:
       AuthenticatedProjectsIdPerformanceTxnIdRoute,
     AuthenticatedProjectsIdPerformanceSummaryRoute:
@@ -853,6 +938,8 @@ const AuthenticatedProjectsIdRouteChildren: AuthenticatedProjectsIdRouteChildren
       AuthenticatedProjectsIdReleasesReleaseRoute,
     AuthenticatedProjectsIdAgentsIndexRoute:
       AuthenticatedProjectsIdAgentsIndexRoute,
+    AuthenticatedProjectsIdCronsIndexRoute:
+      AuthenticatedProjectsIdCronsIndexRoute,
     AuthenticatedProjectsIdIssuesIndexRoute:
       AuthenticatedProjectsIdIssuesIndexRoute,
     AuthenticatedProjectsIdPerformanceIndexRoute:
@@ -861,10 +948,14 @@ const AuthenticatedProjectsIdRouteChildren: AuthenticatedProjectsIdRouteChildren
       AuthenticatedProjectsIdReleasesIndexRoute,
     AuthenticatedProjectsIdIssuesIssueIdIndexRoute:
       AuthenticatedProjectsIdIssuesIssueIdIndexRoute,
+    AuthenticatedProjectsIdCronsMSlugEditRoute:
+      AuthenticatedProjectsIdCronsMSlugEditRoute,
     AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute:
       AuthenticatedProjectsIdIssuesIssueIdEventsEventIdRoute,
     AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute:
       AuthenticatedProjectsIdIssuesIssueIdEventsEmptyRoute,
+    AuthenticatedProjectsIdCronsMSlugIndexRoute:
+      AuthenticatedProjectsIdCronsMSlugIndexRoute,
   };
 
 const AuthenticatedProjectsIdRouteWithChildren =
