@@ -56,6 +56,7 @@ export interface StorageFigures {
 export function StorageView({
   retention: initialRetention,
   figures,
+  reloading,
   title,
   subtitle,
   onChanged,
@@ -63,6 +64,8 @@ export function StorageView({
   retention: Retention;
   /** `null` while loading. */
   figures: { data: StorageFigures } | { error: RustrakError } | null;
+  /** The figures shown are the last ones; newer are on their way. */
+  reloading: boolean;
   title: string;
   subtitle: string;
   /** Reads the page's data again, after a cleanup. */
@@ -136,18 +139,21 @@ export function StorageView({
           </h1>
           <p className="mt-1 text-muted-foreground">{subtitle}</p>
         </div>
-        {/* Shown at once, enabled once the figures are in: both dialogs
-            price what they delete from the projects' sizes. */}
+        {/* Shown at once, enabled once the current figures are in: both
+            dialogs price what they delete from the projects' sizes. */}
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={() => setDeleting(true)}
-            disabled={cleanup.running || !data}
+            disabled={cleanup.running || !data || reloading}
           >
             <Trash2 />
             {t('deleteAction')}
           </Button>
-          <Button onClick={() => setEditing(true)} disabled={!data}>
+          <Button
+            onClick={() => setEditing(true)}
+            disabled={!data || reloading}
+          >
             <Settings2 />
             {t('action')}
           </Button>

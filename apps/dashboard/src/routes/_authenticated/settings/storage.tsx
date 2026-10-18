@@ -91,9 +91,10 @@ function StorageContent() {
     version: number;
     result: Result<Retention, RustrakError>;
   } | null>(null);
-  const [figures, setFigures] = useState<
-    { data: StorageFigures } | { error: RustrakError } | null
-  >(null);
+  const [figures, setFigures] = useState<{
+    version: number;
+    answer: { data: StorageFigures } | { error: RustrakError };
+  } | null>(null);
   // Not `useAsync`, which drops its answer while the next one loads. A
   // newer read wins; an older one is dropped.
   useEffect(() => {
@@ -101,7 +102,9 @@ function StorageContent() {
     void getRetention().then(
       (result) => live && setRetention({ version, result }),
     );
-    void loadFigures().then((answer) => live && setFigures(answer));
+    void loadFigures().then(
+      (answer) => live && setFigures({ version, answer }),
+    );
     return () => {
       live = false;
     };
@@ -127,7 +130,8 @@ function StorageContent() {
       title={t('storage.title')}
       subtitle={t('storage.subtitle')}
       retention={retention.result.data}
-      figures={figures}
+      figures={figures?.answer ?? null}
+      reloading={figures !== null && figures.version !== version}
       onChanged={reload}
     />
   );
