@@ -1,5 +1,11 @@
 # docs
 
+## 0.16.2
+
+### Patch Changes
+
+- [`5ff519f`](https://github.com/rustrak/rustrak/commit/5ff519f6ef4c7f4c81e51c33b7a63406df5f9f3f) Thanks [@AbianS](https://github.com/AbianS)! - Move the site to rustrak.dev, and add the Crons and Storage guides.
+
 ## 0.16.1
 
 ### Patch Changes
