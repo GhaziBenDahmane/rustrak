@@ -59,6 +59,12 @@ pub trait ScheduledJob: Send + Sync {
 
     fn misfire(&self) -> Misfire;
 
+    /// Busy with work started outside the schedule. A due run waits for it
+    /// like it waits for its own last run, leaving that work's history alone.
+    fn busy(&self) -> bool {
+        false
+    }
+
     /// Does the work. The returned value is stored as the run's result.
     async fn run(&self, ctx: JobContext<'_>) -> AppResult<Value>;
 }
@@ -140,7 +146,7 @@ impl Scheduler {
                 set_next_run(pool, key, Some(schedule.next_after(now, tz)), settings).await?;
                 continue;
             };
-            if due > now || self.is_running(key) {
+            if due > now || self.is_running(key) || job.busy() {
                 continue;
             }
 

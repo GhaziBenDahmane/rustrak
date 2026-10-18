@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 use crate::digest::processors::Processors;
 use crate::error::AppResult;
-use crate::models::RetentionSettings;
+use crate::models::{CleanupState, RetentionSettings};
 use crate::scheduler::engine::{JobContext, Misfire, ScheduledJob};
 use crate::scheduler::schedule::{IntervalUnit, Schedule};
 use crate::services::sourcemap_store::SourceMapStore;
@@ -97,6 +97,11 @@ impl ScheduledJob for StorageCleanupJob {
     /// through would only repeat the same purge.
     fn misfire(&self) -> Misfire {
         Misfire::RunOnce
+    }
+
+    /// A cleanup asked for by hand is still running.
+    fn busy(&self) -> bool {
+        self.cleanup.status().state == CleanupState::Running
     }
 
     async fn run(&self, ctx: JobContext<'_>) -> AppResult<Value> {

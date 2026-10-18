@@ -23,6 +23,8 @@ struct FakeJob {
     misfire: Misfire,
     runs: Mutex<Vec<DateTime<Utc>>>,
     gate: Option<Arc<tokio::sync::Notify>>,
+    /// Busy with work started outside the schedule.
+    busy: std::sync::atomic::AtomicBool,
 }
 
 impl FakeJob {
@@ -31,6 +33,7 @@ impl FakeJob {
             misfire,
             runs: Mutex::new(Vec::new()),
             gate: None,
+            busy: Default::default(),
         })
     }
 
@@ -58,6 +61,10 @@ impl ScheduledJob for FakeJob {
 
     fn misfire(&self) -> Misfire {
         self.misfire
+    }
+
+    fn busy(&self) -> bool {
+        self.busy.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     async fn run(&self, ctx: JobContext<'_>) -> AppResult<Value> {
@@ -210,6 +217,7 @@ async fn a_run_still_going_is_not_started_twice() {
         misfire: Misfire::RunOnce,
         runs: Mutex::new(Vec::new()),
         gate: Some(gate.clone()),
+        busy: Default::default(),
     });
     let scheduler = Scheduler::new(vec![job.clone()]);
     Scheduler::update_settings(&db.pool, "fake", json!({"crontab": "* * * * *"}))
@@ -257,4 +265,25 @@ async fn a_panicking_run_does_not_block_the_next_one() {
     }
 
     assert_eq!(job.runs().len(), 2);
+}
+
+#[actix_web::test]
+async fn a_busy_job_waits_for_its_work_to_end_without_leaving_a_trace() {
+    let db = TestDb::new().await;
+    let job = FakeJob::new(Misfire::RunOnce);
+    let scheduler = Scheduler::new(vec![job.clone()]);
+    tick(&scheduler, &db.pool, "2026-01-01T05:30:00Z").await;
+
+    // Busy with a run asked for outside the schedule when 06:00 comes.
+    job.busy.store(true, std::sync::atomic::Ordering::SeqCst);
+    tick(&scheduler, &db.pool, "2026-01-01T06:00:00Z").await;
+    assert!(job.runs().is_empty());
+    let state = Scheduler::job(&db.pool, "fake").await.unwrap();
+    assert_eq!(state.last_started_at, None, "that run's history is kept");
+    assert_eq!(state.next_run_at, Some(at("2026-01-01T06:00:00Z")));
+
+    // Done: the missed slot runs once.
+    job.busy.store(false, std::sync::atomic::Ordering::SeqCst);
+    tick(&scheduler, &db.pool, "2026-01-01T06:05:00Z").await;
+    assert_eq!(job.runs(), vec![at("2026-01-01T06:00:00Z")]);
 }
