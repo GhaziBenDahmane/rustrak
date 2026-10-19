@@ -51,11 +51,14 @@ pub struct UpdateRelease {
 pub struct ReleaseResponse {
     pub version: String,
     #[serde(rename = "ref")]
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub reference: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub url: Option<String>,
     #[serde(rename = "dateCreated")]
     pub date_created: DateTime<Utc>,
     #[serde(rename = "dateReleased")]
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub date_released: Option<DateTime<Utc>>,
 }
 

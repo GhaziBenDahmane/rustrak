@@ -16,6 +16,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/events",
+    operation_id = "events.list",
     tag = "Events",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -90,6 +91,7 @@ pub async fn list_events(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/events/{event_id}",
+    operation_id = "events.get",
     tag = "Events",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -140,10 +142,11 @@ pub async fn get_event(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/events/sentry/{event_id}",
+    operation_id = "events.getBySentryId",
     tag = "Events",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
-        ("event_id" = uuid::Uuid, Path, description = "Client-supplied Sentry event ID (compact or hyphenated UUID)"),
+        ("event_id" = String, Path, description = "Client-supplied Sentry event ID: 32 hex digits, compact or hyphenated"),
     ),
     responses(
         (status = 200, description = "Full event detail, including its issue ID", body = EventDetailResponse),

@@ -39,6 +39,7 @@ fn require_admin(actor: &ApiActor) -> AppResult<()> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/storage/summary",
+    operation_id = "storage.getSummary",
     tag = "Storage",
     responses(
         (status = 200, description = "Instance-wide storage summary", body = StorageSummary),
@@ -59,6 +60,7 @@ pub async fn get_summary(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/storage/projects",
+    operation_id = "storage.getProjects",
     tag = "Storage",
     responses(
         (status = 200, description = "Per-project storage breakdown", body = inline(Vec<ProjectStorage>)),
@@ -79,6 +81,7 @@ pub async fn get_projects(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/storage/cleanup/preview",
+    operation_id = "storage.previewCleanup",
     tag = "Storage",
     request_body = CleanupRequest,
     responses(
@@ -107,6 +110,7 @@ pub async fn preview_cleanup(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/storage/cleanup",
+    operation_id = "storage.executeCleanup",
     tag = "Storage",
     request_body = CleanupRequest,
     responses(
@@ -139,6 +143,7 @@ pub async fn execute_cleanup(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/storage/cleanup/status",
+    operation_id = "storage.getCleanupStatus",
     tag = "Storage",
     responses(
         (status = 200, description = "The current or last cleanup and the rows it removed", body = CleanupStatus),
@@ -159,6 +164,7 @@ pub async fn get_cleanup_status(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/storage/source-maps/gc/preview",
+    operation_id = "storage.previewSourceMapGc",
     tag = "Storage",
     responses(
         (status = 200, description = "Dry-run: orphaned source maps a GC would remove", body = SourceMapGcResult),
@@ -179,6 +185,7 @@ pub async fn preview_source_map_gc(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/storage/source-maps/gc",
+    operation_id = "storage.gcSourceMaps",
     tag = "Storage",
     responses(
         (status = 200, description = "Orphaned source maps removed", body = SourceMapGcResult),
@@ -241,6 +248,7 @@ pub struct StorageApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/storage/retention",
+    operation_id = "storage.getRetention",
     tag = "Storage",
     responses(
         (status = 200, description = "Retention settings, next cleanup and last cleanup", body = RetentionResponse),
@@ -262,6 +270,7 @@ pub async fn get_retention(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/storage/retention",
+    operation_id = "storage.updateRetention",
     tag = "Storage",
     request_body = RetentionSettings,
     responses(
@@ -294,6 +303,7 @@ pub async fn update_retention(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/storage/retention/preview",
+    operation_id = "storage.previewRetention",
     tag = "Storage",
     request_body = RetentionSettings,
     responses(
@@ -318,6 +328,7 @@ pub async fn preview_retention(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/storage/retention/run",
+    operation_id = "storage.runRetention",
     tag = "Storage",
     responses(
         (status = 202, description = "Cleanup started in the background; poll its status", body = CleanupStatus),
@@ -375,6 +386,7 @@ pub async fn run_retention(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/storage/age",
+    operation_id = "storage.getAge",
     tag = "Storage",
     responses(
         (status = 200, description = "How long ago each project's data arrived, per kind", body = crate::models::StorageAge),

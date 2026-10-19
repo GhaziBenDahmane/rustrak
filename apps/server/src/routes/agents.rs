@@ -43,6 +43,7 @@ async fn require_view_access(pool: &DbPool, project_id: i32, actor: &ApiActor) -
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/runs",
+    operation_id = "agents.runs",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentTimeseriesQuery),
     responses(
@@ -80,6 +81,7 @@ pub async fn agent_runs(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/duration",
+    operation_id = "agents.duration",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentTimeseriesQuery),
     responses(
@@ -117,6 +119,7 @@ pub async fn agent_duration(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/models/calls",
+    operation_id = "agents.modelsCalls",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentBreakdownQuery),
     responses(
@@ -154,6 +157,7 @@ pub async fn agent_models_calls(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/models/tokens",
+    operation_id = "agents.modelsTokens",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentBreakdownQuery),
     responses(
@@ -191,6 +195,7 @@ pub async fn agent_models_tokens(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/tools",
+    operation_id = "agents.tools",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentBreakdownQuery),
     responses(
@@ -228,6 +233,7 @@ pub async fn agent_tools(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/traces",
+    operation_id = "agents.traces",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentTracesQuery),
     responses(
@@ -276,6 +282,7 @@ pub async fn agent_traces(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/summary",
+    operation_id = "agents.summary",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentWindowQuery),
     responses(
@@ -310,6 +317,7 @@ pub async fn agent_summary(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/models",
+    operation_id = "agents.modelsTable",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentWindowQuery),
     responses(
@@ -341,6 +349,7 @@ pub async fn agent_models_table(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/tools/stats",
+    operation_id = "agents.toolsTable",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID"), AgentWindowQuery),
     responses(
@@ -372,6 +381,7 @@ pub async fn agent_tools_table(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/agents/environments",
+    operation_id = "agents.environments",
     tag = "Agents",
     params(("project_id" = i32, Path, description = "Project ID")),
     responses(

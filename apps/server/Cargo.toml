@@ -176,6 +176,9 @@ proptest = "1.12.0"
 # Better assertion diffs
 pretty_assertions = "1.4.1"
 
+# Validates real responses against openapi.json (openapi_contract_test)
+jsonschema = "0.59.0"
+
 # tempfile moved to [dependencies] (needed at runtime for assembly)
 
 [[bin]]

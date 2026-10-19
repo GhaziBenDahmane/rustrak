@@ -14,8 +14,10 @@ use crate::telemetry::{Report, Reporter, TelemetryStatus};
 pub struct TelemetryPreview {
     pub enabled: bool,
     /// Why nothing is sent, when `enabled` is false.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub reason: Option<String>,
     /// Where it goes, when `enabled` is true.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub sink: Option<&'static str>,
     /// The next heartbeat, exactly as it would leave. Shown even when
     /// disabled, so the decision can be made on the real thing.
@@ -35,6 +37,7 @@ pub struct PreviewReport {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/telemetry/preview",
+    operation_id = "telemetry.preview",
     tag = "Telemetry",
     responses(
         (status = 200, description = "What the next heartbeat would carry", body = TelemetryPreview),

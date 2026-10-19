@@ -14,6 +14,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/tokens",
+    operation_id = "tokens.list",
     tag = "Tokens",
     responses(
         (status = 200, description = "List of tokens (masked)", body = Vec<AuthTokenResponse>),
@@ -41,6 +42,7 @@ pub async fn list_tokens(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/tokens",
+    operation_id = "tokens.create",
     tag = "Tokens",
     request_body = CreateAuthToken,
     responses(
@@ -66,6 +68,7 @@ pub async fn create_token(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/tokens/{id}",
+    operation_id = "tokens.delete",
     tag = "Tokens",
     params(("id" = i32, Path, description = "Token ID")),
     responses(
@@ -103,6 +106,7 @@ pub async fn delete_token(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/tokens/{id}",
+    operation_id = "tokens.get",
     tag = "Tokens",
     params(("id" = i32, Path, description = "Token ID")),
     responses(

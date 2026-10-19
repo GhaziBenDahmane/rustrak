@@ -62,6 +62,7 @@ impl Invitation {
 pub struct CreateInvitation {
     pub email: String,
     /// Global role the invited user will receive (`admin` | `member`).
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::UserRole))]
     pub role: String,
 }
 
@@ -78,6 +79,7 @@ pub struct AcceptInvitation {
 pub struct InvitationResponse {
     pub token: String,
     pub email: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::UserRole))]
     pub role: String,
     pub status: String,
     pub expires_at: DateTime<Utc>,

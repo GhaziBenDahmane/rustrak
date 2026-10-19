@@ -45,7 +45,10 @@ pub struct Event {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct EventResponse {
     pub id: Uuid,
+    /// Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub event_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub issue_id: Option<Uuid>,
     pub title: String,
     pub timestamp: DateTime<Utc>,
@@ -152,7 +155,10 @@ mod tests {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct EventDetailResponse {
     pub id: Uuid,
+    /// Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub event_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub issue_id: Option<Uuid>,
     pub title: String,
     pub timestamp: DateTime<Utc>,

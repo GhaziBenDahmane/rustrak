@@ -199,7 +199,8 @@ impl SpanProcessor {
         let release = text(&data, "release", 200);
         let environment = text(&data, "environment", 64);
 
-        let tags = data.get("tags").cloned();
+        // The spec promises an object; anything else is dropped.
+        let tags = data.get("tags").filter(|t| t.is_object()).cloned();
 
         Ok(SpanRow {
             transaction_id: None,
@@ -279,5 +280,17 @@ mod tests {
             br#"{"span_id":"s","trace_id":"t","start_timestamp":1.0,"timestamp":2.0}"#
         )
         .is_ok());
+    }
+
+    #[test]
+    fn parse_item_drops_non_object_tags() {
+        let span = |tags: &str| {
+            let item = format!(
+                r#"{{"span_id":"s","trace_id":"t","start_timestamp":1.0,"timestamp":2.0,"tags":{tags}}}"#
+            );
+            SpanProcessor::parse_item(item.as_bytes()).unwrap().tags
+        };
+        assert_eq!(span(r#"[["k","v"]]"#), None);
+        assert_eq!(span(r#"{"k":"v"}"#), Some(serde_json::json!({"k": "v"})));
     }
 }

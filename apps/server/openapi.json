@@ -19,7 +19,7 @@
           "Source Maps"
         ],
         "summary": "GET /api/0/organizations/{org_slug}/\nAlways returns 200 with synthetic org data — sentry-cli validates this before uploading.",
-        "operationId": "org_details",
+        "operationId": "sourceMaps.orgDetails",
         "parameters": [
           {
             "name": "org_slug",
@@ -33,7 +33,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Synthetic org metadata accepted by sentry-cli"
+            "description": "Synthetic org metadata accepted by sentry-cli",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -44,7 +51,7 @@
           "Source Maps"
         ],
         "summary": "POST /api/0/organizations/{org_slug}/artifactbundle/assemble/",
-        "operationId": "artifact_bundle_assemble",
+        "operationId": "sourceMaps.artifactBundleAssemble",
         "parameters": [
           {
             "name": "org_slug",
@@ -121,7 +128,7 @@
           "Source Maps"
         ],
         "summary": "GET /api/0/organizations/{org_slug}/chunk-upload/",
-        "operationId": "chunk_upload_capability",
+        "operationId": "sourceMaps.chunkUploadCapability",
         "parameters": [
           {
             "name": "org_slug",
@@ -135,7 +142,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Chunk upload capabilities and URL"
+            "description": "Chunk upload capabilities and URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkUploadOptions"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -159,7 +173,7 @@
           "Source Maps"
         ],
         "summary": "POST /api/0/organizations/{org_slug}/chunk-upload/",
-        "operationId": "chunk_upload",
+        "operationId": "sourceMaps.chunkUpload",
         "parameters": [
           {
             "name": "org_slug",
@@ -220,7 +234,7 @@
           "Source Maps"
         ],
         "summary": "GET /api/0/projects/{org_slug}/{project_slug}/files/source-maps/",
-        "operationId": "list_source_maps",
+        "operationId": "sourceMaps.list",
         "parameters": [
           {
             "name": "org_slug",
@@ -243,7 +257,14 @@
         ],
         "responses": {
           "200": {
-            "description": "List of uploaded source map files"
+            "description": "List of uploaded source map files",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMapList"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -280,7 +301,7 @@
         ],
         "summary": "POST /api/0/projects/{org_slug}/{project_slug}/releases/",
         "description": "Sentry-compatible release creation. Idempotent: repeating the same\n`(project, version)` returns 208 rather than erroring — sentry-cli and JS\nbundler plugins call this on every build. Triggers date-based regression\nclearing (see [`crate::services::issue::IssueService::finalize_release`])\non every call, not just the new-row branch: `finalize_release`'s own\n`UPDATE ... WHERE` is idempotent (a repeat run affects 0 rows once nothing\nis left to clear), so this also self-heals a prior call that created the\nrow but failed before clearing ran — a plain `if created` gate would\notherwise skip clearing forever once a retry lands on the 208 branch.",
-        "operationId": "create_release",
+        "operationId": "releases.create",
         "parameters": [
           {
             "name": "org_slug",
@@ -377,7 +398,7 @@
         ],
         "summary": "PUT /api/0/projects/{org_slug}/{project_slug}/releases/{version}/",
         "description": "Generic partial update (`ref`, `url`, `dateReleased`). Setting\n`dateReleased` IS \"finalize\" — there is no separate status flag.",
-        "operationId": "finalize_release",
+        "operationId": "releases.finalize",
         "parameters": [
           {
             "name": "org_slug",
@@ -462,7 +483,7 @@
           "GitHub"
         ],
         "summary": "GET /api/github",
-        "operationId": "status",
+        "operationId": "github.status",
         "responses": {
           "200": {
             "description": "GitHub App and installations",
@@ -506,7 +527,7 @@
           "GitHub"
         ],
         "summary": "DELETE /api/github",
-        "operationId": "disconnect",
+        "operationId": "github.disconnect",
         "responses": {
           "204": {
             "description": "GitHub App removed"
@@ -545,7 +566,7 @@
           "GitHub"
         ],
         "summary": "GET /api/github/callback: GitHub sends the browser here after creating the\napp; the code trades for its credentials.",
-        "operationId": "callback",
+        "operationId": "github.callback",
         "parameters": [
           {
             "name": "code",
@@ -614,7 +635,7 @@
           "GitHub"
         ],
         "summary": "GET /api/github/installed: GitHub sends the browser here after the app is\ninstalled on an account.",
-        "operationId": "installed",
+        "operationId": "github.installed",
         "parameters": [
           {
             "name": "installation_id",
@@ -675,7 +696,7 @@
           "GitHub"
         ],
         "summary": "POST /api/github/manifest: what the dashboard posts to GitHub so GitHub\ncreates an app already configured for this server.",
-        "operationId": "manifest",
+        "operationId": "github.manifest",
         "requestBody": {
           "content": {
             "application/json": {
@@ -741,7 +762,7 @@
           "GitHub"
         ],
         "summary": "GET /api/github/me: the GitHub username assignees sync through.",
-        "operationId": "get_my_login",
+        "operationId": "github.getMyLogin",
         "responses": {
           "200": {
             "description": "Your GitHub username",
@@ -775,7 +796,7 @@
           "GitHub"
         ],
         "summary": "PUT /api/github/me",
-        "operationId": "put_my_login",
+        "operationId": "github.putMyLogin",
         "requestBody": {
           "content": {
             "application/json": {
@@ -831,7 +852,7 @@
           "GitHub"
         ],
         "summary": "GET /api/github/repositories?project_id=: the repositories a project can\npoint at, for whoever may change that project's settings.",
-        "operationId": "repositories",
+        "operationId": "github.repositories",
         "parameters": [
           {
             "name": "project_id",
@@ -854,6 +875,16 @@
                   "items": {
                     "$ref": "#/components/schemas/GitHubRepository"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "GitHub is not connected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -902,7 +933,7 @@
           "GitHub"
         ],
         "summary": "POST /api/github/webhook: public, and trusted only through the signature\nGitHub computes with the app's webhook secret.",
-        "operationId": "webhook",
+        "operationId": "github.webhook",
         "requestBody": {
           "description": "GitHub event payload, signed in X-Hub-Signature-256",
           "content": {
@@ -960,7 +991,7 @@
           "Alert Channels"
         ],
         "summary": "GET /api/alert-channels",
-        "operationId": "list_channels",
+        "operationId": "alertChannels.list",
         "responses": {
           "200": {
             "description": "List of notification channels",
@@ -997,7 +1028,7 @@
           "Alert Channels"
         ],
         "summary": "POST /api/alert-channels",
-        "operationId": "create_channel",
+        "operationId": "alertChannels.create",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1044,7 +1075,7 @@
         ],
         "summary": "POST /api/integrations/preview-template",
         "description": "Renders a Custom Webhook template against a sample payload and hands back\nthe body that would be sent. The dashboard cannot run the template engine,\nso it asks while the reader types; going through the dispatcher's own\nrenderer is what keeps the preview from disagreeing with a delivery.",
-        "operationId": "preview_template",
+        "operationId": "alertChannels.previewTemplate",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1057,7 +1088,14 @@
         },
         "responses": {
           "200": {
-            "description": "Rendered body, or why it would not render"
+            "description": "Rendered body, or why it would not render",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewTemplateResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -1083,7 +1121,7 @@
           "Alert Channels"
         ],
         "summary": "GET /api/alert-channels/{id}",
-        "operationId": "get_channel",
+        "operationId": "alertChannels.get",
         "parameters": [
           {
             "name": "id",
@@ -1139,7 +1177,7 @@
           "Alert Channels"
         ],
         "summary": "DELETE /api/alert-channels/{id}",
-        "operationId": "delete_channel",
+        "operationId": "alertChannels.delete",
         "parameters": [
           {
             "name": "id",
@@ -1188,7 +1226,7 @@
           "Alert Channels"
         ],
         "summary": "PATCH /api/alert-channels/{id}",
-        "operationId": "update_channel",
+        "operationId": "alertChannels.update",
         "parameters": [
           {
             "name": "id",
@@ -1256,7 +1294,7 @@
           "Alert Channels"
         ],
         "summary": "POST /api/integrations/{id}/test",
-        "operationId": "test_channel",
+        "operationId": "alertChannels.test",
         "parameters": [
           {
             "name": "id",
@@ -1280,7 +1318,14 @@
         },
         "responses": {
           "200": {
-            "description": "Test notification sent"
+            "description": "Test notification sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestChannelResponse"
+                }
+              }
+            }
           },
           "401": {
             "description": "Unauthorized",
@@ -1316,7 +1361,7 @@
           "Invitations"
         ],
         "summary": "GET /api/invitations — list invitations (admin only)",
-        "operationId": "list_invitations",
+        "operationId": "invitations.list",
         "responses": {
           "200": {
             "description": "List of invitations",
@@ -1363,7 +1408,7 @@
           "Invitations"
         ],
         "summary": "POST /api/invitations — create an invitation (admin only)",
-        "operationId": "create_invitation",
+        "operationId": "invitations.create",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1439,7 +1484,7 @@
           "Invitations"
         ],
         "summary": "DELETE /api/invitations/{token} — revoke a pending invitation (admin only)",
-        "operationId": "revoke_invitation",
+        "operationId": "invitations.revoke",
         "parameters": [
           {
             "name": "token",
@@ -1500,7 +1545,7 @@
         ],
         "summary": "GET /api/projects - List projects with pagination",
         "description": "Admins see every project. Non-admins see only the projects they belong to.",
-        "operationId": "list_projects",
+        "operationId": "projects.list",
         "parameters": [
           {
             "name": "page",
@@ -1577,8 +1622,11 @@
                           "stored_event_count",
                           "digested_event_count",
                           "rate_limited_event_count",
+                          "rate_limit_per_minute",
+                          "rate_limit_per_hour",
                           "created_at",
-                          "updated_at"
+                          "updated_at",
+                          "platform"
                         ],
                         "properties": {
                           "created_at": {
@@ -1698,7 +1746,7 @@
         ],
         "summary": "POST /api/projects - Create a new project",
         "description": "Any authenticated user may create a project. A non-admin creator is\nautomatically granted the project `admin` role so they can access it.",
-        "operationId": "create_project",
+        "operationId": "projects.create",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1754,7 +1802,7 @@
           "Projects"
         ],
         "summary": "GET /api/projects/{id} - Get a project by ID",
-        "operationId": "get_project",
+        "operationId": "projects.get",
         "parameters": [
           {
             "name": "id",
@@ -1810,7 +1858,7 @@
           "Projects"
         ],
         "summary": "DELETE /api/projects/{id} - Delete a project",
-        "operationId": "delete_project",
+        "operationId": "projects.delete",
         "parameters": [
           {
             "name": "id",
@@ -1859,7 +1907,7 @@
           "Projects"
         ],
         "summary": "PATCH /api/projects/{id} - Update a project",
-        "operationId": "update_project",
+        "operationId": "projects.update",
         "parameters": [
           {
             "name": "id",
@@ -1937,7 +1985,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/duration\nTime-bucketed avg/p95 duration for `agent`/`ai_client` spans.",
-        "operationId": "agent_duration",
+        "operationId": "agents.duration",
         "parameters": [
           {
             "name": "project_id",
@@ -2034,7 +2082,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/environments\nThe options the environment filter offers, read from the data rather than\nhardcoded — an installation may name its environments anything.",
-        "operationId": "agent_environments",
+        "operationId": "agents.environments",
         "parameters": [
           {
             "name": "project_id",
@@ -2095,7 +2143,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/models",
-        "operationId": "agent_models_table",
+        "operationId": "agents.modelsTable",
         "parameters": [
           {
             "name": "project_id",
@@ -2181,7 +2229,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/models/calls\nTop models by LLM call count (`gen_ai.operation.type:ai_client`).",
-        "operationId": "agent_models_calls",
+        "operationId": "agents.modelsCalls",
         "parameters": [
           {
             "name": "project_id",
@@ -2279,7 +2327,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/models/tokens\nTop models by total tokens used (`gen_ai.operation.type:ai_client`).",
-        "operationId": "agent_models_tokens",
+        "operationId": "agents.modelsTokens",
         "parameters": [
           {
             "name": "project_id",
@@ -2377,7 +2425,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/runs\nTime-bucketed count of agent-run spans (`gen_ai.operation.type:agent`).",
-        "operationId": "agent_runs",
+        "operationId": "agents.runs",
         "parameters": [
           {
             "name": "project_id",
@@ -2474,7 +2522,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/summary\nAgent runs, LLM calls, tool calls, errors, tokens and latency over the\nselected window — the numbers the six charts cannot state outright.",
-        "operationId": "agent_summary",
+        "operationId": "agents.summary",
         "parameters": [
           {
             "name": "project_id",
@@ -2557,7 +2605,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/tools\nTop tools by call count (`gen_ai.operation.type:tool`).",
-        "operationId": "agent_tools",
+        "operationId": "agents.tools",
         "parameters": [
           {
             "name": "project_id",
@@ -2655,7 +2703,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/tools/stats",
-        "operationId": "agent_tools_table",
+        "operationId": "agents.toolsTable",
         "parameters": [
           {
             "name": "project_id",
@@ -2741,7 +2789,7 @@
           "Agents"
         ],
         "summary": "GET /api/projects/{project_id}/agents/traces\nPaginated per-trace_id aggregate (duration, tokens, tool usage) across\nall AI spans sharing that trace, regardless of origin.",
-        "operationId": "agent_traces",
+        "operationId": "agents.traces",
         "parameters": [
           {
             "name": "project_id",
@@ -2826,6 +2874,7 @@
                         "required": [
                           "trace_id",
                           "agent_names",
+                          "duration_ms",
                           "total_tokens",
                           "tool_call_count",
                           "llm_call_count",
@@ -2931,7 +2980,7 @@
           "Alert Rules"
         ],
         "summary": "GET /api/projects/{project_id}/alert-history",
-        "operationId": "list_history",
+        "operationId": "alertRules.listHistory",
         "parameters": [
           {
             "name": "project_id",
@@ -3002,7 +3051,7 @@
           "Alert Rules"
         ],
         "summary": "GET /api/projects/{project_id}/alert-rules",
-        "operationId": "list_rules",
+        "operationId": "alertRules.list",
         "parameters": [
           {
             "name": "project_id",
@@ -3061,7 +3110,7 @@
           "Alert Rules"
         ],
         "summary": "POST /api/projects/{project_id}/alert-rules",
-        "operationId": "create_rule",
+        "operationId": "alertRules.create",
         "parameters": [
           {
             "name": "project_id",
@@ -3129,7 +3178,7 @@
           "Alert Rules"
         ],
         "summary": "GET /api/projects/{project_id}/alert-rules/{rule_id}",
-        "operationId": "get_rule",
+        "operationId": "alertRules.get",
         "parameters": [
           {
             "name": "project_id",
@@ -3195,7 +3244,7 @@
           "Alert Rules"
         ],
         "summary": "DELETE /api/projects/{project_id}/alert-rules/{rule_id}",
-        "operationId": "delete_rule",
+        "operationId": "alertRules.delete",
         "parameters": [
           {
             "name": "project_id",
@@ -3254,7 +3303,7 @@
           "Alert Rules"
         ],
         "summary": "PATCH /api/projects/{project_id}/alert-rules/{rule_id}",
-        "operationId": "update_rule",
+        "operationId": "alertRules.update",
         "parameters": [
           {
             "name": "project_id",
@@ -3326,13 +3375,80 @@
         ]
       }
     },
+    "/api/projects/{project_id}/events/sentry/{event_id}": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "Resolve the ID returned by a Sentry SDK without already knowing the issue.",
+        "operationId": "events.getBySentryId",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "description": "Client-supplied Sentry event ID: 32 hex digits, compact or hyphenated",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full event detail, including its issue ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Event or accessible project not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/projects/{project_id}/events/stats": {
       "get": {
         "tags": [
           "Stats"
         ],
         "summary": "GET /api/projects/{project_id}/events/stats",
-        "operationId": "get_event_timeseries",
+        "operationId": "stats.getEventTimeseries",
         "parameters": [
           {
             "name": "project_id",
@@ -3398,7 +3514,7 @@
           "GitHub"
         ],
         "summary": "GET /api/projects/{project_id}/github",
-        "operationId": "get_project_repository",
+        "operationId": "github.getProjectRepository",
         "parameters": [
           {
             "name": "project_id",
@@ -3471,7 +3587,7 @@
           "GitHub"
         ],
         "summary": "PUT /api/projects/{project_id}/github",
-        "operationId": "put_project_repository",
+        "operationId": "github.putProjectRepository",
         "parameters": [
           {
             "name": "project_id",
@@ -3557,7 +3673,7 @@
           "GitHub"
         ],
         "summary": "DELETE /api/projects/{project_id}/github",
-        "operationId": "delete_project_repository",
+        "operationId": "github.deleteProjectRepository",
         "parameters": [
           {
             "name": "project_id",
@@ -3618,7 +3734,7 @@
           "GitHub"
         ],
         "summary": "POST /api/projects/{project_id}/github/codeowners: copies the repository's\nCODEOWNERS so ownership can be answered without asking GitHub each time.",
-        "operationId": "sync_codeowners",
+        "operationId": "github.syncCodeowners",
         "parameters": [
           {
             "name": "project_id",
@@ -3686,7 +3802,7 @@
           "Issues"
         ],
         "summary": "GET /api/projects/{project_id}/issues\nLists issues for a project with offset-based pagination",
-        "operationId": "list_issues",
+        "operationId": "issues.list",
         "parameters": [
           {
             "name": "project_id",
@@ -3793,7 +3909,13 @@
                           "first_seen",
                           "last_seen",
                           "event_count",
+                          "level",
+                          "platform",
                           "status",
+                          "substatus",
+                          "priority",
+                          "assigned_to",
+                          "assignee_type",
                           "issue_type",
                           "issue_category",
                           "first_release",
@@ -3889,9 +4011,13 @@
                             ]
                           },
                           "priority": {
-                            "type": [
-                              "string",
-                              "null"
+                            "oneOf": [
+                              {
+                                "$ref": "#/components/schemas/IssuePriority"
+                              },
+                              {
+                                "type": "null"
+                              }
                             ]
                           },
                           "project_id": {
@@ -3902,9 +4028,11 @@
                             "type": "string"
                           },
                           "status": {
-                            "type": "string"
+                            "$ref": "#/components/schemas/IssueStatus"
                           },
-                          "status_details": {},
+                          "status_details": {
+                            "type": "object"
+                          },
                           "substatus": {
                             "type": [
                               "string",
@@ -4000,7 +4128,7 @@
           "Issues"
         ],
         "summary": "PUT /api/projects/{project_id}/issues  (bulk mutate)",
-        "operationId": "bulk_update_issues",
+        "operationId": "issues.bulkUpdate",
         "parameters": [
           {
             "name": "project_id",
@@ -4056,7 +4184,7 @@
           "Issues"
         ],
         "summary": "DELETE /api/projects/{project_id}/issues  (bulk delete by ids or filter)",
-        "operationId": "bulk_delete_issues",
+        "operationId": "issues.bulkDelete",
         "parameters": [
           {
             "name": "project_id",
@@ -4124,7 +4252,7 @@
           "Issues"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}\nGets a single issue by ID",
-        "operationId": "get_issue",
+        "operationId": "issues.get",
         "parameters": [
           {
             "name": "project_id",
@@ -4190,7 +4318,7 @@
           "Issues"
         ],
         "summary": "DELETE /api/projects/{project_id}/issues/{issue_id}\nHard-deletes an issue and all associated events",
-        "operationId": "delete_issue",
+        "operationId": "issues.delete",
         "parameters": [
           {
             "name": "project_id",
@@ -4249,7 +4377,7 @@
           "Issues"
         ],
         "summary": "PATCH /api/projects/{project_id}/issues/{issue_id}\nUpdates issue state (resolve, mute, etc.)",
-        "operationId": "update_issue",
+        "operationId": "issues.update",
         "parameters": [
           {
             "name": "project_id",
@@ -4327,7 +4455,7 @@
           "Issues"
         ],
         "summary": "GET /{issue_id}/activity — chronological activity log (incl. comments).",
-        "operationId": "get_issue_activity",
+        "operationId": "issues.getActivity",
         "parameters": [
           {
             "name": "project_id",
@@ -4388,7 +4516,7 @@
           "Issues"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}/aggregates\nReturns the unique user count and top tags for the issue.",
-        "operationId": "get_issue_aggregates",
+        "operationId": "issues.getAggregates",
         "parameters": [
           {
             "name": "project_id",
@@ -4446,7 +4574,7 @@
           "Issues"
         ],
         "summary": "PUT /{issue_id}/bookmark — set/clear the per-user bookmark.",
-        "operationId": "set_issue_bookmark",
+        "operationId": "issues.setBookmark",
         "parameters": [
           {
             "name": "project_id",
@@ -4514,7 +4642,7 @@
           "Issues"
         ],
         "summary": "POST /{issue_id}/comments — add a note.",
-        "operationId": "create_issue_comment",
+        "operationId": "issues.createComment",
         "parameters": [
           {
             "name": "project_id",
@@ -4582,7 +4710,7 @@
           "Events"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}/events\nLists events for an issue with cursor-based pagination",
-        "operationId": "list_events",
+        "operationId": "events.list",
         "parameters": [
           {
             "name": "project_id",
@@ -4650,6 +4778,7 @@
                         "required": [
                           "id",
                           "event_id",
+                          "issue_id",
                           "title",
                           "timestamp",
                           "level",
@@ -4664,7 +4793,7 @@
                           },
                           "event_id": {
                             "type": "string",
-                            "format": "uuid"
+                            "description": "Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID."
                           },
                           "event_type": {
                             "type": "string"
@@ -4744,7 +4873,7 @@
           "Events"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}\nGets a single event with full data",
-        "operationId": "get_event",
+        "operationId": "events.get",
         "parameters": [
           {
             "name": "project_id",
@@ -4822,7 +4951,7 @@
           "GitHub"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}/github: the issue's links,\nthe commits that may have caused it, and who owns its culprit file.",
-        "operationId": "issue_github",
+        "operationId": "github.issue",
         "parameters": [
           {
             "name": "project_id",
@@ -4900,7 +5029,7 @@
           "GitHub"
         ],
         "summary": "POST .../github/issues: opens a GitHub issue and links it.",
-        "operationId": "create_github_issue",
+        "operationId": "github.createIssue",
         "parameters": [
           {
             "name": "project_id",
@@ -4998,7 +5127,7 @@
           "GitHub"
         ],
         "summary": "POST .../github/links: links an existing GitHub issue or pull request.",
-        "operationId": "link_github_issue",
+        "operationId": "github.linkIssue",
         "parameters": [
           {
             "name": "project_id",
@@ -5096,7 +5225,7 @@
           "GitHub"
         ],
         "summary": "DELETE .../github/links/{link_id}",
-        "operationId": "unlink_github_issue",
+        "operationId": "github.unlinkIssue",
         "parameters": [
           {
             "name": "project_id",
@@ -5177,7 +5306,7 @@
           "Issues"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}/hashes\nLists the grouping hashes that map to an issue.",
-        "operationId": "get_issue_hashes",
+        "operationId": "issues.getHashes",
         "parameters": [
           {
             "name": "project_id",
@@ -5238,7 +5367,7 @@
           "Issues"
         ],
         "summary": "POST /{issue_id}/seen — mark the issue as seen by the current user.",
-        "operationId": "mark_issue_seen",
+        "operationId": "issues.markSeen",
         "parameters": [
           {
             "name": "project_id",
@@ -5296,7 +5425,7 @@
           "Issues"
         ],
         "summary": "GET /{issue_id}/stats?window=24h|30d — zero-filled event-count timeseries.",
-        "operationId": "get_issue_stats",
+        "operationId": "issues.getStats",
         "parameters": [
           {
             "name": "project_id",
@@ -5321,10 +5450,10 @@
           {
             "name": "window",
             "in": "query",
-            "description": "Time window: 24h (default) or 30d",
+            "description": "Time window (default: 24h)",
             "required": false,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/IssueStatsWindow"
             }
           }
         ],
@@ -5363,7 +5492,7 @@
           "Issues"
         ],
         "summary": "PUT /{issue_id}/subscription — set/clear the per-user subscription.",
-        "operationId": "set_issue_subscription",
+        "operationId": "issues.setSubscription",
         "parameters": [
           {
             "name": "project_id",
@@ -5431,7 +5560,7 @@
           "Issues"
         ],
         "summary": "GET /api/projects/{project_id}/issues/{issue_id}/tags/{key}\nLists the distinct values (with counts) for a tag key across the issue.",
-        "operationId": "get_issue_tag_values",
+        "operationId": "issues.getTagValues",
         "parameters": [
           {
             "name": "project_id",
@@ -5501,7 +5630,7 @@
           "Issues"
         ],
         "summary": "GET /{issue_id}/user-reports — list user feedback for an issue.",
-        "operationId": "list_issue_user_reports",
+        "operationId": "issues.listUserReports",
         "parameters": [
           {
             "name": "project_id",
@@ -5560,7 +5689,7 @@
           "Issues"
         ],
         "summary": "POST /{issue_id}/user-reports — attach user feedback to an issue.",
-        "operationId": "create_issue_user_report",
+        "operationId": "issues.createUserReport",
         "parameters": [
           {
             "name": "project_id",
@@ -5628,7 +5757,7 @@
           "Logs"
         ],
         "summary": "GET /api/projects/{project_id}/logs\nLists logs for a project with offset-based pagination (newest first by\nlog timestamp), optionally filtered by level/trace_id.",
-        "operationId": "list_logs",
+        "operationId": "logs.list",
         "parameters": [
           {
             "name": "project_id",
@@ -5711,7 +5840,10 @@
                         "description": "Response model for a single stored log in the list view.",
                         "required": [
                           "id",
+                          "trace_id",
+                          "span_id",
                           "level",
+                          "severity_number",
                           "body",
                           "attributes",
                           "timestamp",
@@ -5719,6 +5851,7 @@
                         ],
                         "properties": {
                           "attributes": {
+                            "type": "object",
                             "description": "Typed attribute map, as received."
                           },
                           "body": {
@@ -5817,7 +5950,7 @@
           "Members"
         ],
         "summary": "GET /api/projects/{project_id}/members",
-        "operationId": "list_members",
+        "operationId": "members.list",
         "parameters": [
           {
             "name": "project_id",
@@ -5886,7 +6019,7 @@
           "Members"
         ],
         "summary": "PUT /api/projects/{project_id}/members",
-        "operationId": "upsert_member",
+        "operationId": "members.upsert",
         "parameters": [
           {
             "name": "project_id",
@@ -5911,7 +6044,14 @@
         },
         "responses": {
           "200": {
-            "description": "Member added or updated"
+            "description": "Member added or updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMember"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid role",
@@ -5977,7 +6117,7 @@
           "Members"
         ],
         "summary": "DELETE /api/projects/{project_id}/members/{user_id}",
-        "operationId": "remove_member",
+        "operationId": "members.remove",
         "parameters": [
           {
             "name": "project_id",
@@ -6058,7 +6198,7 @@
           "Monitors"
         ],
         "summary": "GET /api/projects/{project_id}/monitors",
-        "operationId": "list_monitors",
+        "operationId": "monitors.list",
         "parameters": [
           {
             "name": "project_id",
@@ -6117,7 +6257,7 @@
           "Monitors"
         ],
         "summary": "POST /api/projects/{project_id}/monitors",
-        "operationId": "create_monitor",
+        "operationId": "monitors.create",
         "parameters": [
           {
             "name": "project_id",
@@ -6195,7 +6335,7 @@
           "Monitors"
         ],
         "summary": "GET /api/projects/{project_id}/monitors/{slug}",
-        "operationId": "get_monitor",
+        "operationId": "monitors.get",
         "parameters": [
           {
             "name": "project_id",
@@ -6260,7 +6400,7 @@
           "Monitors"
         ],
         "summary": "PUT /api/projects/{project_id}/monitors/{slug}",
-        "operationId": "update_monitor",
+        "operationId": "monitors.update",
         "parameters": [
           {
             "name": "project_id",
@@ -6345,7 +6485,7 @@
           "Monitors"
         ],
         "summary": "DELETE /api/projects/{project_id}/monitors/{slug}",
-        "operationId": "delete_monitor",
+        "operationId": "monitors.delete",
         "parameters": [
           {
             "name": "project_id",
@@ -6405,7 +6545,7 @@
           "Monitors"
         ],
         "summary": "GET /api/projects/{project_id}/monitors/{slug}/checkins",
-        "operationId": "list_checkins",
+        "operationId": "monitors.listCheckins",
         "parameters": [
           {
             "name": "project_id",
@@ -6484,8 +6624,10 @@
                           "id",
                           "environment",
                           "status",
+                          "duration_ms",
                           "date_added",
-                          "date_updated"
+                          "date_updated",
+                          "expected_time"
                         ],
                         "properties": {
                           "date_added": {
@@ -6578,7 +6720,7 @@
           "Releases"
         ],
         "summary": "GET /api/projects/{project_id}/releases/{release}/new-issues",
-        "operationId": "new_issues_for_release",
+        "operationId": "releases.newIssues",
         "parameters": [
           {
             "name": "project_id",
@@ -6644,7 +6786,7 @@
           "Sessions"
         ],
         "summary": "GET /api/projects/{project_id}/sessions/stats",
-        "operationId": "get_stats",
+        "operationId": "sessions.getStats",
         "parameters": [
           {
             "name": "project_id",
@@ -6732,7 +6874,9 @@
                           "errored",
                           "crashed",
                           "abnormal",
-                          "healthy"
+                          "healthy",
+                          "crash_free_sessions_rate",
+                          "crash_free_users_rate"
                         ],
                         "properties": {
                           "abnormal": {
@@ -6819,7 +6963,7 @@
           "Sessions"
         ],
         "summary": "GET /api/projects/{project_id}/sessions/summary",
-        "operationId": "get_summary",
+        "operationId": "sessions.getSummary",
         "parameters": [
           {
             "name": "project_id",
@@ -6872,7 +7016,7 @@
           "Sessions"
         ],
         "summary": "GET /api/projects/{project_id}/sessions/timeseries",
-        "operationId": "get_timeseries",
+        "operationId": "sessions.getTimeseries",
         "parameters": [
           {
             "name": "project_id",
@@ -6938,7 +7082,7 @@
           "Spans"
         ],
         "summary": "GET /api/projects/{project_id}/spans\nLists spans for a project with offset-based pagination (newest by\nstart_timestamp first), optionally filtered by op/status/trace_id.\nReturns spans regardless of origin — standalone or extracted from a\ntransaction — since both are stored in the same table.",
-        "operationId": "list_spans",
+        "operationId": "spans.list",
         "parameters": [
           {
             "name": "project_id",
@@ -7045,7 +7189,31 @@
                         "description": "A single indexed span — extracted from a transaction, OR standalone\n(Sentry \"span\" item type). Both origins write into the same `spans`\ntable, so `transaction_id` is the only thing that distinguishes them.",
                         "required": [
                           "id",
-                          "is_segment"
+                          "transaction_id",
+                          "span_id",
+                          "trace_id",
+                          "parent_span_id",
+                          "op",
+                          "description",
+                          "status",
+                          "start_timestamp",
+                          "timestamp",
+                          "duration_ms",
+                          "exclusive_time_ms",
+                          "is_segment",
+                          "segment_id",
+                          "platform",
+                          "release",
+                          "environment",
+                          "gen_ai_operation_type",
+                          "gen_ai_agent_name",
+                          "gen_ai_request_model",
+                          "gen_ai_response_model",
+                          "gen_ai_tool_name",
+                          "gen_ai_conversation_id",
+                          "gen_ai_usage_input_tokens",
+                          "gen_ai_usage_output_tokens",
+                          "gen_ai_usage_total_tokens"
                         ],
                         "properties": {
                           "description": {
@@ -7270,7 +7438,7 @@
           "Spans"
         ],
         "summary": "GET /api/projects/{project_id}/spans/{span_id}\nReturns one span together with its attributes and tags — the `gen_ai.*`\npayload (prompts, responses, tool arguments and results) that the list\nresponse deliberately omits, since `spans.data` is untrimmed and a whole\ntrace's worth of it would dwarf the waterfall it is drawn from.",
-        "operationId": "get_span",
+        "operationId": "spans.get",
         "parameters": [
           {
             "name": "project_id",
@@ -7338,7 +7506,7 @@
           "Stats"
         ],
         "summary": "GET /api/projects/{project_id}/stats/summary",
-        "operationId": "get_stats_summary",
+        "operationId": "stats.getSummary",
         "parameters": [
           {
             "name": "project_id",
@@ -7391,7 +7559,7 @@
           "Transactions"
         ],
         "summary": "GET /api/projects/{project_id}/transactions\nLists transactions for a project with offset-based pagination (newest first).",
-        "operationId": "list_transactions",
+        "operationId": "transactions.list",
         "parameters": [
           {
             "name": "project_id",
@@ -7513,6 +7681,8 @@
                           "event_id",
                           "transaction_name",
                           "timestamp",
+                          "start_timestamp",
+                          "duration_ms",
                           "platform",
                           "environment",
                           "release",
@@ -7532,7 +7702,7 @@
                           },
                           "event_id": {
                             "type": "string",
-                            "format": "uuid"
+                            "description": "Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID."
                           },
                           "id": {
                             "type": "string",
@@ -7620,7 +7790,7 @@
           "Transactions"
         ],
         "summary": "GET /api/projects/{project_id}/transactions/stats\nReturns paginated aggregate performance stats (count, p50/p95/p99 latency,\nfailure rate) grouped by transaction name + op, most frequent first.",
-        "operationId": "get_transaction_stats",
+        "operationId": "transactions.getStats",
         "parameters": [
           {
             "name": "project_id",
@@ -7679,6 +7849,7 @@
                         "description": "Aggregate performance stats for one (transaction_name, op) group.\nPowers the performance overview: throughput + latency percentiles +\nfailure rate per transaction. Percentiles are continuous (linear\ninterpolation, matching Postgres `percentile_cont`).",
                         "required": [
                           "transaction_name",
+                          "op",
                           "count",
                           "p50_ms",
                           "p95_ms",
@@ -7775,7 +7946,7 @@
           "Transactions"
         ],
         "summary": "GET /api/projects/{project_id}/transactions/stats/group?name=&op=\nReturns the aggregate stats for a single transaction group — a direct lookup\nso the summary header works regardless of how many groups the project has.",
-        "operationId": "get_transaction_stat_group",
+        "operationId": "transactions.getStatGroup",
         "parameters": [
           {
             "name": "project_id",
@@ -7854,7 +8025,7 @@
           "Transactions"
         ],
         "summary": "GET /api/projects/{project_id}/transactions/{transaction_id}\nReturns a single transaction with its full Sentry payload (spans, contexts,\nmeasurements, tags) for the performance detail view.",
-        "operationId": "get_transaction",
+        "operationId": "transactions.get",
         "parameters": [
           {
             "name": "project_id",
@@ -7922,7 +8093,7 @@
           "Transactions"
         ],
         "summary": "GET /api/projects/{project_id}/transactions/{transaction_id}/spans\nReturns the indexed spans extracted from a transaction, ordered for the\nwaterfall view (by start_timestamp ascending).",
-        "operationId": "get_transaction_spans",
+        "operationId": "transactions.getSpans",
         "parameters": [
           {
             "name": "project_id",
@@ -7957,7 +8128,31 @@
                     "description": "A single indexed span — extracted from a transaction, OR standalone\n(Sentry \"span\" item type). Both origins write into the same `spans`\ntable, so `transaction_id` is the only thing that distinguishes them.",
                     "required": [
                       "id",
-                      "is_segment"
+                      "transaction_id",
+                      "span_id",
+                      "trace_id",
+                      "parent_span_id",
+                      "op",
+                      "description",
+                      "status",
+                      "start_timestamp",
+                      "timestamp",
+                      "duration_ms",
+                      "exclusive_time_ms",
+                      "is_segment",
+                      "segment_id",
+                      "platform",
+                      "release",
+                      "environment",
+                      "gen_ai_operation_type",
+                      "gen_ai_agent_name",
+                      "gen_ai_request_model",
+                      "gen_ai_response_model",
+                      "gen_ai_tool_name",
+                      "gen_ai_conversation_id",
+                      "gen_ai_usage_input_tokens",
+                      "gen_ai_usage_output_tokens",
+                      "gen_ai_usage_total_tokens"
                     ],
                     "properties": {
                       "description": {
@@ -8158,6 +8353,42 @@
         ]
       }
     },
+    "/api/rate-limits": {
+      "get": {
+        "tags": [
+          "Projects"
+        ],
+        "summary": "GET /api/rate-limits - What a project without limits of its own follows",
+        "operationId": "projects.getRateLimits",
+        "responses": {
+          "200": {
+            "description": "The server's per-project limits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/schedules/preview": {
       "post": {
         "tags": [
@@ -8165,7 +8396,7 @@
         ],
         "summary": "POST /api/schedules/preview",
         "description": "Validates a schedule and lists its next five runs from now, so no client\never parses a crontab itself.",
-        "operationId": "preview_schedule",
+        "operationId": "schedules.preview",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8221,7 +8452,7 @@
           "Storage"
         ],
         "summary": "GET /api/storage/age — rows per age bucket, per project and kind.",
-        "operationId": "get_age",
+        "operationId": "storage.getAge",
         "responses": {
           "200": {
             "description": "How long ago each project's data arrived, per kind",
@@ -8257,7 +8488,7 @@
           "Storage"
         ],
         "summary": "POST /api/storage/cleanup — starts deleting old data and the issues it\nempties. Returns at once: the purge runs detached, in batches, and\n`GET /api/storage/cleanup/status` reports its progress.",
-        "operationId": "execute_cleanup",
+        "operationId": "storage.executeCleanup",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8323,7 +8554,7 @@
           "Storage"
         ],
         "summary": "POST /api/storage/cleanup/preview — dry-run count, mutates nothing.",
-        "operationId": "preview_cleanup",
+        "operationId": "storage.previewCleanup",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8369,7 +8600,7 @@
           "Storage"
         ],
         "summary": "GET /api/storage/cleanup/status — progress of the running cleanup, or the\noutcome of the last one.",
-        "operationId": "get_cleanup_status",
+        "operationId": "storage.getCleanupStatus",
         "responses": {
           "200": {
             "description": "The current or last cleanup and the rows it removed",
@@ -8405,7 +8636,7 @@
           "Storage"
         ],
         "summary": "GET /api/storage/projects — per-project counts and estimated weight.",
-        "operationId": "get_projects",
+        "operationId": "storage.getProjects",
         "responses": {
           "200": {
             "description": "Per-project storage breakdown",
@@ -8505,7 +8736,7 @@
           "Storage"
         ],
         "summary": "GET /api/storage/retention",
-        "operationId": "get_retention",
+        "operationId": "storage.getRetention",
         "responses": {
           "200": {
             "description": "Retention settings, next cleanup and last cleanup",
@@ -8549,7 +8780,7 @@
           "Storage"
         ],
         "summary": "PUT /api/storage/retention",
-        "operationId": "update_retention",
+        "operationId": "storage.updateRetention",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8615,7 +8846,7 @@
           "Storage"
         ],
         "summary": "POST /api/storage/retention/preview — what saving these settings would\ndelete on the next cleanup, without saving or deleting anything.",
-        "operationId": "preview_retention",
+        "operationId": "storage.previewRetention",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8671,7 +8902,7 @@
           "Storage"
         ],
         "summary": "POST /api/storage/retention/run — enforces the saved retention now,\nwithout waiting for the schedule. Follow it with the cleanup status.",
-        "operationId": "run_retention",
+        "operationId": "storage.runRetention",
         "responses": {
           "202": {
             "description": "Cleanup started in the background; poll its status",
@@ -8727,7 +8958,7 @@
           "Storage"
         ],
         "summary": "POST /api/storage/source-maps/gc — delete orphaned source maps (DB + disk).",
-        "operationId": "gc_source_maps",
+        "operationId": "storage.gcSourceMaps",
         "responses": {
           "200": {
             "description": "Orphaned source maps removed",
@@ -8763,7 +8994,7 @@
           "Storage"
         ],
         "summary": "POST /api/storage/source-maps/gc/preview — dry-run orphan count, deletes nothing.",
-        "operationId": "preview_source_map_gc",
+        "operationId": "storage.previewSourceMapGc",
         "responses": {
           "200": {
             "description": "Dry-run: orphaned source maps a GC would remove",
@@ -8799,7 +9030,7 @@
           "Storage"
         ],
         "summary": "GET /api/storage/summary — row counts, DB size, and source-map weight.",
-        "operationId": "get_summary",
+        "operationId": "storage.getSummary",
         "responses": {
           "200": {
             "description": "Instance-wide storage summary",
@@ -8835,7 +9066,7 @@
           "Team"
         ],
         "summary": "GET /api/team — list all users (admin only)",
-        "operationId": "list_team",
+        "operationId": "team.list",
         "responses": {
           "200": {
             "description": "List of team members",
@@ -8884,7 +9115,7 @@
           "Team"
         ],
         "summary": "DELETE /api/team/{user_id} — remove a user from the instance (admin only)",
-        "operationId": "delete_user",
+        "operationId": "team.deleteUser",
         "parameters": [
           {
             "name": "user_id",
@@ -8955,7 +9186,7 @@
           "Team"
         ],
         "summary": "PATCH /api/team/{user_id}/role — change a user's global role (admin only)",
-        "operationId": "update_team_role",
+        "operationId": "team.updateRole",
         "parameters": [
           {
             "name": "user_id",
@@ -9046,7 +9277,7 @@
           "Telemetry"
         ],
         "summary": "GET /api/telemetry/preview",
-        "operationId": "preview",
+        "operationId": "telemetry.preview",
         "responses": {
           "200": {
             "description": "What the next heartbeat would carry",
@@ -9093,7 +9324,7 @@
         ],
         "summary": "GET /api/tokens - List tokens (masked)",
         "description": "Admins see all tokens; non-admins see only the tokens they own.",
-        "operationId": "list_tokens",
+        "operationId": "tokens.list",
         "responses": {
           "200": {
             "description": "List of tokens (masked)",
@@ -9130,7 +9361,7 @@
           "Tokens"
         ],
         "summary": "POST /api/tokens - Create a new token (scoped to the acting user)",
-        "operationId": "create_token",
+        "operationId": "tokens.create",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9177,7 +9408,7 @@
         ],
         "summary": "GET /api/tokens/{id} - Reveal full token value",
         "description": "Returns the complete token string. Admins may view any token;\nnon-admins may only view their own.",
-        "operationId": "get_token",
+        "operationId": "tokens.get",
         "parameters": [
           {
             "name": "id",
@@ -9244,7 +9475,7 @@
         ],
         "summary": "DELETE /api/tokens/{id} - Revoke a token",
         "description": "Admins may revoke any token; non-admins may only revoke their own.",
-        "operationId": "delete_token",
+        "operationId": "tokens.delete",
         "parameters": [
           {
             "name": "id",
@@ -9305,7 +9536,7 @@
           "Auth"
         ],
         "summary": "POST /auth/accept-invitation\nAccept a pending invitation: creates the user (with the invite's email + role) and logs in.",
-        "operationId": "accept_invitation",
+        "operationId": "auth.acceptInvitation",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9349,7 +9580,7 @@
           "Auth"
         ],
         "summary": "GET /auth/invitation/{token}\nReturns the invitation's details if it is still acceptable (for the accept page).",
-        "operationId": "get_invitation",
+        "operationId": "auth.getInvitation",
         "parameters": [
           {
             "name": "token",
@@ -9404,7 +9635,7 @@
           "Auth"
         ],
         "summary": "POST /auth/login\nAuthenticate user and create session",
-        "operationId": "login",
+        "operationId": "auth.login",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9448,7 +9679,7 @@
           "Auth"
         ],
         "summary": "POST /auth/logout\nClear session",
-        "operationId": "logout",
+        "operationId": "auth.logout",
         "responses": {
           "204": {
             "description": "Logged out"
@@ -9467,7 +9698,7 @@
           "Auth"
         ],
         "summary": "GET /auth/me\nGet current authenticated user",
-        "operationId": "get_current_user",
+        "operationId": "auth.getCurrentUser",
         "responses": {
           "200": {
             "description": "Current user",
@@ -9501,7 +9732,7 @@
           "Auth"
         ],
         "summary": "PATCH /auth/me\nUpdate the current user's presentation preferences",
-        "operationId": "update_current_user",
+        "operationId": "auth.updateCurrentUser",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9557,7 +9788,7 @@
           "Auth"
         ],
         "summary": "POST /auth/me/password\nChange the current user's password",
-        "operationId": "change_password",
+        "operationId": "auth.changePassword",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9606,7 +9837,7 @@
           "Auth"
         ],
         "summary": "POST /auth/register\nRegistration is invite-only — always rejected. Use `/auth/accept-invitation`.",
-        "operationId": "register",
+        "operationId": "auth.register",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9640,7 +9871,7 @@
           "Auth"
         ],
         "summary": "GET /auth/sso/callback\nValidate the provider response, resolve or provision the local account, and\nestablish the normal Rustrak session.",
-        "operationId": "sso_callback",
+        "operationId": "auth.ssoCallback",
         "parameters": [
           {
             "name": "code",
@@ -9742,7 +9973,7 @@
           "Auth"
         ],
         "summary": "GET /auth/sso/config\nPublic, non-sensitive information used to render the login page.",
-        "operationId": "sso_config",
+        "operationId": "auth.ssoConfig",
         "responses": {
           "200": {
             "description": "Public SSO configuration",
@@ -9766,7 +9997,7 @@
           "Auth"
         ],
         "summary": "GET /auth/sso/link\nThe account an SSO login matched, shown while its owner confirms.",
-        "operationId": "sso_link",
+        "operationId": "auth.ssoLink",
         "responses": {
           "200": {
             "description": "The account waiting for its password",
@@ -9798,7 +10029,7 @@
           "Auth"
         ],
         "summary": "POST /auth/sso/link\nLink the pending SSO identity to its account once the account's password\nis given, and sign in. A wrong password keeps the link pending for a retry.",
-        "operationId": "confirm_sso_link",
+        "operationId": "auth.confirmSsoLink",
         "requestBody": {
           "content": {
             "application/json": {
@@ -9862,7 +10093,7 @@
           "Auth"
         ],
         "summary": "POST /auth/sso/start\nCreate a one-time OIDC authorization request and retain its protections in\nthe encrypted session cookie.",
-        "operationId": "sso_start",
+        "operationId": "auth.ssoStart",
         "responses": {
           "200": {
             "description": "OIDC authorization URL",
@@ -9896,7 +10127,7 @@
           "Health"
         ],
         "summary": "Liveness check - is the process running?\nReturns 200 if the server is alive.",
-        "operationId": "liveness",
+        "operationId": "health.liveness",
         "responses": {
           "200": {
             "description": "Server is alive",
@@ -9917,7 +10148,7 @@
           "Health"
         ],
         "summary": "Readiness check - is the service ready to handle requests?\nReturns 200 if all dependencies are available, 503 otherwise.",
-        "operationId": "readiness",
+        "operationId": "health.readiness",
         "responses": {
           "200": {
             "description": "Service is ready",
@@ -9949,7 +10180,7 @@
         ],
         "summary": "Version check - returns the server version compiled from Cargo.toml.",
         "description": "Requires a session cookie or a Bearer token, unlike its neighbours in this\nscope. `/health` and `/health/ready` answer \"is this process up\", which a\nprobe has to be able to ask without credentials; this one answers \"which\nbuild is this\", which is the first thing worth knowing about a host you\nintend to attack.",
-        "operationId": "version",
+        "operationId": "health.version",
         "responses": {
           "200": {
             "description": "Server version info",
@@ -10006,6 +10237,7 @@
         "required": [
           "id",
           "issue_id",
+          "user_id",
           "type",
           "data",
           "created_at"
@@ -10219,6 +10451,7 @@
         "required": [
           "trace_id",
           "agent_names",
+          "duration_ms",
           "total_tokens",
           "tool_call_count",
           "llm_call_count",
@@ -10273,13 +10506,21 @@
         "description": "Alert delivery history record (audit log and retry queue)",
         "required": [
           "id",
+          "alert_rule_id",
+          "integration_id",
+          "issue_id",
+          "project_id",
           "alert_type",
           "channel_type",
           "channel_name",
           "status",
           "attempt_count",
+          "next_retry_at",
+          "error_message",
+          "http_status_code",
           "idempotency_key",
-          "created_at"
+          "created_at",
+          "sent_at"
         ],
         "properties": {
           "alert_rule_id": {
@@ -10376,6 +10617,9 @@
           "credentials",
           "is_enabled",
           "failure_count",
+          "last_failure_at",
+          "last_failure_message",
+          "last_success_at",
           "created_at",
           "updated_at"
         ],
@@ -10441,7 +10685,9 @@
             "type": "integer",
             "format": "int32"
           },
-          "routing_override": {}
+          "routing_override": {
+            "type": "object"
+          }
         }
       },
       "AlertRuleResponse": {
@@ -10455,6 +10701,7 @@
           "is_enabled",
           "conditions",
           "cooldown_minutes",
+          "last_triggered_at",
           "channels",
           "integration_ids",
           "created_at",
@@ -10602,6 +10849,7 @@
         "required": [
           "id",
           "token",
+          "description",
           "created_at"
         ],
         "properties": {
@@ -10630,7 +10878,9 @@
         "required": [
           "id",
           "token_prefix",
-          "created_at"
+          "description",
+          "created_at",
+          "last_used_at"
         ],
         "properties": {
           "created_at": {
@@ -10730,15 +10980,23 @@
             }
           },
           "priority": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IssuePriority"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "status": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IssueStatusUpdate"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         }
@@ -10777,8 +11035,10 @@
           "id",
           "environment",
           "status",
+          "duration_ms",
           "date_added",
-          "date_updated"
+          "date_updated",
+          "expected_time"
         ],
         "properties": {
           "date_added": {
@@ -10831,6 +11091,61 @@
         "type": "object",
         "description": "Multipart chunk upload.\nEach part's **field name** may be the SHA-1 hex digest of that part's binary content\n(sentry-cli v2 protocol, e.g. `da39a3ee5e6b4b0d3255bfef95601890afd80709`) or an arbitrary\nname like `file` (sentry-cli v3.x). Up to 64 parts per request; each part body is raw binary."
       },
+      "ChunkUploadOptions": {
+        "type": "object",
+        "description": "Chunk upload capabilities, in sentry-cli's camelCase.",
+        "required": [
+          "url",
+          "chunkSize",
+          "chunksPerRequest",
+          "maxRequestSize",
+          "hashAlgorithm",
+          "accept",
+          "concurrency",
+          "compression"
+        ],
+        "properties": {
+          "accept": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chunkSize": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "chunksPerRequest": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "compression": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Required by the `sentry` npm uploader that Sentry SDK v11 bundler\nplugins use; it rejects the response without it. Empty means chunks\nare sent uncompressed, which is what `chunk_upload` reads."
+          },
+          "concurrency": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "hashAlgorithm": {
+            "type": "string"
+          },
+          "maxRequestSize": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
       "CleanupCounts": {
         "type": "object",
         "description": "Rows affected by a cleanup, used symmetrically for the dry-run preview (\"what\nwould be removed\") and the executed result (\"what was removed\"). `spans` are\ncounted directly even though they cascade from `transactions`, so the UI can\nshow the true row impact. `issues_removed` is the number of issues that would\nbe left with zero events and therefore deleted.",
@@ -10839,7 +11154,8 @@
           "transactions",
           "spans",
           "logs",
-          "issues_removed"
+          "issues_removed",
+          "source_maps"
         ],
         "properties": {
           "events": {
@@ -10925,7 +11241,10 @@
         "description": "The cleanup job as the API reports it. Kept in memory: a restart forgets\nit, and a run cut short by one is simply run again, since every batch it\ncommitted is already gone.",
         "required": [
           "state",
-          "removed"
+          "removed",
+          "started_at",
+          "finished_at",
+          "error"
         ],
         "properties": {
           "error": {
@@ -11093,7 +11412,7 @@
             "type": "string"
           },
           "role": {
-            "type": "string",
+            "$ref": "#/components/schemas/UserRole",
             "description": "Global role the invited user will receive (`admin` | `member`)."
           }
         }
@@ -11229,6 +11548,7 @@
         "required": [
           "id",
           "event_id",
+          "issue_id",
           "title",
           "timestamp",
           "ingested_at",
@@ -11251,7 +11571,7 @@
           },
           "event_id": {
             "type": "string",
-            "format": "uuid"
+            "description": "Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID."
           },
           "event_type": {
             "type": "string"
@@ -11304,6 +11624,7 @@
         "required": [
           "id",
           "event_id",
+          "issue_id",
           "title",
           "timestamp",
           "level",
@@ -11318,7 +11639,7 @@
           },
           "event_id": {
             "type": "string",
-            "format": "uuid"
+            "description": "Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID."
           },
           "event_type": {
             "type": "string"
@@ -11447,6 +11768,7 @@
           "html_url",
           "owner_login",
           "install_url",
+          "last_webhook_at",
           "created_at"
         ],
         "properties": {
@@ -11511,6 +11833,9 @@
       },
       "GitHubLogin": {
         "type": "object",
+        "required": [
+          "login"
+        ],
         "properties": {
           "login": {
             "type": [
@@ -11554,6 +11879,7 @@
         "type": "object",
         "description": "`GET /api/github`: everything the integrations page needs in one answer.",
         "required": [
+          "app",
           "installations",
           "webhook_url"
         ],
@@ -11645,7 +11971,7 @@
             "format": "date-time"
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserRole"
           },
           "status": {
             "type": "string"
@@ -11676,7 +12002,7 @@
             "format": "date-time"
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserRole"
           },
           "status": {
             "type": "string"
@@ -11791,6 +12117,15 @@
           }
         }
       },
+      "IssuePriority": {
+        "type": "string",
+        "description": "Triage priority of an issue.",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
       "IssueResponse": {
         "type": "object",
         "description": "Response for API",
@@ -11805,7 +12140,13 @@
           "first_seen",
           "last_seen",
           "event_count",
+          "level",
+          "platform",
           "status",
+          "substatus",
+          "priority",
+          "assigned_to",
+          "assignee_type",
           "issue_type",
           "issue_category",
           "first_release",
@@ -11901,9 +12242,13 @@
             ]
           },
           "priority": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IssuePriority"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "project_id": {
@@ -11914,9 +12259,11 @@
             "type": "string"
           },
           "status": {
-            "type": "string"
+            "$ref": "#/components/schemas/IssueStatus"
           },
-          "status_details": {},
+          "status_details": {
+            "type": "object"
+          },
           "substatus": {
             "type": [
               "string",
@@ -11958,6 +12305,15 @@
           }
         }
       },
+      "IssueSort": {
+        "type": "string",
+        "description": "Sort mode for issues listing",
+        "enum": [
+          "digest_order",
+          "last_seen",
+          "event_count"
+        ]
+      },
       "IssueStatsResponse": {
         "type": "object",
         "required": [
@@ -11976,6 +12332,33 @@
             "description": "Each point is `[bucketStartUnix, count]`."
           }
         }
+      },
+      "IssueStatsWindow": {
+        "type": "string",
+        "description": "How far back issue stats reach.",
+        "enum": [
+          "24h",
+          "30d"
+        ]
+      },
+      "IssueStatus": {
+        "type": "string",
+        "description": "Lifecycle status of an issue (Sentry-compatible).",
+        "enum": [
+          "unresolved",
+          "resolved",
+          "ignored"
+        ]
+      },
+      "IssueStatusUpdate": {
+        "type": "string",
+        "description": "The status an update may set: an [`IssueStatus`], or `resolvedInNextRelease`\nto resolve until the next release ships.",
+        "enum": [
+          "unresolved",
+          "resolved",
+          "ignored",
+          "resolvedInNextRelease"
+        ]
       },
       "IssueTagValue": {
         "type": "object",
@@ -12017,7 +12400,8 @@
         "type": "object",
         "description": "How long ago a kind of data arrived: rows per age bucket, and the oldest.",
         "required": [
-          "counts"
+          "counts",
+          "oldest"
         ],
         "properties": {
           "counts": {
@@ -12065,7 +12449,10 @@
         "description": "Response model for a single stored log in the list view.",
         "required": [
           "id",
+          "trace_id",
+          "span_id",
           "level",
+          "severity_number",
           "body",
           "attributes",
           "timestamp",
@@ -12073,6 +12460,7 @@
         ],
         "properties": {
           "attributes": {
+            "type": "object",
             "description": "Typed attribute map, as received."
           },
           "body": {
@@ -12164,7 +12552,8 @@
         "type": "object",
         "description": "A counter measured over the requested window alongside the same counter\nover the window immediately before it.\n\n`previous` is `None` when the request asked for all time: there is no\nearlier window to compare against, and reporting `0` there would render as\na misleading \"+100%\" in the UI.",
         "required": [
-          "current"
+          "current",
+          "previous"
         ],
         "properties": {
           "current": {
@@ -12284,6 +12673,9 @@
           "id",
           "environment",
           "status",
+          "next_checkin",
+          "next_checkin_latest",
+          "last_checkin",
           "recent_checkins"
         ],
         "properties": {
@@ -12376,6 +12768,33 @@
           }
         }
       },
+      "OrgDetails": {
+        "type": "object",
+        "description": "Synthetic organization sentry-cli checks before uploading.",
+        "required": [
+          "slug",
+          "name",
+          "id",
+          "features"
+        ],
+        "properties": {
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
       "PreviewSchedule": {
         "type": "object",
         "description": "Body of `POST /api/schedules/preview`.",
@@ -12404,6 +12823,30 @@
         "properties": {
           "template": {
             "type": "string"
+          }
+        }
+      },
+      "PreviewTemplateResponse": {
+        "type": "object",
+        "description": "`rendered` when `ok`, `error` otherwise.",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "rendered": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -12471,6 +12914,37 @@
           }
         }
       },
+      "ProjectMember": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "user_id",
+          "role",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "role": {
+            "$ref": "#/components/schemas/ProjectRole"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ProjectMemberResponse": {
         "type": "object",
         "description": "Member row joined with the user's email, for listing a project's team.",
@@ -12489,7 +12963,7 @@
             "type": "string"
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRole"
           },
           "user_id": {
             "type": "integer",
@@ -12507,7 +12981,9 @@
           "html_url",
           "code_mappings",
           "auto_create_issues",
-          "auto_create_conditions"
+          "auto_create_conditions",
+          "codeowners_rules",
+          "codeowners_synced_at"
         ],
         "properties": {
           "auto_create_conditions": {
@@ -12569,8 +13045,11 @@
           "stored_event_count",
           "digested_event_count",
           "rate_limited_event_count",
+          "rate_limit_per_minute",
+          "rate_limit_per_hour",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "platform"
         ],
         "properties": {
           "created_at": {
@@ -12649,7 +13128,10 @@
         "type": "object",
         "description": "A project that keeps its data for other windows than the defaults. Every\nkind is set: an override replaces the defaults whole.",
         "required": [
-          "project_id"
+          "project_id",
+          "events_days",
+          "transactions_days",
+          "logs_days"
         ],
         "properties": {
           "events_days": {
@@ -12679,10 +13161,20 @@
           }
         }
       },
+      "ProjectRole": {
+        "type": "string",
+        "description": "Per-project capability level for a member.\n\nOrdered by privilege: `Viewer` < `Editor` < `Admin` (derived `Ord` uses\ndeclaration order). An `Action` maps to the minimum role that may perform it.",
+        "enum": [
+          "viewer",
+          "editor",
+          "admin"
+        ]
+      },
       "ProjectStatsSummary": {
         "type": "object",
         "description": "Project-wide counters for the overview page, each with its previous-period\ncomparison.",
         "required": [
+          "period_hours",
           "events",
           "new_issues",
           "open_issues"
@@ -12785,6 +13277,24 @@
           "custom_webhook"
         ]
       },
+      "RateLimitsResponse": {
+        "type": "object",
+        "description": "Configure project routes\nThe server's per-project event limits (`MAX_EVENTS_PER_PROJECT_*`).",
+        "required": [
+          "project_per_minute",
+          "project_per_hour"
+        ],
+        "properties": {
+          "project_per_hour": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "project_per_minute": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "ReadinessChecks": {
         "type": "object",
         "required": [
@@ -12821,7 +13331,9 @@
           "errored",
           "crashed",
           "abnormal",
-          "healthy"
+          "healthy",
+          "crash_free_sessions_rate",
+          "crash_free_users_rate"
         ],
         "properties": {
           "abnormal": {
@@ -12871,7 +13383,10 @@
         "description": "API response for a release.",
         "required": [
           "version",
-          "dateCreated"
+          "ref",
+          "url",
+          "dateCreated",
+          "dateReleased"
         ],
         "properties": {
           "dateCreated": {
@@ -12909,6 +13424,7 @@
           "sha",
           "message",
           "author_name",
+          "author_login",
           "url",
           "committed_at"
         ],
@@ -12943,7 +13459,9 @@
       "RetentionResponse": {
         "type": "object",
         "required": [
-          "settings"
+          "settings",
+          "next_run_at",
+          "last_run"
         ],
         "properties": {
           "last_run": {
@@ -12974,7 +13492,10 @@
         "description": "How the last retention cleanup went.",
         "required": [
           "started_at",
-          "status"
+          "finished_at",
+          "status",
+          "removed",
+          "error"
         ],
         "properties": {
           "error": {
@@ -13013,6 +13534,13 @@
       "RetentionSettings": {
         "type": "object",
         "description": "Retention: how long each kind of data is kept, by default and per\nproject, and when the cleanup that enforces it runs. Stored as the\nsettings of the `storage_cleanup` scheduled job; a field left out takes\nits default. Keeping everything forever runs nothing.",
+        "required": [
+          "defaults",
+          "overrides",
+          "frequency",
+          "hour",
+          "weekday"
+        ],
         "properties": {
           "defaults": {
             "$ref": "#/components/schemas/RetentionWindows",
@@ -13054,6 +13582,11 @@
       "RetentionWindows": {
         "type": "object",
         "description": "How long each kind of data is kept, in days. `None` keeps it forever.",
+        "required": [
+          "events_days",
+          "transactions_days",
+          "logs_days"
+        ],
         "properties": {
           "events_days": {
             "type": [
@@ -13166,6 +13699,8 @@
           "errored",
           "crashed",
           "abnormal",
+          "crash_free_sessions_rate",
+          "crash_free_users_rate",
           "active_releases"
         ],
         "properties": {
@@ -13211,7 +13746,8 @@
         "required": [
           "bucket",
           "total",
-          "crashed"
+          "crashed",
+          "crash_free_sessions_rate"
         ],
         "properties": {
           "bucket": {
@@ -13235,6 +13771,43 @@
           }
         }
       },
+      "SortOrder": {
+        "type": "string",
+        "description": "Sort order direction",
+        "enum": [
+          "asc",
+          "desc"
+        ]
+      },
+      "SourceMapFile": {
+        "type": "object",
+        "required": [
+          "debugId",
+          "fileType",
+          "size",
+          "timesUsed",
+          "dateUploaded"
+        ],
+        "properties": {
+          "dateUploaded": {
+            "type": "string"
+          },
+          "debugId": {
+            "type": "string"
+          },
+          "fileType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "timesUsed": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "SourceMapGcResult": {
         "type": "object",
         "description": "Outcome of a source-map garbage collection: orphaned `source_file` rows\n(no `source_file_metadata` referencing them) removed from the DB and unlinked\nfrom disk. `bytes_freed` is the exact summed `size` of the removed files.",
@@ -13250,6 +13823,20 @@
           "files_removed": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "SourceMapList": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SourceMapFile"
+            }
           }
         }
       },
@@ -13293,13 +13880,19 @@
           {
             "type": "object",
             "required": [
-              "attributes"
+              "attributes",
+              "tags"
             ],
             "properties": {
               "attributes": {
+                "type": "object",
                 "description": "The span's attribute bag, flattened to `{key: value}` regardless of\nwhich producer wrote the row — see [`span_attributes`]. This is the\n`gen_ai.*` payload (prompts, responses, tool arguments and results,\nsystem instructions, tool definitions) that the agents UI renders."
               },
               "tags": {
+                "type": [
+                  "object",
+                  "null"
+                ],
                 "description": "Span tags, when the producer stored any. Spans Protocol v2 has no\nseparate tags concept — everything is an attribute — so this is always\n`None` for a v2-origin span."
               }
             }
@@ -13312,7 +13905,31 @@
         "description": "A single indexed span — extracted from a transaction, OR standalone\n(Sentry \"span\" item type). Both origins write into the same `spans`\ntable, so `transaction_id` is the only thing that distinguishes them.",
         "required": [
           "id",
-          "is_segment"
+          "transaction_id",
+          "span_id",
+          "trace_id",
+          "parent_span_id",
+          "op",
+          "description",
+          "status",
+          "start_timestamp",
+          "timestamp",
+          "duration_ms",
+          "exclusive_time_ms",
+          "is_segment",
+          "segment_id",
+          "platform",
+          "release",
+          "environment",
+          "gen_ai_operation_type",
+          "gen_ai_agent_name",
+          "gen_ai_request_model",
+          "gen_ai_response_model",
+          "gen_ai_tool_name",
+          "gen_ai_conversation_id",
+          "gen_ai_usage_input_tokens",
+          "gen_ai_usage_output_tokens",
+          "gen_ai_usage_total_tokens"
         ],
         "properties": {
           "description": {
@@ -13484,7 +14101,8 @@
       "SsoConfigResponse": {
         "type": "object",
         "required": [
-          "enabled"
+          "enabled",
+          "provider_name"
         ],
         "properties": {
           "enabled": {
@@ -13648,7 +14266,8 @@
           "role",
           "is_active",
           "is_primary",
-          "created_at"
+          "created_at",
+          "last_login"
         ],
         "properties": {
           "created_at": {
@@ -13677,7 +14296,7 @@
             "format": "date-time"
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserRole"
           }
         }
       },
@@ -13685,6 +14304,8 @@
         "type": "object",
         "required": [
           "enabled",
+          "reason",
+          "sink",
           "report"
         ],
         "properties": {
@@ -13711,11 +14332,40 @@
           }
         }
       },
+      "TestChannelResponse": {
+        "type": "object",
+        "description": "Outcome of a test notification.",
+        "required": [
+          "success",
+          "message",
+          "response_body"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "response_body": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the endpoint answered, when it answered anything."
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
       "TestIntegrationBody": {
         "type": "object",
         "description": "Request body for the test-integration endpoint.",
         "properties": {
-          "routing_override": {}
+          "routing_override": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
         }
       },
       "ToggleRequest": {
@@ -13738,6 +14388,8 @@
           "event_id",
           "transaction_name",
           "timestamp",
+          "start_timestamp",
+          "duration_ms",
           "platform",
           "environment",
           "release",
@@ -13746,6 +14398,7 @@
         ],
         "properties": {
           "data": {
+            "type": "object",
             "description": "Full Sentry transaction payload (spans, contexts, measurements, tags, request, user)."
           },
           "duration_ms": {
@@ -13761,7 +14414,7 @@
           },
           "event_id": {
             "type": "string",
-            "format": "uuid"
+            "description": "Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID."
           },
           "id": {
             "type": "string",
@@ -13801,6 +14454,8 @@
           "event_id",
           "transaction_name",
           "timestamp",
+          "start_timestamp",
+          "duration_ms",
           "platform",
           "environment",
           "release",
@@ -13820,7 +14475,7 @@
           },
           "event_id": {
             "type": "string",
-            "format": "uuid"
+            "description": "Sentry event ID: 32 hex digits, not necessarily an RFC 4122 UUID."
           },
           "id": {
             "type": "string",
@@ -13857,6 +14512,7 @@
         "description": "Aggregate performance stats for one (transaction_name, op) group.\nPowers the performance overview: throughput + latency percentiles +\nfailure rate per transaction. Percentiles are continuous (linear\ninterpolation, matching Postgres `percentile_cont`).",
         "required": [
           "transaction_name",
+          "op",
           "count",
           "p50_ms",
           "p95_ms",
@@ -13992,15 +14648,23 @@
             ]
           },
           "priority": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IssuePriority"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "status": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IssueStatusUpdate"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "substatus": {
@@ -14170,7 +14834,7 @@
         ],
         "properties": {
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserRole"
           }
         }
       },
@@ -14182,7 +14846,7 @@
         ],
         "properties": {
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectRole"
           },
           "user_id": {
             "type": "integer",
@@ -14196,6 +14860,8 @@
         "required": [
           "id",
           "project_id",
+          "issue_id",
+          "event_id",
           "name",
           "email",
           "comments",
@@ -14276,7 +14942,9 @@
           "id",
           "email",
           "role",
-          "is_admin"
+          "is_admin",
+          "language",
+          "timezone"
         ],
         "properties": {
           "email": {
@@ -14298,7 +14966,7 @@
             "description": "Chosen dashboard language, or `null` when the user never chose one."
           },
           "role": {
-            "type": "string"
+            "$ref": "#/components/schemas/UserRole"
           },
           "timezone": {
             "type": [
@@ -14308,6 +14976,14 @@
             "description": "Chosen IANA timezone, or `null` when the user never chose one."
           }
         }
+      },
+      "UserRole": {
+        "type": "string",
+        "description": "Instance-wide role for a user.\n\n`Admin` has full access to every project and to team management.\n`Member` only sees projects they are a member of (see `ProjectRole`).",
+        "enum": [
+          "admin",
+          "member"
+        ]
       },
       "VersionResponse": {
         "type": "object",

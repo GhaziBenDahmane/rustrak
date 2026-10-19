@@ -100,8 +100,11 @@ pub struct AlertIntegration {
     pub credentials: serde_json::Value,
     pub is_enabled: bool,
     pub failure_count: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_failure_at: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_failure_message: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_success_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -295,6 +298,7 @@ pub struct AlertRule {
     #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub conditions: serde_json::Value,
     pub cooldown_minutes: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_triggered_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -325,6 +329,7 @@ fn default_conditions() -> serde_json::Value {
 pub struct AlertRuleChannelInput {
     pub integration_id: i32,
     #[serde(default = "default_empty_object")]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub routing_override: serde_json::Value,
 }
 
@@ -356,6 +361,7 @@ pub struct AlertRuleResponse {
     #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub conditions: serde_json::Value,
     pub cooldown_minutes: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_triggered_at: Option<DateTime<Utc>>,
     /// All linked integrations including routing_override per channel.
     pub channels: Vec<AlertRuleChannelInput>,
@@ -456,22 +462,31 @@ impl RuleConditions {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct AlertHistory {
     pub id: i64,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub alert_rule_id: Option<i32>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub integration_id: Option<i32>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub issue_id: Option<Uuid>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub project_id: Option<i32>,
     pub alert_type: String,
     pub channel_type: String,
     pub channel_name: String,
     #[serde(skip_serializing)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub payload: serde_json::Value,
     pub status: AlertStatus,
     pub attempt_count: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub next_retry_at: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub error_message: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub http_status_code: Option<i32>,
     pub idempotency_key: String,
     pub created_at: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub sent_at: Option<DateTime<Utc>>,
 }
 

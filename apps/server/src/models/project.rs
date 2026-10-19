@@ -285,10 +285,13 @@ pub struct ProjectResponse {
     /// Events the quota dropped after ingest had accepted them.
     pub rate_limited_event_count: i64,
     /// The project's own limits, or `null` when it follows the operator's.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub rate_limit_per_minute: Option<i64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub rate_limit_per_hour: Option<i64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub platform: Option<String>,
     /// Present only when the request asked for `?stats_period=`.
     ///

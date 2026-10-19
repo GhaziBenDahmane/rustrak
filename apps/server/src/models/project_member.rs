@@ -7,6 +7,7 @@ use sqlx::FromRow;
 /// Ordered by privilege: `Viewer` < `Editor` < `Admin` (derived `Ord` uses
 /// declaration order). An `Action` maps to the minimum role that may perform it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum ProjectRole {
     Viewer,
@@ -40,10 +41,12 @@ impl ProjectRole {
 }
 
 #[derive(Debug, Clone, FromRow, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ProjectMember {
     pub id: i32,
     pub project_id: i32,
     pub user_id: i32,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::ProjectRole))]
     pub role: String,
     pub created_at: DateTime<Utc>,
 }
@@ -60,6 +63,7 @@ impl ProjectMember {
 pub struct ProjectMemberResponse {
     pub user_id: i32,
     pub email: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::ProjectRole))]
     pub role: String,
     pub created_at: DateTime<Utc>,
 }
@@ -68,6 +72,7 @@ pub struct ProjectMemberResponse {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct UpsertProjectMember {
     pub user_id: i32,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::ProjectRole))]
     pub role: String,
 }
 

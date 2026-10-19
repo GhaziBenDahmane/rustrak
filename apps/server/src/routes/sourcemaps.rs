@@ -42,6 +42,51 @@ pub struct AssembleResponse {
     pub detail: Option<String>,
 }
 
+/// Synthetic organization sentry-cli checks before uploading.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct OrgDetails {
+    pub slug: String,
+    pub name: String,
+    pub id: String,
+    pub features: Vec<String>,
+}
+
+/// Chunk upload capabilities, in sentry-cli's camelCase.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct ChunkUploadOptions {
+    pub url: String,
+    pub chunk_size: u64,
+    pub chunks_per_request: u64,
+    pub max_request_size: u64,
+    pub hash_algorithm: String,
+    pub accept: Vec<String>,
+    pub concurrency: u64,
+    /// Required by the `sentry` npm uploader that Sentry SDK v11 bundler
+    /// plugins use; it rejects the response without it. Empty means chunks
+    /// are sent uncompressed, which is what `chunk_upload` reads.
+    pub compression: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct SourceMapFile {
+    pub debug_id: String,
+    pub file_type: String,
+    pub size: i32,
+    pub times_used: i32,
+    pub date_uploaded: String,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct SourceMapList {
+    pub data: Vec<SourceMapFile>,
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -49,31 +94,36 @@ pub struct AssembleResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/0/organizations/{org_slug}/",
+    operation_id = "sourceMaps.orgDetails",
     tag = "Source Maps",
     params(("org_slug" = String, Path, description = "Organization slug")),
     responses(
-        (status = 200, description = "Synthetic org metadata accepted by sentry-cli"),
+        (status = 200, description = "Synthetic org metadata accepted by sentry-cli", body = OrgDetails),
     ),
 ))]
 /// GET /api/0/organizations/{org_slug}/
 /// Always returns 200 with synthetic org data — sentry-cli validates this before uploading.
 pub async fn org_details(path: web::Path<String>) -> AppResult<HttpResponse> {
     let org_slug = path.into_inner();
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "slug": org_slug,
-        "name": org_slug,
-        "id": "1",
-        "features": ["artifact-bundles", "artifact-bundles-v2"]
-    })))
+    Ok(HttpResponse::Ok().json(OrgDetails {
+        name: org_slug.clone(),
+        slug: org_slug,
+        id: "1".to_string(),
+        features: vec![
+            "artifact-bundles".to_string(),
+            "artifact-bundles-v2".to_string(),
+        ],
+    }))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/0/organizations/{org_slug}/chunk-upload/",
+    operation_id = "sourceMaps.chunkUploadCapability",
     tag = "Source Maps",
     params(("org_slug" = String, Path, description = "Organization slug")),
     responses(
-        (status = 200, description = "Chunk upload capabilities and URL"),
+        (status = 200, description = "Chunk upload capabilities and URL", body = ChunkUploadOptions),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
@@ -92,24 +142,32 @@ pub async fn chunk_upload_capability(
         .unwrap_or_else(|| format!("http://{}:{}", config.host, config.port));
 
     let chunk_size = config.max_chunk_size_bytes as u64;
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "url": format!("{}/api/0/organizations/{}/chunk-upload/", base_url, org_slug),
-        "chunkSize": chunk_size,
-        "chunksPerRequest": 64u64,
-        "maxRequestSize": chunk_size * 64,
-        "hashAlgorithm": "sha1",
-        "accept": ["release_files", "sources", "artifact_bundles", "artifact_bundles_v2"],
-        "concurrency": 8u64,
-        // Required by the `sentry` npm uploader that Sentry SDK v11 bundler
-        // plugins use; it rejects the response without it. Empty means chunks
-        // are sent uncompressed, which is what `chunk_upload` reads.
-        "compression": []
-    })))
+    Ok(HttpResponse::Ok().json(ChunkUploadOptions {
+        url: format!(
+            "{}/api/0/organizations/{}/chunk-upload/",
+            base_url, org_slug
+        ),
+        chunk_size,
+        chunks_per_request: 64,
+        max_request_size: chunk_size * 64,
+        hash_algorithm: "sha1".to_string(),
+        accept: [
+            "release_files",
+            "sources",
+            "artifact_bundles",
+            "artifact_bundles_v2",
+        ]
+        .map(String::from)
+        .to_vec(),
+        concurrency: 8,
+        compression: Vec::new(),
+    }))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/0/organizations/{org_slug}/chunk-upload/",
+    operation_id = "sourceMaps.chunkUpload",
     tag = "Source Maps",
     params(("org_slug" = String, Path, description = "Organization slug")),
     request_body(
@@ -203,6 +261,7 @@ pub async fn chunk_upload(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/0/organizations/{org_slug}/artifactbundle/assemble/",
+    operation_id = "sourceMaps.artifactBundleAssemble",
     tag = "Source Maps",
     params(("org_slug" = String, Path, description = "Organization slug")),
     request_body = AssembleBody,
@@ -400,13 +459,14 @@ pub async fn artifact_bundle_assemble(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/0/projects/{org_slug}/{project_slug}/files/source-maps/",
+    operation_id = "sourceMaps.list",
     tag = "Source Maps",
     params(
         ("org_slug" = String, Path, description = "Organization slug"),
         ("project_slug" = String, Path, description = "Project slug"),
     ),
     responses(
-        (status = 200, description = "List of uploaded source map files"),
+        (status = 200, description = "List of uploaded source map files", body = SourceMapList),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
     ),
@@ -490,20 +550,18 @@ pub async fn list_source_maps(
     .fetch_all(pool.get_ref())
     .await?;
 
-    let data: Vec<serde_json::Value> = rows
+    let data = rows
         .into_iter()
-        .map(|r| {
-            serde_json::json!({
-                "debugId": r.debug_id,
-                "fileType": r.file_type,
-                "size": r.size,
-                "timesUsed": r.times_used,
-                "dateUploaded": r.date_uploaded,
-            })
+        .map(|r| SourceMapFile {
+            debug_id: r.debug_id,
+            file_type: r.file_type,
+            size: r.size,
+            times_used: r.times_used,
+            date_uploaded: r.date_uploaded,
         })
         .collect();
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "data": data })))
+    Ok(HttpResponse::Ok().json(SourceMapList { data }))
 }
 
 // ---------------------------------------------------------------------------

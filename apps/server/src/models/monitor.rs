@@ -419,9 +419,11 @@ pub struct CheckInResponse {
     pub id: uuid::Uuid,
     pub environment: String,
     pub status: CheckInStatus,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub duration_ms: Option<i64>,
     pub date_added: DateTime<Utc>,
     pub date_updated: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub expected_time: Option<DateTime<Utc>>,
 }
 
@@ -433,8 +435,11 @@ pub struct MonitorEnvironmentResponse {
     pub id: uuid::Uuid,
     pub environment: String,
     pub status: MonitorEnvironmentStatus,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub next_checkin: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub next_checkin_latest: Option<DateTime<Utc>>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_checkin: Option<DateTime<Utc>>,
     /// Newest first.
     pub recent_checkins: Vec<CheckInResponse>,

@@ -20,6 +20,53 @@ pub const STATUS_UNRESOLVED: &str = "unresolved";
 pub const STATUS_RESOLVED: &str = "resolved";
 pub const STATUS_IGNORED: &str = "ignored";
 
+// Spec-only: the column stays a `String`.
+/// Lifecycle status of an issue (Sentry-compatible).
+#[cfg(feature = "openapi")]
+#[derive(utoipa::ToSchema)]
+#[schema(rename_all = "lowercase")]
+pub enum IssueStatus {
+    Unresolved,
+    Resolved,
+    Ignored,
+}
+
+// Spec-only, like `IssueStatus`.
+/// The status an update may set: an [`IssueStatus`], or `resolvedInNextRelease`
+/// to resolve until the next release ships.
+#[cfg(feature = "openapi")]
+#[derive(utoipa::ToSchema)]
+#[schema(rename_all = "lowercase")]
+pub enum IssueStatusUpdate {
+    Unresolved,
+    Resolved,
+    Ignored,
+    #[schema(rename = "resolvedInNextRelease")]
+    ResolvedInNextRelease,
+}
+
+// Spec-only: the `window` query parameter of the issue stats endpoint.
+/// How far back issue stats reach.
+#[cfg(feature = "openapi")]
+#[derive(utoipa::ToSchema)]
+pub enum IssueStatsWindow {
+    #[schema(rename = "24h")]
+    Day,
+    #[schema(rename = "30d")]
+    Month,
+}
+
+// Spec-only, like `IssueStatus`.
+/// Triage priority of an issue.
+#[cfg(feature = "openapi")]
+#[derive(utoipa::ToSchema)]
+#[schema(rename_all = "lowercase")]
+pub enum IssuePriority {
+    Low,
+    Medium,
+    High,
+}
+
 /// Substatus values valid under `status = "unresolved"`.
 const UNRESOLVED_SUBSTATUSES: &[&str] = &[
     SUBSTATUS_NEW,
@@ -95,17 +142,26 @@ pub struct IssueResponse {
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
     pub event_count: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub level: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub platform: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = IssueStatus))]
     pub status: String,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub substatus: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<IssuePriority>))]
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub priority: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub assigned_to: Option<i32>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub assignee_type: Option<String>,
     pub issue_type: String,
     pub issue_category: String,
     pub first_release: String,
     pub last_release: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub status_details: serde_json::Value,
     /// Deprecated: derived from `status`. Kept for the legacy client/UI until
     /// they migrate to `status`. Remove in the client/frontend phases of #165.
@@ -138,8 +194,10 @@ pub struct IssueResponse {
 #[derive(Debug, Default, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct UpdateIssueState {
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<IssueStatusUpdate>))]
     pub status: Option<String>,
     pub substatus: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<IssuePriority>))]
     pub priority: Option<String>,
     /// `None` when omitted, `Some(None)` when the client sent an explicit
     /// `null` (clears the assignment), `Some(Some(id))` to assign.
@@ -186,7 +244,9 @@ fn validate_bulk_ids_size(ids: &[Uuid]) -> AppResult<()> {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct BulkUpdateIssues {
     pub ids: Vec<Uuid>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<IssueStatusUpdate>))]
     pub status: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<IssuePriority>))]
     pub priority: Option<String>,
 }
 

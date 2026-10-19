@@ -76,13 +76,17 @@ mod tests {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct LogResponse {
     pub id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub trace_id: Option<String>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub span_id: Option<String>,
     pub level: String,
     /// OTel severity number (1=trace … 21=fatal). None for unknown levels.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub severity_number: Option<i16>,
     pub body: String,
     /// Typed attribute map, as received.
+    #[cfg_attr(feature = "openapi", schema(value_type = Object))]
     pub attributes: serde_json::Value,
     pub timestamp: DateTime<Utc>,
     pub ingested_at: DateTime<Utc>,

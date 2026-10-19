@@ -35,6 +35,7 @@ pub struct VersionResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/health",
+    operation_id = "health.liveness",
     tag = "Health",
     responses(
         (status = 200, description = "Server is alive", body = LivenessResponse),
@@ -49,6 +50,7 @@ pub async fn liveness() -> HttpResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/health/version",
+    operation_id = "health.version",
     tag = "Health",
     responses(
         (status = 200, description = "Server version info", body = VersionResponse),
@@ -75,6 +77,7 @@ pub async fn version(_auth: ApiAuth) -> HttpResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/health/ready",
+    operation_id = "health.readiness",
     tag = "Health",
     responses(
         (status = 200, description = "Service is ready", body = ReadinessResponse),

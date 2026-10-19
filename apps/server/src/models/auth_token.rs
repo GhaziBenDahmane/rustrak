@@ -28,6 +28,7 @@ pub struct CreateAuthToken {
 pub struct AuthTokenCreatedResponse {
     pub id: i32,
     pub token: String, // Only shown once!
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -38,8 +39,10 @@ pub struct AuthTokenCreatedResponse {
 pub struct AuthTokenResponse {
     pub id: i32,
     pub token_prefix: String, // First 8 chars only
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_used_at: Option<DateTime<Utc>>,
 }
 

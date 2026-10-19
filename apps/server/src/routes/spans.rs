@@ -16,6 +16,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/spans",
+    operation_id = "spans.list",
     tag = "Spans",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -74,6 +75,7 @@ pub async fn list_spans(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/spans/{span_id}",
+    operation_id = "spans.get",
     tag = "Spans",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

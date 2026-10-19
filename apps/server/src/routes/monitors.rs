@@ -48,6 +48,7 @@ async fn require(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/monitors",
+    operation_id = "monitors.list",
     tag = "Monitors",
     params(("project_id" = i32, Path, description = "Project ID")),
     responses(
@@ -71,6 +72,7 @@ pub async fn list_monitors(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/monitors",
+    operation_id = "monitors.create",
     tag = "Monitors",
     params(("project_id" = i32, Path, description = "Project ID")),
     request_body = CreateMonitor,
@@ -98,6 +100,7 @@ pub async fn create_monitor(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/monitors/{slug}",
+    operation_id = "monitors.get",
     tag = "Monitors",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -124,6 +127,7 @@ pub async fn get_monitor(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/projects/{project_id}/monitors/{slug}",
+    operation_id = "monitors.update",
     tag = "Monitors",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -154,6 +158,7 @@ pub async fn update_monitor(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/monitors/{slug}",
+    operation_id = "monitors.delete",
     tag = "Monitors",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -181,6 +186,7 @@ pub async fn delete_monitor(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/monitors/{slug}/checkins",
+    operation_id = "monitors.listCheckins",
     tag = "Monitors",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

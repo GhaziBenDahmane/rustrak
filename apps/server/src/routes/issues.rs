@@ -49,6 +49,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues",
+    operation_id = "issues.list",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -125,6 +126,7 @@ pub async fn list_issues(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}",
+    operation_id = "issues.get",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -184,6 +186,7 @@ pub async fn get_issue(
 #[cfg_attr(feature = "openapi", utoipa::path(
     patch,
     path = "/api/projects/{project_id}/issues/{issue_id}",
+    operation_id = "issues.update",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -270,6 +273,7 @@ pub async fn update_issue(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/issues/{issue_id}",
+    operation_id = "issues.delete",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -314,6 +318,7 @@ pub async fn delete_issue(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/hashes",
+    operation_id = "issues.getHashes",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -354,6 +359,7 @@ pub async fn get_issue_hashes(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/tags/{key}",
+    operation_id = "issues.getTagValues",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -395,6 +401,7 @@ pub async fn get_issue_tag_values(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/aggregates",
+    operation_id = "issues.getAggregates",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -435,6 +442,7 @@ pub async fn get_issue_aggregates(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/projects/{project_id}/issues",
+    operation_id = "issues.bulkUpdate",
     tag = "Issues",
     params(("project_id" = i32, Path, description = "Project ID")),
     request_body = crate::models::BulkUpdateIssues,
@@ -505,6 +513,7 @@ pub async fn bulk_update_issues(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/issues",
+    operation_id = "issues.bulkDelete",
     tag = "Issues",
     params(("project_id" = i32, Path, description = "Project ID")),
     request_body = crate::models::BulkDeleteIssues,
@@ -581,11 +590,12 @@ fn require_user(actor: &ApiActor) -> AppResult<i32> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/stats",
+    operation_id = "issues.getStats",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
         ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
-        ("window" = Option<String>, Query, description = "Time window: 24h (default) or 30d"),
+        ("window" = Option<crate::models::issue::IssueStatsWindow>, Query, description = "Time window (default: 24h)"),
     ),
     responses(
         (status = 200, description = "Zero-filled event-count timeseries", body = resp::IssueStatsResponse),
@@ -627,6 +637,7 @@ pub async fn get_issue_stats(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/activity",
+    operation_id = "issues.getActivity",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -661,6 +672,7 @@ pub async fn get_issue_activity(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/issues/{issue_id}/comments",
+    operation_id = "issues.createComment",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -708,6 +720,7 @@ pub async fn create_issue_comment(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/projects/{project_id}/issues/{issue_id}/bookmark",
+    operation_id = "issues.setBookmark",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -746,6 +759,7 @@ pub async fn set_issue_bookmark(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/projects/{project_id}/issues/{issue_id}/subscription",
+    operation_id = "issues.setSubscription",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -785,6 +799,7 @@ pub async fn set_issue_subscription(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/issues/{issue_id}/seen",
+    operation_id = "issues.markSeen",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -820,6 +835,7 @@ pub async fn mark_issue_seen(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/user-reports",
+    operation_id = "issues.listUserReports",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -854,6 +870,7 @@ pub async fn list_issue_user_reports(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/issues/{issue_id}/user-reports",
+    operation_id = "issues.createUserReport",
     tag = "Issues",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
