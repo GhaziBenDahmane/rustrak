@@ -242,18 +242,19 @@ flattens everything into one relevance-ordered list.
 
 ## From code, and from your editor
 
-The REST API has a typed client, and the client has an MCP server over it, so an
-assistant can triage your instance in the same session it is writing the fix.
+The REST API has a typed client, and the server has an MCP endpoint built in,
+so an assistant can triage your instance in the same session it is writing the
+fix. Turn it on in **Settings → AI assistants (MCP)** and point Claude, Cursor
+or any MCP client at `https://<your-rustrak>/mcp` with an API token: there is
+nothing to install. See the [MCP guide](https://rustrak.dev/sdks/mcp).
 
 ```bash
 npm install @rustrak/client   # the REST API, typed
-npx @rustrak/mcp              # Claude, Cursor, Continue
 ```
 
 | Package | Version | What it is |
 |---|---|---|
 | [`@rustrak/client`](https://www.npmjs.com/package/@rustrak/client) | [![npm](https://img.shields.io/npm/v/@rustrak/client?style=flat-square)](https://www.npmjs.com/package/@rustrak/client) | TypeScript client. Every method returns `Result<T, RustrakError>` and never throws, so a call that can fail says so in its type |
-| [`@rustrak/mcp`](https://www.npmjs.com/package/@rustrak/mcp) | [![npm](https://img.shields.io/npm/v/@rustrak/mcp?style=flat-square)](https://www.npmjs.com/package/@rustrak/mcp) | MCP server over that client, so an assistant can read and manage your instance |
 
 The OpenAPI spec is browsable in the [API reference](https://rustrak.dev/api-reference).
 

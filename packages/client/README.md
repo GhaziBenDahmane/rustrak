@@ -504,7 +504,7 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Package | Description |
 |---|---|
-| [`@rustrak/mcp`](https://www.npmjs.com/package/@rustrak/mcp) | MCP server — gives Claude Desktop, Cursor, and Continue direct access to your Rustrak instance via 18 tools |
+| [MCP server](https://rustrak.dev/sdks/mcp) | Built into the Rustrak server at `/mcp` — gives Claude, Cursor and other MCP clients direct access to your instance |
 
 ## What is Rustrak?
 

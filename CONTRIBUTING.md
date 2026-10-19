@@ -176,7 +176,6 @@ that apply inside it. Read the one for the area you are touching:
 - Server: `apps/server/CLAUDE.md`
 - Dashboard: `apps/dashboard/CLAUDE.md`
 - Client Package: `packages/client/CLAUDE.md`
-- MCP Server: `packages/mcp/CLAUDE.md`
 
 ## Code Standards
 

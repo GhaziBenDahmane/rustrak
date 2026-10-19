@@ -18,6 +18,7 @@ src/
 ├── ingest/                         Sentry envelope parsing and temp storage
 ├── digest/                         grouping and issue creation, off the hot path
 ├── workers/                        Tokio background tasks
+├── mcp/                            the MCP tools served at /mcp
 ├── auth/                           the three extractors
 ├── middleware/                     rate limiting, auth enforcement, tracing
 └── pagination/                     cursor and offset helpers
@@ -42,11 +43,42 @@ group, always.
 | Session | humans on the dashboard | email + password, Argon2id, httpOnly cookie |
 | Bearer token | API and scripts | 40-char hex against `auth_tokens` |
 | Sentry auth | SDKs on ingest routes | the key embedded in the DSN |
+| OAuth access token | MCP clients, `/mcp` only | `rto_` + hex, hashed in `oauth_grants` |
 
 They are separate on purpose, the same way GitHub separates sessions from PATs.
 Session auth is better UX for people; token auth is the standard for machines.
 
 DSN format: `http://<sentry_key>@<host>/<project_id>`.
+
+## The MCP server at `/mcp`
+
+`routes/mcp.rs` is the endpoint and its switch; `src/mcp/` holds the tools,
+one module per area, mirroring `routes/`.
+
+- **Off until an admin turns it on** (`installation.mcp_enabled`, `PUT
+  /api/settings/mcp`). Off, `/mcp` is a 404.
+- **Bearer token only**: an API token or an OAuth access token. The session
+  cookie is refused, so a browser tab cannot call tools for its user. The
+  tools act as the token's owner.
+- **OAuth** (`routes/oauth.rs`, `services/oauth.rs`): Rustrak is its own
+  authorization server. Clients identify with a Client ID Metadata Document,
+  fetched only from public addresses (`is_public`, IP pinned, no redirects);
+  PKCE S256 is required; codes and tokens are stored as SHA-256 hashes; an
+  access token is bound to `<base>/mcp` and refused everywhere else.
+  `/oauth/authorize` is a dashboard page (consent every time) and the shell
+  is served with `frame-ancestors 'none'` so it cannot be clickjacked. A
+  request whose client or redirect does not verify is never redirected.
+- **Stateless** (protocol `2026-07-28`, `rmcp`): one `POST` per call, nothing
+  kept between calls, no session store.
+- **A tool calls the REST handler**, in-process, with extractors built from its
+  arguments (`web::Path::from`, `web::Query(args(&a)?)`, `web::Json(...)`).
+  Access checks, validation and the response are the handler's own, so a tool
+  cannot drift from the endpoint. Do not reimplement a handler in a tool.
+- **A handler a tool calls must return a `Send` future.** Await a value before
+  starting `HttpResponse::Ok()`; an `actix_web::Error` argument needs a
+  `Send` inner function (see `issues::delete_issues`).
+- `tests/integration/mcp_test.rs` pins the full tool list, so adding or
+  removing a tool updates `TOOLS` there.
 
 ## It also serves the dashboard
 
@@ -62,7 +94,8 @@ for anyone who never installs Node. `RUSTRAK_DASHBOARD=off` skips a build that
 is present, which is how a published image runs API-only.
 
 The one rule the fallback must not break: `API_PREFIXES` (`/api`, `/auth`,
-`/health`, `/docs`, `/api-docs`) never answer with the application shell. An
+`/health`, `/docs`, `/api-docs`, `/metrics`, `/mcp`) never answer with the
+application shell. An
 unmatched path under one of them is a JSON 404 like any other error, because a
 mistyped endpoint answering `200 text/html` makes `@rustrak/client` report a
 schema failure against itself. `apps/dashboard/vite.config.ts` proxies the same
