@@ -269,7 +269,8 @@ fn span_row(
     // Relay's exclusive_time is already in milliseconds.
     let exclusive_time_ms = span.get("exclusive_time").and_then(|v| v.as_f64());
 
-    let tags = span.get("tags").cloned();
+    // The spec promises an object; anything else is dropped.
+    let tags = span.get("tags").filter(|t| t.is_object()).cloned();
 
     // gen_ai.* normalization, on the span's own `data` attributes bag —
     // same shared function `SpanProcessor` calls for standalone spans, so

@@ -9,8 +9,8 @@
 //! schemas assert them.
 //!
 //! It walks the spec rather than a list, so a new `GET` is covered the day it
-//! is added. Path parameters with no seeded row get a value that does not
-//! exist, which still proves the 404 body.
+//! is added. Every `GET` must answer 200 against the seed, so the schema
+//! checked is its success body; the few that cannot are in `NOT_SEEDED`.
 #![cfg(feature = "openapi")]
 
 use crate::common::TestDb;
@@ -56,6 +56,17 @@ const REDIRECTS: &[&str] = &[
     "/auth/sso/callback",
 ];
 
+/// `GET`s that cannot answer 200 against the seed: a row it has no way to
+/// create, or a service the test does not configure. Every other `GET` must
+/// succeed, so its success schema is the one checked.
+const NOT_SEEDED: &[&str] = &[
+    // No GitHub App configured.
+    "github.repositories",
+    // A token only an emailed invitation or an SSO login hands out.
+    "auth.getInvitation",
+    "auth.ssoLink",
+];
+
 struct Seed {
     project_id: i32,
     project_slug: String,
@@ -63,6 +74,10 @@ struct Seed {
     issue_id: Uuid,
     event_row_id: Uuid,
     sdk_event_id: Uuid,
+    transaction_id: Uuid,
+    span_row_id: Uuid,
+    rule_id: i32,
+    integration_id: i32,
 }
 
 fn test_config() -> Config {
@@ -183,6 +198,41 @@ async fn seed(db: &TestDb) -> (Seed, String) {
     .await
     .unwrap();
 
+    let now = Utc::now();
+    let transaction_id = Uuid::new_v4();
+    // No `op`: the stat-group route, called without one, matches a null op.
+    sqlx::query(
+        "INSERT INTO transactions (id, event_id, project_id, trace_id, transaction_name, \
+         start_timestamp, timestamp, duration_ms, data) \
+         VALUES ($1, $2, $3, $4, 'GET /contract', $5, $5, 12.5, $6)",
+    )
+    .bind(transaction_id)
+    .bind(Uuid::new_v4())
+    .bind(project.id)
+    .bind("0".repeat(32))
+    .bind(now)
+    .bind(json!({"transaction": "GET /contract"}))
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let span_row_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO spans (id, transaction_id, project_id, span_id, trace_id, op, \
+         start_timestamp, timestamp, duration_ms, tags, data) \
+         VALUES ($1, $2, $3, $4, $5, 'db.query', $6, $6, 2.5, $7, $8)",
+    )
+    .bind(span_row_id)
+    .bind(transaction_id)
+    .bind(project.id)
+    .bind("0".repeat(16))
+    .bind("0".repeat(32))
+    .bind(now)
+    .bind(json!({"k": "v"}))
+    .bind(json!({}))
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
     let seed = Seed {
         project_id: project.id,
         project_slug: project.slug,
@@ -190,6 +240,10 @@ async fn seed(db: &TestDb) -> (Seed, String) {
         issue_id: issue.id,
         event_row_id,
         sdk_event_id,
+        transaction_id,
+        span_row_id,
+        rule_id: 0,
+        integration_id: 0,
     };
     (seed, token.token)
 }
@@ -201,9 +255,15 @@ fn param_value(name: &str, path: &str, schema: &Value, seed: &Seed) -> String {
         "project_id" => seed.project_id.to_string(),
         "id" if path.starts_with("/api/projects/") => seed.project_id.to_string(),
         "id" if path.starts_with("/api/tokens/") => seed.token_id.to_string(),
+        "id" if path.starts_with("/api/integrations/") => seed.integration_id.to_string(),
+        "name" if path.ends_with("/transactions/stats/group") => "GET%20%2Fcontract".into(),
         "issue_id" => seed.issue_id.to_string(),
         "event_id" if path.contains("/events/sentry/") => seed.sdk_event_id.simple().to_string(),
         "event_id" => seed.event_row_id.to_string(),
+        "transaction_id" => seed.transaction_id.to_string(),
+        "span_id" => seed.span_row_id.to_string(),
+        "rule_id" => seed.rule_id.to_string(),
+        "slug" => "contract".into(),
         "project_slug" => seed.project_slug.clone(),
         "org_slug" => "rustrak".into(),
         "key" => "level".into(),
@@ -272,7 +332,7 @@ fn null_but_optional(spec: &Value, schema: &Value, value: &Value, at: &str, out:
 #[actix_web::test]
 async fn every_get_matches_the_published_spec() {
     let db = TestDb::new().await;
-    let (seed, token) = seed(&db).await;
+    let (mut seed, token) = seed(&db).await;
     let spec = serde_json::to_value(rustrak::openapi::ApiDoc::openapi()).unwrap();
     let reporter = Arc::new(Reporter::new(
         db.pool.clone(),
@@ -351,6 +411,45 @@ async fn every_get_matches_the_published_spec() {
         .expect("login sets a session cookie")
         .into_owned();
 
+    // Through the handlers, so these rows are what a real client creates.
+    let project = seed.project_id;
+    let monitor = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri(&format!("/api/projects/{project}/monitors"))
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .set_json(json!({"name": "Contract", "slug": "contract",
+                "config": {"schedule": {"type": "crontab", "value": "0 * * * *"}}}))
+            .to_request(),
+    )
+    .await;
+    assert!(
+        monitor.status().is_success(),
+        "seed monitor: {}",
+        monitor.status()
+    );
+    let rule: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::post()
+            .uri(&format!("/api/projects/{project}/alert-rules"))
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .set_json(json!({"name": "Contract", "alert_type": "new_issue"}))
+            .to_request(),
+    )
+    .await;
+    seed.rule_id = rule["id"].as_i64().expect("seed alert rule") as i32;
+    let integration: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/integrations")
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .set_json(json!({"name": "Contract", "provider_type": "webhook",
+                "credentials": {"url": "https://example.com/hook"}}))
+            .to_request(),
+    )
+    .await;
+    seed.integration_id = integration["id"].as_i64().expect("seed integration") as i32;
+
     let mut failures = Vec::new();
     let mut checked = 0;
     for (path, item) in spec["paths"].as_object().unwrap() {
@@ -388,6 +487,11 @@ async fn every_get_matches_the_published_spec() {
         let status = response.status().as_u16().to_string();
         let body = test::read_body(response).await;
         checked += 1;
+        if status != "200" && !NOT_SEEDED.contains(&id) {
+            failures.push(format!(
+                "{id} GET {uri}: {status}, expected 200 against the seed"
+            ));
+        }
 
         let Some(documented) = op["responses"].get(&status) else {
             failures.push(format!("{id} GET {uri}: undocumented status {status}"));

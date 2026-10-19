@@ -77,6 +77,12 @@ pub fn validate_routing_override(
     credentials: &serde_json::Value,
     routing: &serde_json::Value,
 ) -> AppResult<()> {
+    // Stored and returned as-is, and the spec promises an object.
+    if !routing.is_object() {
+        return Err(AppError::Validation(
+            "routing_override must be a JSON object".to_string(),
+        ));
+    }
     match provider_type {
         ProviderType::Slack => {
             let method = credentials
@@ -964,6 +970,20 @@ mod tests {
         let creds = serde_json::json!({"method": "webhook", "webhook_url": "https://hooks.slack.com/services/T/B/X"});
         let routing = serde_json::json!({});
         assert!(validate_routing_override(ProviderType::Slack, &creds, &routing).is_ok());
+    }
+
+    #[test]
+    fn test_validate_routing_non_object_fails() {
+        let slack = serde_json::json!({"method": "webhook", "webhook_url": "https://hooks.slack.com/services/T/B/X"});
+        let webhook = serde_json::json!({"url": "https://example.com/hook"});
+        for routing in [
+            serde_json::json!([]),
+            serde_json::json!(null),
+            serde_json::json!("x"),
+        ] {
+            assert!(validate_routing_override(ProviderType::Slack, &slack, &routing).is_err());
+            assert!(validate_routing_override(ProviderType::Webhook, &webhook, &routing).is_err());
+        }
     }
 
     #[test]
