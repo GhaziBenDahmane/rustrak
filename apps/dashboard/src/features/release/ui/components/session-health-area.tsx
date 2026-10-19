@@ -105,10 +105,7 @@ export function SessionHealthArea({
     healthy: Math.max(0, point.total - point.crashed),
   }));
   const times = chartData.map((p) => p.t);
-  const axis = timeLineAxis(
-    times,
-    bucketWidth(times, intervalHours ? intervalHours * 3_600_000 : undefined),
-  );
+  const axis = timeLineAxis(times, bucketWidth(times, intervalHours));
 
   if (chartData.length === 0 || chartData.every((p) => p.total === 0)) {
     return (

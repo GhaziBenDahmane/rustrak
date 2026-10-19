@@ -314,7 +314,7 @@ export function ErrorVolumeChart({
         points.map((p) => p.t),
         bucketWidth(
           raw.map((p) => p.t),
-          intervalHours ? intervalHours * 3_600_000 : undefined,
+          intervalHours,
         ) * groupSize,
       ),
     };

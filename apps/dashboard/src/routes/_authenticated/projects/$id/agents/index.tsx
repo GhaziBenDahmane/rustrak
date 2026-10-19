@@ -128,6 +128,7 @@ function AgentsPage() {
   });
   const { project: projectResult, loaded } = Route.useLoaderData();
   const projectId = Number.parseInt(id, 10);
+  const { intervalHours } = resolveAgentFilters({ period });
 
   if (!projectResult.success) {
     return (
@@ -206,9 +207,7 @@ function AgentsPage() {
                 <CardContent>
                   <AgentTimeseriesChart
                     points={runs}
-                    intervalHours={
-                      resolveAgentFilters({ period }).intervalHours
-                    }
+                    intervalHours={intervalHours}
                   />
                 </CardContent>
               </Card>
@@ -223,9 +222,7 @@ function AgentsPage() {
                 <CardContent>
                   <AgentDurationChart
                     points={duration}
-                    intervalHours={
-                      resolveAgentFilters({ period }).intervalHours
-                    }
+                    intervalHours={intervalHours}
                   />
                 </CardContent>
               </Card>

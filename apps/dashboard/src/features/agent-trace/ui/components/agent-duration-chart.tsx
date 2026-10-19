@@ -77,10 +77,7 @@ export function AgentDurationChart({
     p95: p.p95_ms,
   }));
   const times = chartData.map((p) => p.t);
-  const axis = timeLineAxis(
-    times,
-    bucketWidth(times, intervalHours ? intervalHours * 3_600_000 : undefined),
-  );
+  const axis = timeLineAxis(times, bucketWidth(times, intervalHours));
 
   if (chartData.length === 0) {
     return (

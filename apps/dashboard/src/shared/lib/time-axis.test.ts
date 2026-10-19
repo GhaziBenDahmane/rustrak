@@ -6,7 +6,7 @@ const D = 24 * H;
 
 describe('bucketWidth', () => {
   it('prefers the interval the caller asked for', () => {
-    expect(bucketWidth([0, 3 * D], D)).toBe(D);
+    expect(bucketWidth([0, 3 * D], 24)).toBe(D);
   });
 
   it('falls back to the narrowest gap between points', () => {

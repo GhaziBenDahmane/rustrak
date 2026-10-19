@@ -17,12 +17,14 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
 /**
- * Width of one bucket in milliseconds: the requested interval when the
- * caller knows it, else the narrowest gap between points, else an hour (a
- * single point has no spacing to read).
+ * Width of one bucket in milliseconds: the requested interval (in hours)
+ * when the caller knows it, else the narrowest gap between points, else an
+ * hour (a single point has no spacing to read).
  */
-export function bucketWidth(times: number[], intervalMs?: number): number {
-  if (intervalMs != null && intervalMs > 0) return intervalMs;
+export function bucketWidth(times: number[], intervalHours?: number): number {
+  if (intervalHours != null && intervalHours > 0) {
+    return intervalHours * HOUR_MS;
+  }
 
   let narrowest = Number.POSITIVE_INFINITY;
   for (let i = 1; i < times.length; i++) {

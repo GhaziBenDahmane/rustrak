@@ -165,13 +165,7 @@ export function CrashFreeTrend({
       // Let a bad window pull the floor down rather than clipping the dip
       // that made it interesting.
       floor: rates.length ? Math.min(DEFAULT_FLOOR, ...rates) : DEFAULT_FLOOR,
-      axis: timeLineAxis(
-        times,
-        bucketWidth(
-          times,
-          intervalHours ? intervalHours * 3_600_000 : undefined,
-        ),
-      ),
+      axis: timeLineAxis(times, bucketWidth(times, intervalHours)),
     };
   }, [data, intervalHours]);
 

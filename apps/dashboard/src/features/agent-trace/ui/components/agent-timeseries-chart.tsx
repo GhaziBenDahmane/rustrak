@@ -67,10 +67,7 @@ export function AgentTimeseriesChart({
     value: p.value,
   }));
   const times = chartData.map((p) => p.t);
-  const axis = timeBarAxis(
-    times,
-    bucketWidth(times, intervalHours ? intervalHours * 3_600_000 : undefined),
-  );
+  const axis = timeBarAxis(times, bucketWidth(times, intervalHours));
 
   if (chartData.length === 0) {
     return (
