@@ -79,7 +79,12 @@ pub(crate) fn relay_level(raw: &str) -> Option<&'static str> {
 
 /// A payload timestamp, as epoch seconds or RFC 3339.
 pub(crate) fn extract_timestamp(data: &serde_json::Value, key: &str) -> Option<DateTime<Utc>> {
-    let raw = data.get(key)?;
+    timestamp_from_value(data.get(key)?)
+}
+
+/// Relay's `Timestamp` (relay-event-schema/src/protocol/types.rs): epoch
+/// seconds or an RFC 3339 string.
+pub(crate) fn timestamp_from_value(raw: &serde_json::Value) -> Option<DateTime<Utc>> {
     if let Some(epoch) = raw.as_f64() {
         return epoch_to_utc(epoch);
     }

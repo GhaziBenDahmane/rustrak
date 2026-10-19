@@ -16,9 +16,9 @@ use uuid::Uuid;
 /// surfaced separately for querying.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LogItem {
-    /// Epoch seconds when the log was created.
-    #[serde(default)]
-    pub timestamp: f64,
+    /// When the log was created (epoch seconds or RFC 3339 on the wire).
+    #[serde(default, deserialize_with = "crate::models::deserialize_timestamp")]
+    pub timestamp: Option<DateTime<Utc>>,
     /// Trace this log belongs to (required by the protocol).
     #[serde(default)]
     pub trace_id: String,

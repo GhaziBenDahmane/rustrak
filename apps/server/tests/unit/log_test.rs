@@ -240,3 +240,30 @@ mod level2 {
         assert_eq!(logs[0].level, "error");
     }
 }
+
+/// Issue #427: sentry-go marshals `Log.Timestamp` (`time.Time`) as an RFC3339
+/// string. Relay's `OurLog.timestamp` is `Annotated<Timestamp>`, which accepts
+/// both strings and numbers (`relay-event-schema/src/protocol/types.rs`).
+#[test]
+fn test_parse_container_accepts_rfc3339_timestamp() {
+    for ts in [
+        "2026-10-19T09:50:34.997868399Z",
+        "2026-10-19T11:49:02.434963+02:00",
+    ] {
+        let body = format!(
+            r#"{{"items":[{{"timestamp":"{ts}","trace_id":"5b8efff798038103d269b633813fc60c","level":"info","body":"hello"}}]}}"#
+        );
+        let logs = LogContainer::parse(body.as_bytes()).expect(ts);
+        let expected = chrono::DateTime::parse_from_rfc3339(ts).unwrap();
+        assert_eq!(logs[0].timestamp, Some(expected.to_utc()));
+    }
+}
+
+/// Relay rejects a timestamp at or before the epoch, not one just after it.
+#[test]
+fn test_parse_container_keeps_sub_millisecond_after_epoch() {
+    let logs =
+        LogContainer::parse(br#"{"items":[{"timestamp":0.0005},{"timestamp":0.0}]}"#).unwrap();
+    assert!(logs[0].timestamp.is_some());
+    assert!(logs[1].timestamp.is_none());
+}

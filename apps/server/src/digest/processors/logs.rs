@@ -1,8 +1,7 @@
-use super::{clamp, clamp_opt, epoch_to_utc, Processor, ProcessorCtx};
+use super::{clamp, clamp_opt, Processor, ProcessorCtx};
 use crate::error::AppResult;
 use crate::models::log::{LogContainer, LogItem};
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use sha1::{Digest as _, Sha1};
 use uuid::Uuid;
 
@@ -30,7 +29,7 @@ impl Processor for LogsProcessor {
         for (index, log) in logs.into_iter().enumerate() {
             let id = Uuid::new_v4();
             let dedupe_key = dedupe_key(&container_hash, index, ctx.event_id);
-            let timestamp = epoch_to_datetime(log.timestamp).unwrap_or(ctx.ingested_at);
+            let timestamp = log.timestamp.unwrap_or(ctx.ingested_at);
             let level = normalize_level(&log.level);
             let severity_number = severity_number(&level);
 
@@ -73,17 +72,6 @@ impl Processor for LogsProcessor {
 
 fn dedupe_key(container_hash: &str, index: usize, delivery_id: Uuid) -> String {
     format!("{container_hash}:{delivery_id}:{index}")
-}
-
-/// Converts an epoch-seconds float (with sub-second precision) to a UTC instant.
-fn epoch_to_datetime(epoch: f64) -> Option<DateTime<Utc>> {
-    // NaN/inf must fall through to the ingested_at fallback: `epoch <= 0.0` is
-    // false for NaN (IEEE 754), and a saturating NaN-to-int cast would otherwise
-    // store 1970-01-01 instead.
-    if !epoch.is_finite() || epoch <= 0.0 {
-        return None;
-    }
-    epoch_to_utc(epoch)
 }
 
 /// Normalizes the log level, defaulting to "info" when the SDK omits it.
