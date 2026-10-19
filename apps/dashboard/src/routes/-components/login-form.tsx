@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { RustrakError, SsoConfig } from '@rustrak/client';
+import type { RustrakError, SsoConfigResponse } from '@rustrak/client';
 import { Eye, EyeOff } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
@@ -63,7 +63,7 @@ export function LoginForm({
   ssoConfig,
   ssoFailed,
 }: {
-  ssoConfig: SsoConfig | null;
+  ssoConfig: SsoConfigResponse | null;
   ssoFailed: boolean;
 }) {
   const t = useTranslations('auth');

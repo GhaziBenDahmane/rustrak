@@ -1,0 +1,3 @@
+# Generated from apps/server/openapi.json by `pnpm --filter @rustrak/client generate`:
+# collapsed in GitHub diffs and left out of language stats.
+packages/client/src/generated/** linguist-generated=true

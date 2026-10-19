@@ -1,201 +1,161 @@
-import type { KyInstance } from 'ky';
+import { ZodError } from 'zod';
 import type { ClientConfig } from './config.js';
+import type { RustrakError } from './errors.js';
+import { createClient, createConfig } from './generated/client/index.js';
+import { Rustrak } from './generated/sdk.gen.js';
+import { Err, Ok, type Result } from './result.js';
 import {
-  AgentsResource,
-  AlertIntegrationsResource,
-  AlertRulesResource,
-  AuthResource,
-  EventsResource,
-  GitHubResource,
-  HealthResource,
-  InvitationsResource,
-  IssuesResource,
-  LogsResource,
-  MembersResource,
-  MonitorsResource,
-  ProjectsResource,
-  ReleasesResource,
-  SchedulesResource,
-  SessionsResource,
-  SourceMapsResource,
-  SpansResource,
-  StatsResource,
-  StorageResource,
-  TeamResource,
-  TokensResource,
-  TransactionsResource,
-} from './resources/index.js';
-import { createKyInstance } from './utils/index.js';
+  createFetch,
+  isTransportFailure,
+  transformHttpError,
+} from './utils/http.js';
+
+/** What a caller may pass: the request's own parts, never client plumbing. */
+type RequestKeys = 'path' | 'query' | 'body' | 'headers' | 'signal';
+
+type Call<F> = F extends (options: infer O) => infer R
+  ? (
+      ...args: {} extends Pick<O, Extract<keyof O, RequestKeys>>
+        ? [options?: Pick<O, Extract<keyof O, RequestKeys>>]
+        : [options: Pick<O, Extract<keyof O, RequestKeys>>]
+    ) => Promise<Result<Data<Awaited<R>>, RustrakError>>
+  : never;
+
+/** The success half of the generated `{ data, error }` union. */
+type Data<R> =
+  Extract<R, { error: undefined }> extends { data: infer D } ? D : never;
+
+type Resource<T> = { readonly [M in keyof T]: Call<T[M]> };
 
 /**
- * Main Rustrak API client
+ * Every operation in `openapi.json`, grouped by tag:
+ * `client.issues.list({ path: { project_id } })`.
+ *
+ * Generated in `src/generated/`; this file only changes what a call returns.
+ */
+export type RustrakClient = {
+  readonly [R in keyof Rustrak]: Resource<Rustrak[R]>;
+};
+
+/**
+ * Main Rustrak API client. Every method returns a `Result`; nothing throws for
+ * an expected failure.
  *
  * @example
  * ```typescript
  * const client = new RustrakClient({
  *   baseUrl: 'http://localhost:8080',
- *   token: 'your-api-token'
+ *   token: 'your-api-token',
  * });
  *
- * // List all projects
- * const projects = await client.projects.list();
- *
- * // Get issues for a project
- * const issues = await client.issues.list(1);
- *
- * // Get events for an issue
- * const events = await client.events.list(1, 'issue-uuid');
+ * const issues = await client.issues.list({ path: { project_id: 1 } });
+ * if (issues.success) console.log(issues.data.items);
  * ```
  */
-export class RustrakClient {
-  private readonly http: KyInstance;
-
-  /**
-   * Authentication API resource
-   */
-  public readonly auth: AuthResource;
-
-  /**
-   * Projects API resource
-   */
-  public readonly projects: ProjectsResource;
-
-  /**
-   * Issues API resource
-   */
-  public readonly issues: IssuesResource;
-
-  /**
-   * Events API resource
-   */
-  public readonly events: EventsResource;
-
-  /**
-   * Auth Tokens API resource
-   */
-  public readonly tokens: TokensResource;
-
-  /**
-   * Alert Integrations API resource (global credential destinations)
-   */
-  public readonly alertIntegrations: AlertIntegrationsResource;
-
-  /**
-   * Alert Rules API resource (per-project alert configuration)
-   */
-  public readonly alertRules: AlertRulesResource;
-
-  /**
-   * Source Maps API resource (sentry-cli artifact bundle upload protocol)
-   */
-  public readonly sourceMaps: SourceMapsResource;
-
-  /**
-   * Team API resource (global user roster and roles)
-   */
-  public readonly team: TeamResource;
-
-  /**
-   * Invitations API resource (pending user invitations)
-   */
-  public readonly invitations: InvitationsResource;
-
-  /**
-   * Project Members API resource (per-project membership and roles)
-   */
-  public readonly members: MembersResource;
-
-  /**
-   * Sessions API resource (release health)
-   */
-  public readonly sessions: SessionsResource;
-
-  /**
-   * Releases API resource (data scoped to a specific release)
-   */
-  public readonly releases: ReleasesResource;
-
-  /**
-   * Transactions API resource (performance monitoring)
-   */
-  public readonly transactions: TransactionsResource;
-
-  /**
-   * Logs API resource (standalone logs)
-   */
-  public readonly logs: LogsResource;
-
-  /**
-   * Cron monitors API resource (Sentry Crons)
-   */
-  public readonly monitors: MonitorsResource;
-
-  /**
-   * Schedules API resource (previews for crontab/interval schedules)
-   */
-  public readonly schedules: SchedulesResource;
-
-  /**
-   * Spans API resource (standalone + transaction-embedded spans, shared table)
-   */
-  public readonly spans: SpansResource;
-
-  /**
-   * AI Agent Monitoring dashboard API resource
-   */
-  public readonly agents: AgentsResource;
-
-  /**
-   * Stats API resource (project-wide overview aggregates)
-   */
-  public readonly stats: StatsResource;
-
-  /**
-   * Storage API resource (usage + retention cleanup, admin only)
-   */
-  public readonly storage: StorageResource;
-
-  /**
-   * Health API resource (version info)
-   */
-  public readonly health: HealthResource;
-
-  /**
-   * GitHub integration resource
-   */
-  public readonly github: GitHubResource;
-
-  /**
-   * Create a new Rustrak API client
-   *
-   * @param config - Client configuration
-   */
+export const RustrakClient = class {
   constructor(config: ClientConfig) {
-    this.http = createKyInstance(config);
-
-    // Initialize resources
-    this.auth = new AuthResource(this.http);
-    this.projects = new ProjectsResource(this.http);
-    this.issues = new IssuesResource(this.http);
-    this.events = new EventsResource(this.http);
-    this.tokens = new TokensResource(this.http);
-    this.github = new GitHubResource(this.http);
-    this.alertIntegrations = new AlertIntegrationsResource(this.http);
-    this.alertRules = new AlertRulesResource(this.http);
-    this.sourceMaps = new SourceMapsResource(this.http);
-    this.team = new TeamResource(this.http);
-    this.invitations = new InvitationsResource(this.http);
-    this.members = new MembersResource(this.http);
-    this.sessions = new SessionsResource(this.http);
-    this.releases = new ReleasesResource(this.http);
-    this.transactions = new TransactionsResource(this.http);
-    this.logs = new LogsResource(this.http);
-    this.monitors = new MonitorsResource(this.http);
-    this.schedules = new SchedulesResource(this.http);
-    this.spans = new SpansResource(this.http);
-    this.agents = new AgentsResource(this.http);
-    this.stats = new StatsResource(this.http);
-    this.storage = new StorageResource(this.http);
-    this.health = new HealthResource(this.http);
+    // biome-ignore lint/correctness/noConstructorReturn: the instance is the generated SDK with every method wrapped
+    return Object.setPrototypeOf(createApi(config), new.target.prototype);
   }
+} as unknown as new (
+  config: ClientConfig,
+) => RustrakClient;
+
+function createApi(config: ClientConfig): RustrakClient {
+  const sdk = new Rustrak({
+    client: createClient(
+      createConfig({
+        baseUrl: config.baseUrl,
+        credentials: 'include',
+        fetch: createFetch(config),
+        // Every 2xx in the spec is JSON or empty. `auto` would hand back an
+        // HTML page or a stream as a success without validating it.
+        parseAs: 'json',
+        headers: {
+          // Without it a content-negotiating hop can answer with HTML.
+          Accept: 'application/json',
+          ...config.headers,
+          ...(config.token && { Authorization: `Bearer ${config.token}` }),
+        },
+      }),
+    ),
+  });
+
+  const api: Record<string, Record<string, unknown>> = {};
+  for (const name of Object.getOwnPropertyNames(Rustrak.prototype)) {
+    if (name === 'constructor') continue;
+    const resource = sdk[name as keyof Rustrak] as unknown as Record<
+      string,
+      (options: object) => Promise<Outcome>
+    >;
+    const methods: Record<string, unknown> = {};
+    for (const method of Object.getOwnPropertyNames(
+      Object.getPrototypeOf(resource),
+    )) {
+      if (method === 'constructor') continue;
+      methods[method] = async (options: { headers?: unknown } = {}) =>
+        toResult(
+          await resource[method]!({
+            ...options,
+            // A JSON write spreads these into an object, which keeps nothing
+            // of a `Headers` or an array of pairs.
+            headers:
+              options.headers instanceof Headers ||
+              Array.isArray(options.headers)
+                ? Object.fromEntries(new Headers(options.headers))
+                : options.headers,
+            throwOnError: false,
+          }),
+        );
+    }
+    api[name] = methods;
+  }
+  return api as unknown as RustrakClient;
+}
+
+type Outcome = {
+  data?: unknown;
+  error?: unknown;
+  response?: Response;
+};
+
+/**
+ * The boundary: the generated client's `{ data, error, response }` becomes a
+ * `Result`.
+ *
+ * Only failures this file recognises become an `Err`. Anything else, a
+ * `TypeError` from a genuine bug, is rethrown so it crashes where it can be
+ * debugged instead of being laundered into `{ success: false }`.
+ */
+function toResult({
+  data,
+  error,
+  response,
+}: Outcome): Result<unknown, RustrakError> {
+  if (error === undefined) return Ok(data);
+  if (isTransportFailure(error)) return Err(error.rustrakError);
+  if (response && !response.ok) {
+    // `error` is the parsed body, or its text when it is not JSON.
+    return Err(transformHttpError(response, error));
+  }
+  if (!response && error instanceof ZodError) {
+    return Err({
+      kind: 'invalid_request',
+      message: 'The request input did not match the expected schema.',
+    });
+  }
+  if (response && error instanceof SyntaxError) {
+    return Err({
+      kind: 'invalid_response',
+      message: 'The server returned a body that is not valid JSON.',
+    });
+  }
+  if (response && error instanceof ZodError) {
+    // No Zod issues: they embed the offending response data.
+    return Err({
+      kind: 'invalid_response',
+      message: 'The server response did not match the expected schema.',
+    });
+  }
+  throw error;
 }

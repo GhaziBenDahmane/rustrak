@@ -7,12 +7,12 @@
  */
 import type {
   ActivityEntry,
-  Issue,
   IssueAggregates,
-  IssueStats,
-  IssueStatsWindow,
-  ListIssuesOptions,
-  OffsetPaginatedResponse,
+  IssueResponse,
+  IssueStatsResponse,
+  IssuesGetStatsData,
+  IssuesListData,
+  IssuesListResponse,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -35,10 +35,13 @@ import { createClient } from '@/shared/api/rustrak';
  */
 export async function listIssues(
   projectId: number,
-  options?: ListIssuesOptions,
-): Promise<Result<OffsetPaginatedResponse<Issue>, RustrakError>> {
+  options?: IssuesListData['query'],
+): Promise<Result<IssuesListResponse, RustrakError>> {
   const client = await createClient();
-  return client.issues.list(projectId, options);
+  return client.issues.list({
+    path: { project_id: projectId },
+    query: options,
+  });
 }
 
 /**
@@ -51,9 +54,11 @@ export async function listIssues(
 export async function getIssue(
   projectId: number,
   issueId: string,
-): Promise<Result<Issue, RustrakError>> {
+): Promise<Result<IssueResponse, RustrakError>> {
   const client = await createClient();
-  return client.issues.get(projectId, issueId);
+  return client.issues.get({
+    path: { project_id: projectId, issue_id: issueId },
+  });
 }
 
 /**
@@ -67,7 +72,9 @@ export async function getIssueAggregates(
   issueId: string,
 ): Promise<Result<IssueAggregates, RustrakError>> {
   const client = await createClient();
-  return client.issues.getAggregates(projectId, issueId);
+  return client.issues.getAggregates({
+    path: { project_id: projectId, issue_id: issueId },
+  });
 }
 
 /**
@@ -80,10 +87,13 @@ export async function getIssueAggregates(
 export async function getIssueStats(
   projectId: number,
   issueId: string,
-  window: IssueStatsWindow = '24h',
-): Promise<Result<IssueStats, RustrakError>> {
+  window: NonNullable<IssuesGetStatsData['query']>['window'] = '24h',
+): Promise<Result<IssueStatsResponse, RustrakError>> {
   const client = await createClient();
-  return client.issues.getStats(projectId, issueId, window);
+  return client.issues.getStats({
+    path: { project_id: projectId, issue_id: issueId },
+    query: { window },
+  });
 }
 
 /**
@@ -97,5 +107,7 @@ export async function getIssueActivity(
   issueId: string,
 ): Promise<Result<ActivityEntry[], RustrakError>> {
   const client = await createClient();
-  return client.issues.getActivity(projectId, issueId);
+  return client.issues.getActivity({
+    path: { project_id: projectId, issue_id: issueId },
+  });
 }

@@ -3,6 +3,7 @@
  * repository, and what an issue knows from GitHub.
  */
 import type {
+  GitHubLogin,
   GitHubRepository,
   GitHubStatus,
   IssueGitHub,
@@ -23,14 +24,16 @@ export async function listRepositories(
   projectId: number,
 ): Promise<Result<GitHubRepository[], RustrakError>> {
   const client = await createClient();
-  return client.github.repositories(projectId);
+  return client.github.repositories({ query: { project_id: projectId } });
 }
 
 export async function getProjectRepository(
   projectId: number,
 ): Promise<Result<ProjectRepository | null, RustrakError>> {
   const client = await createClient();
-  return client.github.projectRepository(projectId);
+  return client.github.getProjectRepository({
+    path: { project_id: projectId },
+  });
 }
 
 export async function getIssueGitHub(
@@ -38,12 +41,14 @@ export async function getIssueGitHub(
   issueId: string,
 ): Promise<Result<IssueGitHub, RustrakError>> {
   const client = await createClient();
-  return client.github.issue(projectId, issueId);
+  return client.github.issue({
+    path: { project_id: projectId, issue_id: issueId },
+  });
 }
 
 export async function getMyGitHubLogin(): Promise<
-  Result<{ login: string | null }, RustrakError>
+  Result<GitHubLogin, RustrakError>
 > {
   const client = await createClient();
-  return client.github.myLogin();
+  return client.github.getMyLogin();
 }

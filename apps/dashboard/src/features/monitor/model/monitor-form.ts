@@ -1,7 +1,7 @@
 import type {
   CreateMonitor,
-  Monitor,
   MonitorConfigInput,
+  MonitorResponse,
   Schedule,
 } from '@rustrak/client';
 import { z } from 'zod';
@@ -68,7 +68,7 @@ export const DEFAULT_MONITOR_FORM: MonitorFormData = {
   recovery_threshold: 1,
 };
 
-export function formFromMonitor(monitor: Monitor): MonitorFormData {
+export function formFromMonitor(monitor: MonitorResponse): MonitorFormData {
   return { ...monitor.config, name: monitor.name, slug: monitor.slug };
 }
 

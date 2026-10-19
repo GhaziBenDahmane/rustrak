@@ -1,4 +1,4 @@
-import type { TransactionStats } from '@rustrak/client';
+import type { TransactionStatsResponse } from '@rustrak/client';
 import { useTransition } from 'react';
 import { useFormatter, useTranslations } from 'use-intl';
 import { cn } from '@/shared/lib/utils';
@@ -9,7 +9,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface TransactionStatsTableProps {
   projectId: number;
-  stats: TransactionStats[];
+  stats: TransactionStatsResponse[];
   currentPage: number;
   totalPages: number;
   totalCount: number;
@@ -36,7 +36,7 @@ function failureTone(rate: number): string {
 }
 
 /** Link to a group's samples (Sentry's transaction summary drill-down). */
-function summaryHref(projectId: number, s: TransactionStats): string {
+function summaryHref(projectId: number, s: TransactionStatsResponse): string {
   const params = new URLSearchParams({ name: s.transaction_name });
   if (s.op) params.set('op', s.op);
   return `/projects/${projectId}/performance/summary?${params.toString()}`;

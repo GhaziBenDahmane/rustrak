@@ -1,4 +1,4 @@
-import type { RustrakError, User } from '@rustrak/client';
+import type { RustrakError, UserResponse } from '@rustrak/client';
 import { createClient } from './rustrak';
 
 /**
@@ -12,7 +12,7 @@ import { createClient } from './rustrak';
  * allowed", which login also does not fix.
  */
 export type CurrentUser =
-  | { state: 'authenticated'; user: User }
+  | { state: 'authenticated'; user: UserResponse }
   | { state: 'anonymous' }
   | { state: 'unavailable'; error: RustrakError };
 

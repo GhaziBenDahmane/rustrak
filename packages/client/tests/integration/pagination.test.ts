@@ -112,12 +112,22 @@ describe('Pagination', () => {
       );
 
       // Get first page
-      const firstPage = expectOk(await client.issues.list(1, { page: 1 }));
+      const firstPage = expectOk(
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: { page: 1 },
+        }),
+      );
       expect(firstPage.items).toHaveLength(1);
       expect(firstPage.total_pages).toBe(2);
 
       // Get second page
-      const secondPage = expectOk(await client.issues.list(1, { page: 2 }));
+      const secondPage = expectOk(
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: { page: 2 },
+        }),
+      );
       expect(secondPage.items).toHaveLength(1);
 
       expect(requestCount).toBe(2);
@@ -136,7 +146,9 @@ describe('Pagination', () => {
         }),
       );
 
-      const response = expectOk(await client.issues.list(1));
+      const response = expectOk(
+        await client.issues.list({ path: { project_id: 1 } }),
+      );
 
       expect(response.items).toHaveLength(0);
       expect(response.total_count).toBe(0);
@@ -169,10 +181,13 @@ describe('Pagination', () => {
       );
 
       expectOk(
-        await client.issues.list(1, {
-          sort: 'last_seen',
-          order: 'asc',
-          filter: 'all',
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: {
+            sort: 'last_seen',
+            order: 'asc',
+            filter: 'all',
+          },
         }),
       );
     });
@@ -211,17 +226,23 @@ describe('Pagination', () => {
       );
 
       expectOk(
-        await client.issues.list(1, {
-          sort: 'last_seen',
-          filter: 'all',
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: {
+            sort: 'last_seen',
+            filter: 'all',
+          },
         }),
       );
 
       expectOk(
-        await client.issues.list(1, {
-          sort: 'last_seen',
-          filter: 'all',
-          page: 2,
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: {
+            sort: 'last_seen',
+            filter: 'all',
+            page: 2,
+          },
         }),
       );
 
@@ -270,15 +291,26 @@ describe('Pagination', () => {
       );
 
       const firstPage = expectOk(
-        await client.events.list(1, '323e4567-e89b-12d3-a456-426614174000'),
+        await client.events.list({
+          path: {
+            project_id: 1,
+            issue_id: '323e4567-e89b-12d3-a456-426614174000',
+          },
+        }),
       );
 
       expect(firstPage.items).toHaveLength(1);
       expect(firstPage.has_more).toBe(true);
 
       const secondPage = expectOk(
-        await client.events.list(1, '323e4567-e89b-12d3-a456-426614174000', {
-          cursor: firstPage.next_cursor,
+        await client.events.list({
+          path: {
+            project_id: 1,
+            issue_id: '323e4567-e89b-12d3-a456-426614174000',
+          },
+          query: {
+            cursor: firstPage.next_cursor,
+          },
         }),
       );
 
@@ -309,7 +341,12 @@ describe('Pagination', () => {
         ),
       );
 
-      expectOk(await client.issues.list(1, { per_page: 5 }));
+      expectOk(
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: { per_page: 5 },
+        }),
+      );
     });
 
     it('should handle last page correctly', async () => {
@@ -325,7 +362,12 @@ describe('Pagination', () => {
         }),
       );
 
-      const response = expectOk(await client.issues.list(1, { page: 3 }));
+      const response = expectOk(
+        await client.issues.list({
+          path: { project_id: 1 },
+          query: { page: 3 },
+        }),
+      );
 
       expect(response.page).toBe(3);
       expect(response.total_pages).toBe(3);
@@ -346,7 +388,7 @@ describe('Pagination', () => {
 
       // Make 10 rapid requests
       const requests = Array.from({ length: 10 }, (_, i) =>
-        client.issues.list(1, { page: i + 1 }),
+        client.issues.list({ path: { project_id: 1 }, query: { page: i + 1 } }),
       );
 
       const responses = await Promise.all(requests);

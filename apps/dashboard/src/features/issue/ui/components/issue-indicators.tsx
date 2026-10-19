@@ -1,4 +1,4 @@
-import type { Issue, IssuePriority } from '@rustrak/client';
+import type { IssuePriority, IssueResponse } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
 import { priorityDisplay, statusDisplay } from '@/features/issue/model/status';
 import { cn } from '@/shared/lib/utils';
@@ -37,7 +37,7 @@ export function StatusIndicator({
   issue,
   className,
 }: {
-  issue: Pick<Issue, 'status' | 'substatus'>;
+  issue: Pick<IssueResponse, 'status' | 'substatus'>;
   className?: string;
 }) {
   const t = useTranslations('issues');

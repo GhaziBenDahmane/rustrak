@@ -1,4 +1,4 @@
-import type { EventDetail } from '@rustrak/client';
+import type { EventDetailResponse } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
 import type { readEventPayload } from '@/features/event/lib/event-payload';
 import { formatStackTraceAsText } from '@/features/event/lib/format-stack-trace';
@@ -30,7 +30,7 @@ export function EventSections({
   eventData,
   sourceUrl,
 }: {
-  event: EventDetail;
+  event: EventDetailResponse;
   payload: EventPayload;
   eventData: Record<string, unknown>;
   sourceUrl?: FrameSourceUrl;

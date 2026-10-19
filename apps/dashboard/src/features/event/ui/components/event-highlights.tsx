@@ -1,9 +1,9 @@
-import type { EventDetail } from '@rustrak/client';
+import type { EventDetailResponse } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
 import { cn } from '@/shared/lib/utils';
 
 interface EventHighlightsProps {
-  event: EventDetail;
+  event: EventDetailResponse;
   tags: Record<string, string>;
   contexts?: Record<string, Record<string, unknown>>;
   eventData: Record<string, unknown>;

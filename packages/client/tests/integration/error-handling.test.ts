@@ -9,11 +9,9 @@ import {
   SERVER_ERROR_MESSAGE,
   TIMEOUT_ERROR_MESSAGE,
 } from '../../src/errors.js';
-// `isTransportFailure` comes from the module, not the barrel: the carrier is
-// internal to the hop between ky and `BaseResource` and is deliberately not
-// re-exported.
-import { isTransportFailure } from '../../src/utils/http.js';
-import { createKyInstance } from '../../src/utils/index.js';
+// From the module, not the barrel: the transport and the status mapping are
+// internal to the client and deliberately not re-exported.
+import { createFetch, transformHttpError } from '../../src/utils/http.js';
 import { expectErr, expectOk } from '../helpers/result.js';
 import { appErrorResponse } from '../mocks/handlers.js';
 import { server } from '../setup.js';
@@ -80,7 +78,7 @@ describe('Error Handling', () => {
     });
 
     it('should map 404 to not_found', async () => {
-      const error = expectErr(await client.projects.get(999));
+      const error = expectErr(await client.projects.get({ path: { id: 999 } }));
 
       expect(error.kind).toBe('not_found');
       expect(isRetryable(error)).toBe(false);
@@ -279,7 +277,9 @@ describe('Error Handling', () => {
   // synthetic-path block below asserts the opposite for 5xx.
   describe('Server error contract (nested AppError body)', () => {
     it('400 ValidationError keeps the server message', async () => {
-      const error = expectErr(await client.auth.getInvitation('expired-token'));
+      const error = expectErr(
+        await client.auth.getInvitation({ path: { token: 'expired-token' } }),
+      );
 
       expect(error.kind).toBe('validation');
       expect(error.message).toBe(
@@ -292,8 +292,7 @@ describe('Error Handling', () => {
     it('401 Unauthorized keeps the server message', async () => {
       const error = expectErr(
         await client.auth.login({
-          email: 'nobody@example.com',
-          password: 'wrong-password',
+          body: { email: 'nobody@example.com', password: 'wrong-password' },
         }),
       );
 
@@ -304,7 +303,9 @@ describe('Error Handling', () => {
     });
 
     it('403 Forbidden keeps the server message', async () => {
-      const error = expectErr(await client.team.remove(2));
+      const error = expectErr(
+        await client.team.deleteUser({ path: { user_id: 2 } }),
+      );
 
       expect(error.kind).toBe('forbidden');
       expect(error.message).toBe(
@@ -315,7 +316,7 @@ describe('Error Handling', () => {
     });
 
     it('404 NotFound keeps the server message without doubling the prefix', async () => {
-      const error = expectErr(await client.projects.get(999));
+      const error = expectErr(await client.projects.get({ path: { id: 999 } }));
 
       expect(error.kind).toBe('not_found');
       // `GET /api/projects/{id}` runs `access::require` and then
@@ -338,7 +339,12 @@ describe('Error Handling', () => {
     // `routes/team.rs:118-125` rejects a primary-admin role change first, which
     // the next test pins.
     it('409 Conflict has a kind of its own and keeps the server message', async () => {
-      const error = expectErr(await client.team.updateRole(3, 'member'));
+      const error = expectErr(
+        await client.team.updateRole({
+          path: { user_id: 3 },
+          body: { role: 'member' },
+        }),
+      );
 
       expect(error.kind).toBe('conflict');
       expect(error.message).toBe('Conflict: Cannot demote the last admin');
@@ -346,7 +352,12 @@ describe('Error Handling', () => {
     });
 
     it('403 wins over 409 when the target is the primary admin', async () => {
-      const error = expectErr(await client.team.updateRole(2, 'member'));
+      const error = expectErr(
+        await client.team.updateRole({
+          path: { user_id: 2 },
+          body: { role: 'member' },
+        }),
+      );
 
       expect(error.kind).toBe('forbidden');
       expect(error.message).toBe(
@@ -358,8 +369,7 @@ describe('Error Handling', () => {
     it('403 Forbidden on the invite-only register endpoint', async () => {
       const error = expectErr(
         await client.auth.register({
-          email: 'someone@example.com',
-          password: 'password123',
+          body: { email: 'someone@example.com', password: 'password123' },
         }),
       );
 
@@ -370,47 +380,32 @@ describe('Error Handling', () => {
   });
 
   // Statuses whose only real producer is an endpoint this client never calls.
-  // They are driven through a bare ky instance against `/__status-transform/*`
-  // rather than a resource method, because no management endpoint can emit
-  // them: `AppError::PayloadTooLarge` comes only from envelope ingestion and
-  // the flat 429 only from the ingest rate limiter. See the matching block in
-  // `tests/mocks/handlers.ts`.
-  //
-  // A bare ky instance still rejects: the `Result` conversion lives in
-  // `BaseResource`, and the rejection carries the union inside
-  // `RustrakTransportFailure`. `unwrapTransport` asserts that carrier is what
-  // came out, so a raw ky error could not slip through here.
+  // They are driven through the client's own transport and status mapping
+  // against `/__status-transform/*` rather than a method, because no
+  // management endpoint can emit them: `AppError::PayloadTooLarge` comes only
+  // from envelope ingestion and the flat 429 only from the ingest rate
+  // limiter. See the matching block in `tests/mocks/handlers.ts`.
   describe('transformHttpError status mapping (synthetic paths)', () => {
-    const bareClient = (maxRetries = 0) =>
-      createKyInstance({
-        baseUrl: 'http://localhost:8080',
-        token: 'test-token',
-        maxRetries,
-      });
-
-    async function unwrapTransport(
-      request: Promise<unknown>,
-    ): Promise<RustrakError> {
-      const thrown = await request.then(
-        () => {
-          expect.fail('expected the request to reject');
-        },
-        (error: unknown) => error,
+    /** A path no operation names, through the same transport and mapping. */
+    async function unwrapTransport(path: string): Promise<RustrakError> {
+      const response = await createFetch({ baseUrl: '', maxRetries: 0 })(
+        `http://localhost:8080/${path}`,
       );
-
-      if (!isTransportFailure(thrown)) {
-        expect.fail(
-          `expected a RustrakTransportFailure, got ${String(thrown)}`,
-        );
+      const text = await response.text();
+      let body: unknown = text;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        // Not JSON: the mapping receives the text, as the client does.
       }
-      return thrown.rustrakError;
+      return transformHttpError(response, body);
     }
 
     // 413 used to fall through to `transformHttpError`'s `default:` branch,
     // the same gap 409 had. It has its own kind now.
     it('413 PayloadTooLarge keeps the server message', async () => {
       const error = await unwrapTransport(
-        bareClient().get('__status-transform/payload-too-large'),
+        '__status-transform/payload-too-large',
       );
 
       expect(error.kind).toBe('payload_too_large');
@@ -421,9 +416,7 @@ describe('Error Handling', () => {
     });
 
     it('500 DatabaseError is redacted and stays retryable', async () => {
-      const error = await unwrapTransport(
-        bareClient().get('__status-transform/database-error'),
-      );
+      const error = await unwrapTransport('__status-transform/database-error');
 
       expect(error.kind).toBe('server_error');
       // The fixture sends "Database error: pool timed out while waiting for an
@@ -440,9 +433,7 @@ describe('Error Handling', () => {
     // the strongest case for redaction: the fixture's message names a
     // filesystem failure and an OS errno.
     it('500 InternalError is redacted', async () => {
-      const error = await unwrapTransport(
-        bareClient().get('__status-transform/internal-error'),
-      );
+      const error = await unwrapTransport('__status-transform/internal-error');
 
       expect(error.kind).toBe('server_error');
       expect(error.message).toBe(SERVER_ERROR_MESSAGE);
@@ -457,9 +448,7 @@ describe('Error Handling', () => {
     // fixtures both lines were uncovered, which is how the union could have
     // grown a wrong branch without a single test noticing.
     it('410 maps to gone and keeps the message', async () => {
-      const error = await unwrapTransport(
-        bareClient().get('__status-transform/gone'),
-      );
+      const error = await unwrapTransport('__status-transform/gone');
 
       expect(error.kind).toBe('gone');
       expect(error.message).toBe('This endpoint has been retired');
@@ -468,9 +457,7 @@ describe('Error Handling', () => {
     });
 
     it('an unenumerated sub-500 status falls to client_error with its status intact', async () => {
-      const error = await unwrapTransport(
-        bareClient().get('__status-transform/unenumerated'),
-      );
+      const error = await unwrapTransport('__status-transform/unenumerated');
 
       expect(error.kind).toBe('client_error');
       expect(error.message).toBe("I'm a teapot");
@@ -481,9 +468,7 @@ describe('Error Handling', () => {
     });
 
     it('429 exposes the flat ingest message and a populated retryAfter', async () => {
-      const error = await unwrapTransport(
-        bareClient().get('__status-transform/rate-limited'),
-      );
+      const error = await unwrapTransport('__status-transform/rate-limited');
 
       expect(error.kind).toBe('rate_limited');
       expect(error.message).toBe('rate_limit_exceeded');
@@ -554,14 +539,13 @@ describe('Error Handling', () => {
       expect(error.message).toBe(TIMEOUT_ERROR_MESSAGE);
       expect(error.message).toContain('timed out');
       expect(isRetryable(error)).toBe(true);
-      // No `cause`: the underlying ky error embeds the resolved host and port.
+      // No `cause`: the underlying error embeds the resolved host and port.
       expect(error).not.toHaveProperty('cause');
       expect(error).toMatchObject({ reason: 'timeout' });
     });
 
-    // The reason this message is fixed rather than forwarded. ky's
-    // `NetworkError` builds its own as
-    // `Request failed due to a network error: ${method} ${url}`, so a
+    // The reason this message is fixed rather than forwarded. A fetch failure
+    // can name the method and URL in its own message, so a
     // self-hosted deployment that renders `error.message` anywhere would print
     // its internal host and port to the browser.
     it('never puts the host or the port in the message', async () => {
@@ -637,6 +621,32 @@ describe('Error Handling', () => {
       expect(error.message).toBe(NETWORK_ERROR_MESSAGE);
       expect(error.message).not.toContain('socket hang up');
     });
+
+    // A proxy's HTML page, a body with no Content-Type and an empty body are
+    // all a 200 that is not the JSON the operation promises.
+    it.each([
+      [
+        'an HTML page',
+        () =>
+          new HttpResponse('<html></html>', {
+            headers: { 'Content-Type': 'text/html' },
+          }),
+      ],
+      ['no Content-Type', () => new HttpResponse('<html></html>')],
+      [
+        'an empty body',
+        () => new HttpResponse(null, { headers: { 'Content-Length': '0' } }),
+      ],
+    ])(
+      'should report invalid_response on a 200 with %s',
+      async (_, response) => {
+        server.use(http.get('http://localhost:8080/api/projects', response));
+
+        const error = expectErr(await client.projects.list());
+
+        expect(error.kind).toBe('invalid_response');
+      },
+    );
 
     it('should report invalid_response on schema mismatch', async () => {
       server.use(
@@ -879,7 +889,7 @@ describe('Error Handling', () => {
   // reintroducing a class.
   describe('structuredClone (RSC boundary)', () => {
     it('a failed Result survives structuredClone intact', async () => {
-      const result = await client.projects.get(999);
+      const result = await client.projects.get({ path: { id: 999 } });
 
       const cloned = structuredClone(result);
 
@@ -892,7 +902,7 @@ describe('Error Handling', () => {
     });
 
     it('a successful Result survives structuredClone intact', async () => {
-      const result = await client.projects.get(1);
+      const result = await client.projects.get({ path: { id: 1 } });
 
       const cloned = structuredClone(result);
 
@@ -901,7 +911,7 @@ describe('Error Handling', () => {
     });
 
     it('nothing in a Result has a prototype other than Object.prototype', async () => {
-      const result = await client.projects.get(999);
+      const result = await client.projects.get({ path: { id: 999 } });
 
       expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
       expect(Object.getPrototypeOf(expectErr(result))).toBe(Object.prototype);
@@ -914,8 +924,13 @@ describe('Error Handling', () => {
       // mapping, the pre-flight input check, the response-schema check, the
       // 5xx redaction and the transport failure.
       const cases: RustrakError[] = [
-        expectErr(await client.projects.get(999)),
-        expectErr(await client.projects.create({ name: '' })),
+        expectErr(await client.projects.get({ path: { id: 999 } })),
+        // A number where the spec says string: rejected before anything is sent.
+        expectErr(
+          await client.projects.create({
+            body: { name: 42 as unknown as string },
+          }),
+        ),
       ];
 
       server.use(
@@ -963,7 +978,7 @@ describe('Error Handling', () => {
   // ---------------------------------------------------------------------------
   describe('Field-level errors', () => {
     const createProject = () =>
-      client.projects.create({ name: 'Taken', slug: 'taken-slug' });
+      client.projects.create({ body: { name: 'Taken', slug: 'taken-slug' } });
 
     it('a 409 carrying fields surfaces them on the conflict error', async () => {
       // The commonest case by far: 12 of the 14 annotated server sites are
@@ -1165,7 +1180,9 @@ describe('Error Handling', () => {
         ),
       );
 
-      const error = expectErr(await client.projects.create({ name: 'X' }));
+      const error = expectErr(
+        await client.projects.create({ body: { name: 'X' } }),
+      );
 
       expect(error.kind).toBe('server_error');
       expect('fields' in error).toBe(false);

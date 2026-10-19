@@ -1,4 +1,4 @@
-import type { EventDetail } from '@rustrak/client';
+import type { EventDetailResponse } from '@rustrak/client';
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -8,7 +8,7 @@ import { copyToClipboard } from '@/shared/lib/clipboard';
 import { Button } from '@/shared/ui/components/shadcn/button';
 
 interface EventDetailsProps {
-  event: EventDetail;
+  event: EventDetailResponse;
 }
 
 interface DetailRowProps {
@@ -133,7 +133,7 @@ function KeyInformation({
   event,
   payload,
 }: {
-  event: EventDetail;
+  event: EventDetailResponse;
   payload: EventPayload;
 }) {
   const format = useFormatter();
@@ -191,7 +191,7 @@ function LogEntry({ logentry }: { logentry: EventPayload['logentry'] }) {
   );
 }
 
-function Deployment({ event }: { event: EventDetail }) {
+function Deployment({ event }: { event: EventDetailResponse }) {
   const t = useTranslations('events');
   return (
     <Section title={t('details.deployment')}>
@@ -203,7 +203,7 @@ function Deployment({ event }: { event: EventDetail }) {
   );
 }
 
-function Sdk({ event }: { event: EventDetail }) {
+function Sdk({ event }: { event: EventDetailResponse }) {
   const t = useTranslations('events');
   if (!event.sdk_name && !event.sdk_version) return null;
 

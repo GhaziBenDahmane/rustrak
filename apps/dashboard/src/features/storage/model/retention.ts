@@ -1,7 +1,7 @@
 import type {
   CleanupCounts,
   ProjectStorage,
-  Retention,
+  RetentionResponse,
   RetentionSettings,
   RetentionWindows,
   StorageAge,
@@ -52,7 +52,7 @@ export function windowsFor(
   settings: RetentionSettings,
   projectId: number,
 ): RetentionWindows {
-  const override = settings.overrides.find((o) => o.project_id === projectId);
+  const override = settings.overrides?.find((o) => o.project_id === projectId);
   if (!override) return settings.defaults;
   const { project_id: _, ...windows } = override;
   return windows;
@@ -61,7 +61,7 @@ export function windowsFor(
 /** Whether any project ever loses data, so the cleanup runs at all. */
 export function deletesAnything(settings: RetentionSettings): boolean {
   return [settings.defaults, ...settings.overrides].some((w) =>
-    KINDS.some((kind) => w[WINDOW_FIELD[kind]] !== null),
+    KINDS.some((kind) => w[WINDOW_FIELD[kind]] != null),
   );
 }
 
@@ -245,7 +245,7 @@ export interface StatusLine {
 
 /** When the cleanup runs next, and how its last run went. */
 export function runStatus(
-  state: Retention,
+  state: RetentionResponse,
   t: Translate,
 ): { next: StatusLine; last: StatusLine | null } {
   const { settings, next_run_at, last_run } = state;
@@ -296,7 +296,10 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
  * changes on its own: a save leaves the next run for the scheduler's next
  * tick, a running cleanup finishes, and a scheduled one runs at its time.
  */
-export function nextReadIn(state: Retention, now: number): number | null {
+export function nextReadIn(
+  state: RetentionResponse,
+  now: number,
+): number | null {
   if (state.last_run?.status === 'running') return POLL_MS;
   if (!deletesAnything(state.settings)) return null;
   if (!state.next_run_at) return POLL_MS;

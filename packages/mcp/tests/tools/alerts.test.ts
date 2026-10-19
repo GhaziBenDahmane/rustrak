@@ -8,7 +8,7 @@ describe('alert tools', () => {
 
   beforeEach(async () => {
     mockClient = {
-      alertIntegrations: {
+      alertChannels: {
         list: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
@@ -38,7 +38,7 @@ describe('alert tools', () => {
           updated_at: '2024-01-01T00:00:00Z',
         },
       ];
-      mockClient.alertIntegrations.list.mockResolvedValue(ok(mockChannels));
+      mockClient.alertChannels.list.mockResolvedValue(ok(mockChannels));
 
       const result = await callTool({
         name: 'list_alert_channels',
@@ -60,7 +60,7 @@ describe('alert tools', () => {
         provider_type: 'custom_webhook',
         is_enabled: true,
       };
-      mockClient.alertIntegrations.create.mockResolvedValue(ok(created));
+      mockClient.alertChannels.create.mockResolvedValue(ok(created));
 
       const result = await callTool({
         name: 'create_alert_channel',
@@ -80,12 +80,14 @@ describe('alert tools', () => {
       );
       // is_enabled was not given, so it is not sent either: the server's
       // default applies rather than an invented one.
-      expect(mockClient.alertIntegrations.create).toHaveBeenCalledWith({
-        name: 'Ops chat bridge',
-        provider_type: 'custom_webhook',
-        credentials: {
-          url: 'https://example.com/hook',
-          template: '{"text": "{{ issue.title }}"}',
+      expect(mockClient.alertChannels.create).toHaveBeenCalledWith({
+        body: {
+          name: 'Ops chat bridge',
+          provider_type: 'custom_webhook',
+          credentials: {
+            url: 'https://example.com/hook',
+            template: '{"text": "{{ issue.title }}"}',
+          },
         },
       });
     });
@@ -101,13 +103,13 @@ describe('alert tools', () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(mockClient.alertIntegrations.create).not.toHaveBeenCalled();
+      expect(mockClient.alertChannels.create).not.toHaveBeenCalled();
     });
   });
 
   describe('update_alert_channel', () => {
     it('sends only the fields that were given', async () => {
-      mockClient.alertIntegrations.update.mockResolvedValue(
+      mockClient.alertChannels.update.mockResolvedValue(
         ok({ id: 7, is_enabled: false }),
       );
 
@@ -117,15 +119,16 @@ describe('alert tools', () => {
       });
 
       expect(result.isError).toBeFalsy();
-      expect(mockClient.alertIntegrations.update).toHaveBeenCalledWith(7, {
-        is_enabled: false,
+      expect(mockClient.alertChannels.update).toHaveBeenCalledWith({
+        path: { id: 7 },
+        body: { is_enabled: false },
       });
     });
   });
 
   describe('preview_alert_template', () => {
     it('returns what the template renders to', async () => {
-      mockClient.alertIntegrations.previewTemplate.mockResolvedValue(
+      mockClient.alertChannels.previewTemplate.mockResolvedValue(
         ok({ ok: true, rendered: '{"text": "Sample issue"}' }),
       );
 
@@ -138,15 +141,15 @@ describe('alert tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.ok).toBe(true);
       expect(parsed.rendered).toContain('Sample issue');
-      expect(mockClient.alertIntegrations.previewTemplate).toHaveBeenCalledWith(
-        '{"text": "{{ issue.title }}"}',
-      );
+      expect(mockClient.alertChannels.previewTemplate).toHaveBeenCalledWith({
+        body: { template: '{"text": "{{ issue.title }}"}' },
+      });
     });
 
     it('hands back the refusal as data, not as a tool error', async () => {
       // A template the server would refuse is an answer, not a failure of
       // the call: the agent reads why and fixes the body.
-      mockClient.alertIntegrations.previewTemplate.mockResolvedValue(
+      mockClient.alertChannels.previewTemplate.mockResolvedValue(
         ok({ ok: false, error: '`issue.titel` is not a field' }),
       );
 
@@ -163,7 +166,7 @@ describe('alert tools', () => {
   describe('test_alert_channel', () => {
     it('sends a test notification to the channel', async () => {
       const mockResponse = { success: true, message: 'Test notification sent' };
-      mockClient.alertIntegrations.test.mockResolvedValue(ok(mockResponse));
+      mockClient.alertChannels.test.mockResolvedValue(ok(mockResponse));
 
       const result = await callTool({
         name: 'test_alert_channel',
@@ -173,7 +176,9 @@ describe('alert tools', () => {
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.success).toBe(true);
-      expect(mockClient.alertIntegrations.test).toHaveBeenCalledWith(1);
+      expect(mockClient.alertChannels.test).toHaveBeenCalledWith({
+        path: { id: 1 },
+      });
     });
   });
 
@@ -201,7 +206,9 @@ describe('alert tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toHaveLength(1);
       expect(parsed[0].alert_type).toBe('new_issue');
-      expect(mockClient.alertRules.list).toHaveBeenCalledWith(42);
+      expect(mockClient.alertRules.list).toHaveBeenCalledWith({
+        path: { project_id: 42 },
+      });
     });
   });
 });

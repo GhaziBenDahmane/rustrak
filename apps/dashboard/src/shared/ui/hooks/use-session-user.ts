@@ -1,4 +1,4 @@
-import type { User } from '@rustrak/client';
+import type { UserResponse } from '@rustrak/client';
 import { useRouteContext } from '@tanstack/react-router';
 
 /**
@@ -15,7 +15,7 @@ import { useRouteContext } from '@tanstack/react-router';
  * a component reaching this line has already been guaranteed one, and a
  * nullable type would make every call site handle a branch that cannot happen.
  */
-export function useSessionUser(): User {
+export function useSessionUser(): UserResponse {
   const context = useRouteContext({ from: '/_authenticated' });
 
   if (context.state !== 'authenticated') {

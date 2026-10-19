@@ -1,4 +1,4 @@
-import type { AuthToken } from '@rustrak/client';
+import type { AuthTokenResponse } from '@rustrak/client';
 import { Key, Plus } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -32,7 +32,7 @@ import { CreateTokenDialog } from './create-token-dialog';
 import { TokenCards, TokenTable } from './token-rows';
 
 interface TokensListProps {
-  initialTokens: AuthToken[];
+  initialTokens: AuthTokenResponse[];
 }
 
 export function TokensList({ initialTokens }: TokensListProps) {
@@ -46,7 +46,9 @@ export function TokensList({ initialTokens }: TokensListProps) {
   // Which single token a request is in flight for, so only its own buttons go
   // quiet rather than the whole table.
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<AuthToken | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AuthTokenResponse | null>(
+    null,
+  );
 
   const closeCreate = () => {
     setIsCreateOpen(false);
@@ -96,7 +98,7 @@ export function TokensList({ initialTokens }: TokensListProps) {
     });
   };
 
-  const copy = (token: AuthToken) => {
+  const copy = (token: AuthTokenResponse) => {
     setBusyId(token.id);
     startTransition(async () => {
       const result = await getToken(token.id);
@@ -132,7 +134,7 @@ export function TokensList({ initialTokens }: TokensListProps) {
 
   const rowProps = {
     tokens: initialTokens,
-    isBusy: (token: AuthToken) => isPending || busyId === token.id,
+    isBusy: (token: AuthTokenResponse) => isPending || busyId === token.id,
     onCopy: copy,
     onDelete: setPendingDelete,
   };

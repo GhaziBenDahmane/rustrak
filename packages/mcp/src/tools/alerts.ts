@@ -15,7 +15,7 @@ export function registerAlertTools(
       inputSchema: {},
     },
     async () => {
-      const result = await client.alertIntegrations.list();
+      const result = await client.alertChannels.list();
       return mcpJson(result);
     },
   );
@@ -43,11 +43,13 @@ export function registerAlertTools(
       },
     },
     async ({ name, provider_type, credentials, is_enabled }) => {
-      const result = await client.alertIntegrations.create({
-        name,
-        provider_type,
-        credentials,
-        ...(is_enabled === undefined ? {} : { is_enabled }),
+      const result = await client.alertChannels.create({
+        body: {
+          name,
+          provider_type,
+          credentials,
+          ...(is_enabled === undefined ? {} : { is_enabled }),
+        },
       });
       return mcpJson(result);
     },
@@ -70,10 +72,13 @@ export function registerAlertTools(
       },
     },
     async ({ channel_id, name, credentials, is_enabled }) => {
-      const result = await client.alertIntegrations.update(channel_id, {
-        ...(name === undefined ? {} : { name }),
-        ...(credentials === undefined ? {} : { credentials }),
-        ...(is_enabled === undefined ? {} : { is_enabled }),
+      const result = await client.alertChannels.update({
+        path: { id: channel_id },
+        body: {
+          ...(name === undefined ? {} : { name }),
+          ...(credentials === undefined ? {} : { credentials }),
+          ...(is_enabled === undefined ? {} : { is_enabled }),
+        },
       });
       return mcpJson(result);
     },
@@ -93,7 +98,9 @@ export function registerAlertTools(
       },
     },
     async ({ template }) => {
-      const result = await client.alertIntegrations.previewTemplate(template);
+      const result = await client.alertChannels.previewTemplate({
+        body: { template },
+      });
       return mcpJson(result);
     },
   );
@@ -108,7 +115,9 @@ export function registerAlertTools(
       },
     },
     async ({ channel_id }) => {
-      const result = await client.alertIntegrations.test(channel_id);
+      const result = await client.alertChannels.test({
+        path: { id: channel_id },
+      });
       return mcpJson(result);
     },
   );
@@ -122,7 +131,9 @@ export function registerAlertTools(
       },
     },
     async ({ project_id }) => {
-      const result = await client.alertRules.list(project_id);
+      const result = await client.alertRules.list({
+        path: { project_id },
+      });
       return mcpJson(result);
     },
   );

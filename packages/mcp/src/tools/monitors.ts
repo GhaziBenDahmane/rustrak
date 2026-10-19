@@ -48,7 +48,8 @@ export function registerMonitorTools(
         'and per-environment status (active = waiting for a first ok run, ok, error = incident open) with its recent check-ins.',
       inputSchema: { project_id: z.number().int().describe('Project ID') },
     },
-    async ({ project_id }) => mcpJson(await client.monitors.list(project_id)),
+    async ({ project_id }) =>
+      mcpJson(await client.monitors.list({ path: { project_id } })),
   );
 
   server.registerTool(
@@ -62,7 +63,7 @@ export function registerMonitorTools(
       },
     },
     async ({ project_id, slug }) =>
-      mcpJson(await client.monitors.get(project_id, slug)),
+      mcpJson(await client.monitors.get({ path: { project_id, slug } })),
   );
 
   server.registerTool(
@@ -87,10 +88,13 @@ export function registerMonitorTools(
     },
     async ({ project_id, slug, page, per_page, environment }) =>
       mcpJson(
-        await client.monitors.listCheckIns(project_id, slug, {
-          ...(page === undefined ? {} : { page }),
-          ...(per_page === undefined ? {} : { per_page }),
-          ...(environment === undefined ? {} : { environment }),
+        await client.monitors.listCheckins({
+          path: { project_id, slug },
+          query: {
+            ...(page === undefined ? {} : { page }),
+            ...(per_page === undefined ? {} : { per_page }),
+            ...(environment === undefined ? {} : { environment }),
+          },
         }),
       ),
   );
@@ -117,10 +121,13 @@ export function registerMonitorTools(
     },
     async ({ project_id, name, slug, config }) =>
       mcpJson(
-        await client.monitors.create(project_id, {
-          name,
-          ...(slug === undefined ? {} : { slug }),
-          config,
+        await client.monitors.create({
+          path: { project_id },
+          body: {
+            name,
+            ...(slug === undefined ? {} : { slug }),
+            config,
+          },
         }),
       ),
   );
@@ -141,10 +148,13 @@ export function registerMonitorTools(
     },
     async ({ project_id, slug, name, config, is_muted }) =>
       mcpJson(
-        await client.monitors.update(project_id, slug, {
-          ...(name === undefined ? {} : { name }),
-          ...(config === undefined ? {} : { config }),
-          ...(is_muted === undefined ? {} : { is_muted }),
+        await client.monitors.update({
+          path: { project_id, slug },
+          body: {
+            ...(name === undefined ? {} : { name }),
+            ...(config === undefined ? {} : { config }),
+            ...(is_muted === undefined ? {} : { is_muted }),
+          },
         }),
       ),
   );
@@ -163,7 +173,7 @@ export function registerMonitorTools(
     },
     async ({ project_id, slug }) =>
       mcpDone(
-        await client.monitors.delete(project_id, slug),
+        await client.monitors.delete({ path: { project_id, slug } }),
         `Monitor ${slug} deleted.`,
       ),
   );

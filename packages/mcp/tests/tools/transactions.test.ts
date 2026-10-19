@@ -105,8 +105,7 @@ describe('transaction tools', () => {
       expect(parsed.items[0].transaction_name).toBe('/api/checkout');
       expect(parsed.total_count).toBe(1);
       expect(mockClient.transactions.list).toHaveBeenCalledWith(
-        1,
-        expect.any(Object),
+        expect.objectContaining({ path: { project_id: 1 } }),
       );
     });
 
@@ -125,16 +124,16 @@ describe('transaction tools', () => {
         },
       });
 
-      expect(mockClient.transactions.list).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
+      expect(mockClient.transactions.list).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: expect.objectContaining({
           page: 2,
           per_page: 50,
           name: '/api/checkout',
           op: 'http.server',
           status: 'ok',
         }),
-      );
+      });
     });
 
     it('returns error content on API failure', async () => {
@@ -172,10 +171,12 @@ describe('transaction tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.transaction_name).toBe('/api/checkout');
       expect(parsed.data.spans[0].op).toBe('db');
-      expect(mockClient.transactions.get).toHaveBeenCalledWith(
-        1,
-        'a1b2c3d4-e89b-12d3-a456-426614174000',
-      );
+      expect(mockClient.transactions.get).toHaveBeenCalledWith({
+        path: {
+          project_id: 1,
+          transaction_id: 'a1b2c3d4-e89b-12d3-a456-426614174000',
+        },
+      });
     });
 
     it('returns error content on API failure', async () => {
@@ -212,8 +213,7 @@ describe('transaction tools', () => {
       expect(parsed.items[0].transaction_name).toBe('/api/checkout');
       expect(parsed.items[0].p50_ms).toBe(200);
       expect(mockClient.transactions.getStats).toHaveBeenCalledWith(
-        1,
-        expect.any(Object),
+        expect.objectContaining({ path: { project_id: 1 } }),
       );
     });
 
@@ -252,10 +252,12 @@ describe('transaction tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toHaveLength(1);
       expect(parsed[0].op).toBe('db.query');
-      expect(mockClient.transactions.getSpans).toHaveBeenCalledWith(
-        1,
-        'a1b2c3d4-e89b-12d3-a456-426614174000',
-      );
+      expect(mockClient.transactions.getSpans).toHaveBeenCalledWith({
+        path: {
+          project_id: 1,
+          transaction_id: 'a1b2c3d4-e89b-12d3-a456-426614174000',
+        },
+      });
     });
 
     it('returns error content on API failure', async () => {

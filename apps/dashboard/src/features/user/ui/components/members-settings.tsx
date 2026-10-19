@@ -1,4 +1,8 @@
-import type { ProjectMember, ProjectRole, TeamMember } from '@rustrak/client';
+import type {
+  ProjectMemberResponse,
+  ProjectRole,
+  TeamMemberResponse,
+} from '@rustrak/client';
 import { Loader2, UserPlus, Users } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -40,7 +44,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface MembersSettingsProps {
   projectId: number;
-  members: ProjectMember[];
+  members: ProjectMemberResponse[];
   currentUserId?: number;
   canManage: boolean;
 }
@@ -54,15 +58,14 @@ export function MembersSettings({
   const router = useRouter();
   const t = useTranslations('user');
   const [isPending, startTransition] = useTransition();
-  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [team, setTeam] = useState<TeamMemberResponse[] | null>(null);
   // Distinct from `team === null`, which only means "not loaded yet". An empty
   // dropdown reading "No users available" is a claim about the team; if the
   // fetch failed we have no basis to make it.
   const [teamFailed, setTeamFailed] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [removingMember, setRemovingMember] = useState<ProjectMember | null>(
-    null,
-  );
+  const [removingMember, setRemovingMember] =
+    useState<ProjectMemberResponse | null>(null);
 
   const memberIds = new Set(members.map((m) => m.user_id));
   // Exclude users who are already members, and global admins — admins (including
@@ -97,7 +100,10 @@ export function MembersSettings({
     };
   }, [canManage]);
 
-  const handleRoleChange = (member: ProjectMember, role: ProjectRole) => {
+  const handleRoleChange = (
+    member: ProjectMemberResponse,
+    role: ProjectRole,
+  ) => {
     if (role === member.role) return;
     startTransition(async () => {
       const result = await upsertProjectMember(projectId, {
@@ -232,7 +238,7 @@ interface AddMemberDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: number;
-  availableUsers: TeamMember[];
+  availableUsers: TeamMemberResponse[];
   /** The team list could not be read, so the dropdown is empty for a reason. */
   teamFailed: boolean;
   onSuccess: () => void;

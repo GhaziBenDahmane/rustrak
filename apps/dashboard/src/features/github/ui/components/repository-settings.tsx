@@ -1,5 +1,5 @@
 import type {
-  AlertRuleConditions,
+  AlertRuleResponse,
   CodeMapping,
   GitHubRepository,
   ProjectRepository,
@@ -77,7 +77,7 @@ export function RepositorySettings({
     repo?: GitHubRepository;
     code_mappings?: CodeMapping[];
     auto_create_issues?: boolean;
-    auto_create_conditions?: AlertRuleConditions;
+    auto_create_conditions?: AlertRuleResponse['conditions'];
   }) =>
     run(t('repository.saveFailed'), () =>
       setProjectRepository(projectId, {
@@ -363,9 +363,9 @@ function AutoCreateFilters({
   disabled,
   onSave,
 }: {
-  saved: AlertRuleConditions;
+  saved: AlertRuleResponse['conditions'];
   disabled: boolean;
-  onSave: (conditions: AlertRuleConditions) => void;
+  onSave: (conditions: AlertRuleResponse['conditions']) => void;
 }) {
   const t = useTranslations('github');
   const [filters, setFilters] = useState(() => formFromConditions(saved));

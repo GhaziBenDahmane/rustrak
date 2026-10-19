@@ -44,7 +44,10 @@ export function registerTeamTools(
       },
     },
     async ({ user_id, role }) => {
-      const result = await client.team.updateRole(user_id, role);
+      const result = await client.team.updateRole({
+        path: { user_id },
+        body: { role },
+      });
       return mcpDone(result, `User ${user_id} is now ${role}.`);
     },
   );
@@ -60,7 +63,7 @@ export function registerTeamTools(
       annotations: { destructiveHint: true },
     },
     async ({ user_id }) => {
-      const result = await client.team.remove(user_id);
+      const result = await client.team.deleteUser({ path: { user_id } });
       return mcpDone(result, `User ${user_id} removed.`);
     },
   );
@@ -80,7 +83,7 @@ export function registerTeamTools(
       },
     },
     async ({ email, role }) => {
-      const result = await client.invitations.create({ email, role });
+      const result = await client.invitations.create({ body: { email, role } });
       return mcpJson(result);
     },
   );
@@ -109,7 +112,7 @@ export function registerTeamTools(
       annotations: { destructiveHint: true },
     },
     async ({ token }) => {
-      const result = await client.invitations.revoke(token);
+      const result = await client.invitations.revoke({ path: { token } });
       return mcpDone(result, 'Invitation revoked.');
     },
   );
@@ -126,7 +129,7 @@ export function registerTeamTools(
       },
     },
     async ({ project_id }) => {
-      const result = await client.members.list(project_id);
+      const result = await client.members.list({ path: { project_id } });
       return mcpJson(result);
     },
   );
@@ -145,7 +148,10 @@ export function registerTeamTools(
       },
     },
     async ({ project_id, user_id, role }) => {
-      const result = await client.members.upsert(project_id, { user_id, role });
+      const result = await client.members.upsert({
+        path: { project_id },
+        body: { user_id, role },
+      });
       return mcpDone(
         result,
         `User ${user_id} is now ${role} on project ${project_id}.`,
@@ -168,7 +174,9 @@ export function registerTeamTools(
       annotations: { destructiveHint: true },
     },
     async ({ project_id, user_id }) => {
-      const result = await client.members.remove(project_id, user_id);
+      const result = await client.members.remove({
+        path: { project_id, user_id },
+      });
       return mcpDone(
         result,
         `User ${user_id} removed from project ${project_id}.`,

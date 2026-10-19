@@ -1,4 +1,8 @@
-import type { ActivityEntry, Issue, IssueGitHub } from '@rustrak/client';
+import type {
+  ActivityEntry,
+  IssueGitHub,
+  IssueResponse,
+} from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import { IssueCodeBlock } from '@/features/github/ui/components/issue-code-block';
 import { IssueActivity } from '@/features/issue/ui/components/issue-activity';
@@ -6,7 +10,7 @@ import { IssueActivity } from '@/features/issue/ui/components/issue-activity';
 interface EventRailProps {
   projectId: number;
   issueId: string;
-  issue: Issue;
+  issue: IssueResponse;
   activity: ActivityEntry[];
   /** What GitHub says about the issue; `null` when it could not be loaded. */
   code: IssueGitHub | null;

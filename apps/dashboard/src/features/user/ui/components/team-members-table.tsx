@@ -1,4 +1,4 @@
-import type { TeamMember } from '@rustrak/client';
+import type { TeamMemberResponse } from '@rustrak/client';
 import { Trash2 } from 'lucide-react';
 import { type ReactNode, useMemo } from 'react';
 import { useFormatter, useTranslations } from 'use-intl';
@@ -9,7 +9,7 @@ import {
 } from '@/shared/ui/components/data-table/use-app-table';
 import { Button } from '@/shared/ui/components/shadcn/button';
 
-const helper = createAppColumnHelper<TeamMember>();
+const helper = createAppColumnHelper<TeamMemberResponse>();
 
 /**
  * The instance's people, as a table.
@@ -30,17 +30,17 @@ export function TeamMembersTable({
   renderRoleSelect,
   onRemove,
 }: {
-  members: TeamMember[];
+  members: TeamMemberResponse[];
   currentUserId?: number;
   disabled: boolean;
-  renderRoleBadge: (role: TeamMember['role']) => ReactNode;
-  renderRoleSelect: (member: TeamMember, locked: boolean) => ReactNode;
-  onRemove: (member: TeamMember) => void;
+  renderRoleBadge: (role: TeamMemberResponse['role']) => ReactNode;
+  renderRoleSelect: (member: TeamMemberResponse, locked: boolean) => ReactNode;
+  onRemove: (member: TeamMemberResponse) => void;
 }) {
   const format = useFormatter();
   const t = useTranslations('user');
 
-  const isLocked = (member: TeamMember) =>
+  const isLocked = (member: TeamMemberResponse) =>
     member.id === currentUserId || member.is_primary === true;
 
   const columns = useMemo(

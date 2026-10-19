@@ -1,4 +1,4 @@
-import type { AuthToken } from '@rustrak/client';
+import type { AuthTokenResponse } from '@rustrak/client';
 import { Copy, Trash2 } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { Button } from '@/shared/ui/components/shadcn/button';
@@ -18,10 +18,10 @@ export function TokenActions({
   onCopy,
   onDelete,
 }: {
-  token: AuthToken;
+  token: AuthTokenResponse;
   busy: boolean;
-  onCopy: (token: AuthToken) => void;
-  onDelete: (token: AuthToken) => void;
+  onCopy: (token: AuthTokenResponse) => void;
+  onDelete: (token: AuthTokenResponse) => void;
 }) {
   const t = useTranslations('tokens');
   const label = token.description || token.token_prefix;

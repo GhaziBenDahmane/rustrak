@@ -43,7 +43,7 @@ function projectHealth(stats: ProjectListStats): ProjectHealth {
   const { current, previous } = stats.new_issues;
   // `previous === null` means an all-time request with nothing to compare
   // against, which is not evidence of a rise. A previous of zero is, though.
-  if (previous !== null && current > previous) {
+  if (previous != null && current > previous) {
     return 'rising';
   }
   return 'quiet';

@@ -1,4 +1,4 @@
-import type { OffsetPaginatedResponse, Transaction } from '@rustrak/client';
+import type { TransactionsListResponse } from '@rustrak/client';
 import { Zap } from 'lucide-react';
 import { useTransition } from 'react';
 import { useFormatter, useTranslations } from 'use-intl';
@@ -10,7 +10,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface TransactionsListProps {
   projectId: number;
-  initialTransactions: OffsetPaginatedResponse<Transaction>;
+  initialTransactions: TransactionsListResponse;
   currentPage: number;
   /** Base path for pagination links (defaults to the performance landing). */
   basePath?: string;
@@ -23,18 +23,18 @@ interface TransactionsListProps {
   };
 }
 
-function formatDuration(ms: number | null): string {
-  if (ms === null) return '—';
+function formatDuration(ms: number | null | undefined): string {
+  if (ms == null) return '—';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-function durationTone(ms: number | null): {
+function durationTone(ms: number | null | undefined): {
   text: string;
   bar: string;
   pct: number;
 } {
-  if (ms === null)
+  if (ms == null)
     return { text: 'text-muted-foreground', bar: 'bg-muted', pct: 0 };
   if (ms > 3000)
     return { text: 'text-destructive', bar: 'bg-destructive', pct: 100 };

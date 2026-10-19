@@ -1,4 +1,4 @@
-import type { SessionTimeseries } from '@rustrak/client';
+import type { SessionsGetTimeseriesResponse } from '@rustrak/client';
 // Not loaded through next/dynamic, deliberately.
 //
 // The advice does not apply in the App Router: this module is a client
@@ -71,7 +71,7 @@ function ChartTooltip(props: {
 }
 
 interface SessionHealthAreaProps {
-  data: SessionTimeseries;
+  data: SessionsGetTimeseriesResponse;
   height?: number;
 }
 

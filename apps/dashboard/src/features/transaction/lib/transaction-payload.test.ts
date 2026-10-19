@@ -1,8 +1,10 @@
-import type { TransactionDetail } from '@rustrak/client';
+import type { TransactionDetailResponse } from '@rustrak/client';
 import { describe, expect, it } from 'vitest';
 import { readTransactionPayload } from './transaction-payload';
 
-function txn(over: Partial<TransactionDetail> = {}): TransactionDetail {
+function txn(
+  over: Partial<TransactionDetailResponse> = {},
+): TransactionDetailResponse {
   return {
     id: 't1',
     transaction_name: 'GET /',
@@ -11,7 +13,7 @@ function txn(over: Partial<TransactionDetail> = {}): TransactionDetail {
     start_timestamp: '2026-01-01T00:00:00.000Z',
     data: {},
     ...over,
-  } as unknown as TransactionDetail;
+  } as unknown as TransactionDetailResponse;
 }
 
 describe('readTransactionPayload', () => {

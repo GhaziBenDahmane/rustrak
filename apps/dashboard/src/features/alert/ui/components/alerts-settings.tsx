@@ -1,4 +1,8 @@
-import type { AlertIntegration, AlertRule, Project } from '@rustrak/client';
+import type {
+  AlertIntegration,
+  AlertRuleResponse,
+  ProjectResponse,
+} from '@rustrak/client';
 import { Bell, Plus } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -15,8 +19,8 @@ import { Button } from '@/shared/ui/components/shadcn/button';
 import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface AlertsSettingsProps {
-  project: Project;
-  alertRules: AlertRule[];
+  project: ProjectResponse;
+  alertRules: AlertRuleResponse[];
   channels: AlertIntegration[];
 }
 
@@ -28,15 +32,19 @@ export function AlertsSettings({
   const t = useTranslations('alerts');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
-  const [deletingRule, setDeletingRule] = useState<AlertRule | null>(null);
+  const [editingRule, setEditingRule] = useState<AlertRuleResponse | null>(
+    null,
+  );
+  const [deletingRule, setDeletingRule] = useState<AlertRuleResponse | null>(
+    null,
+  );
   const [showAddForm, setShowAddForm] = useState(false);
 
   const enabledIntegrations = channels.filter((c) => c.is_enabled);
 
   const getIntegrationById = (id: number) => channels.find((c) => c.id === id);
 
-  const handleToggleEnabled = (rule: AlertRule) => {
+  const handleToggleEnabled = (rule: AlertRuleResponse) => {
     startTransition(async () => {
       const result = await updateAlertRule(project.id, rule.id, {
         is_enabled: !rule.is_enabled,

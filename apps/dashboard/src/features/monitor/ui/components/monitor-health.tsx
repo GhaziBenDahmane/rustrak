@@ -1,4 +1,4 @@
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 import { BellOff } from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import {
@@ -20,7 +20,7 @@ const PILL: Record<MonitorHealth, string> = {
 };
 
 /** A dot in the colour of the monitor's health, for dense rows. */
-export function MonitorHealthDot({ monitor }: { monitor: Monitor }) {
+export function MonitorHealthDot({ monitor }: { monitor: MonitorResponse }) {
   const t = useTranslations('crons');
   const health = monitorHealth(monitor);
   return (
@@ -33,7 +33,7 @@ export function MonitorHealthDot({ monitor }: { monitor: Monitor }) {
 }
 
 /** The monitor's health spelled out, plus whether it is muted. */
-export function MonitorHealthBadge({ monitor }: { monitor: Monitor }) {
+export function MonitorHealthBadge({ monitor }: { monitor: MonitorResponse }) {
   const t = useTranslations('crons');
   const health = monitorHealth(monitor);
   return (

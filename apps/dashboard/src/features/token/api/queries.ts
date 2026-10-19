@@ -5,7 +5,7 @@
  * if this module reaches the client bundle the build fails, instead of shipping
  * a browser bundle that holds the session cookie.
  */
-import type { AuthToken, Result, RustrakError } from '@rustrak/client';
+import type { AuthTokenResponse, Result, RustrakError } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
 /**
@@ -21,7 +21,9 @@ import { createClient } from '@/shared/api/rustrak';
  *
  * @returns List of auth tokens with masked token values
  */
-export async function listTokens(): Promise<Result<AuthToken[], RustrakError>> {
+export async function listTokens(): Promise<
+  Result<AuthTokenResponse[], RustrakError>
+> {
   const client = await createClient();
   return client.tokens.list();
 }

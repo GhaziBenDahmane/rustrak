@@ -30,7 +30,7 @@ export function registerTokenTools(
       },
     },
     async ({ token_id }) => {
-      const result = await client.tokens.get(token_id);
+      const result = await client.tokens.get({ path: { id: token_id } });
       return mcpJson(result);
     },
   );
@@ -48,7 +48,7 @@ export function registerTokenTools(
       },
     },
     async ({ description }) => {
-      const result = await client.tokens.create({ description });
+      const result = await client.tokens.create({ body: { description } });
       return mcpJson(result);
     },
   );
@@ -64,7 +64,7 @@ export function registerTokenTools(
       annotations: { destructiveHint: true },
     },
     async ({ token_id }) => {
-      const result = await client.tokens.delete(token_id);
+      const result = await client.tokens.delete({ path: { id: token_id } });
       return mcpDone(result, `Token ${token_id} revoked successfully.`);
     },
   );

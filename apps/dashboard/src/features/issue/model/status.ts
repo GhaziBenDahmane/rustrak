@@ -1,4 +1,4 @@
-import type { Issue, IssuePriority } from '@rustrak/client';
+import type { IssuePriority, IssueResponse } from '@rustrak/client';
 
 /**
  * Presentation metadata for an issue indicator (#165).
@@ -33,7 +33,7 @@ const SUBSTATUS_KEYS: Record<string, string> = {
  * Unresolved (the common case) stays neutral; only resolved earns an accent.
  */
 export function statusDisplay(
-  issue: Pick<Issue, 'status' | 'substatus'>,
+  issue: Pick<IssueResponse, 'status' | 'substatus'>,
 ): IssueIndicator {
   const substatusKey = issue.substatus
     ? SUBSTATUS_KEYS[issue.substatus]

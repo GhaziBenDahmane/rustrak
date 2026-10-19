@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 import { Loader2 } from 'lucide-react';
 import { useMemo, useTransition } from 'react';
 import { type Path, useForm, useFormContext, useWatch } from 'react-hook-form';
@@ -47,7 +47,7 @@ export function MonitorForm({
 }: {
   projectId: number;
   /** Absent when creating. */
-  monitor?: Monitor;
+  monitor?: MonitorResponse;
 }) {
   const t = useTranslations('crons');
   const globalT = useTranslations();

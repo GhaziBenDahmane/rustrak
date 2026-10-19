@@ -38,11 +38,9 @@ export function registerLogTools(
       },
     },
     async ({ project_id, page, per_page, level, trace_id }) => {
-      const result = await client.logs.list(project_id, {
-        page,
-        per_page,
-        level,
-        trace_id,
+      const result = await client.logs.list({
+        path: { project_id },
+        query: { page, per_page, level, trace_id },
       });
       return mcpJson(result);
     },

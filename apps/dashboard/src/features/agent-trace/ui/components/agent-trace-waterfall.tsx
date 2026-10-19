@@ -1,4 +1,4 @@
-import type { Span } from '@rustrak/client';
+import type { SpanResponse } from '@rustrak/client';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'use-intl';
@@ -7,7 +7,7 @@ import { barGeometry } from '@/shared/lib/waterfall-geometry';
 import { Link } from '@/shared/ui/components/link';
 
 interface AgentTraceWaterfallProps {
-  spans: Span[];
+  spans: SpanResponse[];
   projectId: number;
   traceId: string;
   /**
@@ -21,13 +21,13 @@ interface AgentTraceWaterfallProps {
 }
 
 interface TreeNode {
-  span: Span;
+  span: SpanResponse;
   depth: number;
   children: TreeNode[];
 }
 
 interface FlatRow {
-  span: Span;
+  span: SpanResponse;
   depth: number;
   hasChildren: boolean;
   collapsed: boolean;
@@ -44,7 +44,7 @@ const OPERATION_TYPE_COLOR: Record<string, string> = {
   handoff: 'bg-cyan-500',
 };
 
-function opColor(span: Span): string {
+function opColor(span: SpanResponse): string {
   const genAiColor = span.gen_ai_operation_type
     ? OPERATION_TYPE_COLOR[span.gen_ai_operation_type]
     : undefined;
@@ -59,13 +59,13 @@ function opColor(span: Span): string {
   return 'bg-primary';
 }
 
-function epochMs(iso: string | null): number | null {
+function epochMs(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   return Number.isNaN(t) ? null : t;
 }
 
-function formatDuration(ms: number | null): string {
+function formatDuration(ms: number | null | undefined): string {
   if (ms == null) return '—';
   if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
   if (ms < 1000) return `${ms.toFixed(1)}ms`;
@@ -78,11 +78,11 @@ function formatDuration(ms: number | null): string {
  * waterfall there's no single segment span guaranteed to anchor everything,
  * since a trace can span multiple standalone-span "segments".
  */
-function buildTree(spans: Span[]): TreeNode[] {
+function buildTree(spans: SpanResponse[]): TreeNode[] {
   const known = new Set(
     spans.map((s) => s.span_id).filter((id): id is string => Boolean(id)),
   );
-  const childrenByParent = new Map<string, Span[]>();
+  const childrenByParent = new Map<string, SpanResponse[]>();
 
   for (const span of spans) {
     const key =
@@ -374,7 +374,7 @@ function CollapseControl({
 }
 
 /** The span's operation, the name it goes by, and its status when it failed. */
-function SpanLabel({ span }: { span: Span }) {
+function SpanLabel({ span }: { span: SpanResponse }) {
   const t = useTranslations('agents');
   const failed = span.status && span.status !== 'ok';
   const label =

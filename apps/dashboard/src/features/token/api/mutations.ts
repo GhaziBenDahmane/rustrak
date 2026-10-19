@@ -1,5 +1,5 @@
 import type {
-  AuthTokenCreated,
+  AuthTokenCreatedResponse,
   CreateAuthToken,
   Result,
   RustrakError,
@@ -22,9 +22,9 @@ import { createClient } from '@/shared/api/rustrak';
  */
 export async function createToken(
   input: CreateAuthToken,
-): Promise<Result<AuthTokenCreated, RustrakError>> {
+): Promise<Result<AuthTokenCreatedResponse, RustrakError>> {
   const client = await createClient();
-  return client.tokens.create(input);
+  return client.tokens.create({ body: input });
 }
 
 /**
@@ -36,7 +36,7 @@ export async function deleteToken(
   id: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.tokens.delete(id);
+  return client.tokens.delete({ path: { id } });
 }
 
 /**
@@ -47,7 +47,7 @@ export async function deleteToken(
  */
 export async function getToken(
   id: number,
-): Promise<Result<AuthTokenCreated, RustrakError>> {
+): Promise<Result<AuthTokenCreatedResponse, RustrakError>> {
   const client = await createClient();
-  return client.tokens.get(id);
+  return client.tokens.get({ path: { id } });
 }

@@ -1,4 +1,4 @@
-import type { Issue } from '@rustrak/client';
+import type { IssueResponse } from '@rustrak/client';
 import {
   AlertCircle,
   Bookmark,
@@ -38,11 +38,11 @@ import { TrendSparkline } from '@/shared/ui/components/trend-sparkline';
  * stale the way a captured value would.
  */
 export interface IssueRowHandlers {
-  onAction: (action: IssueAction, issue: Issue) => void;
-  onDelete: (issue: Issue) => void;
+  onAction: (action: IssueAction, issue: IssueResponse) => void;
+  onDelete: (issue: IssueResponse) => void;
 }
 
-const helper = createAppColumnHelper<Issue>();
+const helper = createAppColumnHelper<IssueResponse>();
 
 /**
  * The issue list's columns.
@@ -80,7 +80,7 @@ export function issueColumns(
   format: Formatter,
 ) {
   return helper.columns([
-    selectionColumn<Issue>(tableT),
+    selectionColumn<IssueResponse>(tableT),
 
     helper.accessor('title', {
       header: t('columns.issue'),

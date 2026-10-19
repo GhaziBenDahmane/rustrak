@@ -1,4 +1,4 @@
-import type { TransactionDetail } from '@rustrak/client';
+import type { TransactionDetailResponse } from '@rustrak/client';
 import { useFormatter } from 'use-intl';
 import { Badge } from '@/shared/ui/components/shadcn/badge';
 
@@ -9,7 +9,7 @@ function formatDuration(ms: number | null): string {
 }
 
 interface TransactionBadgesProps {
-  txn: TransactionDetail;
+  txn: TransactionDetailResponse;
   /** From the trace context, which is where the SDK puts them. */
   op: string | undefined;
   status: string | undefined;

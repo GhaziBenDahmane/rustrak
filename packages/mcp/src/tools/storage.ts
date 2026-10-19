@@ -75,11 +75,13 @@ export function registerStorageTools(
       include_logs,
     }) => {
       const result = await client.storage.previewCleanup({
-        older_than_days,
-        project_id,
-        include_events,
-        include_transactions,
-        include_logs,
+        body: {
+          older_than_days,
+          project_id,
+          include_events,
+          include_transactions,
+          include_logs,
+        },
       });
       return mcpJson(result);
     },
@@ -138,11 +140,13 @@ export function registerStorageTools(
         );
       }
       const result = await client.storage.executeCleanup({
-        older_than_days,
-        project_id,
-        include_events,
-        include_transactions,
-        include_logs,
+        body: {
+          older_than_days,
+          project_id,
+          include_events,
+          include_transactions,
+          include_logs,
+        },
       });
       return mcpJson(result);
     },
@@ -169,7 +173,7 @@ export function registerStorageTools(
       inputSchema: {},
     },
     async () => {
-      const result = await client.storage.previewGcSourceMaps();
+      const result = await client.storage.previewSourceMapGc();
       return mcpJson(result);
     },
   );
@@ -250,7 +254,7 @@ export function registerStorageTools(
       inputSchema: retentionInput,
     },
     async (settings) =>
-      mcpJson(await client.storage.previewRetention(settings)),
+      mcpJson(await client.storage.previewRetention({ body: settings })),
   );
 
   server.registerTool(
@@ -307,7 +311,7 @@ export function registerStorageTools(
           'update_retention with a retention window schedules permanent deletion and was not confirmed. Run preview_retention, show the user what goes, then call again with confirm=true to proceed.',
         );
       }
-      return mcpJson(await client.storage.updateRetention(settings));
+      return mcpJson(await client.storage.updateRetention({ body: settings }));
     },
   );
 }

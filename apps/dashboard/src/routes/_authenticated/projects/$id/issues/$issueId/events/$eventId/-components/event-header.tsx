@@ -1,4 +1,4 @@
-import type { Issue, IssueLink } from '@rustrak/client';
+import type { IssueLink, IssueResponse } from '@rustrak/client';
 import { CircleAlert } from 'lucide-react';
 import { useFormatter, useTranslations } from 'use-intl';
 import { IssueGitHubButton } from '@/features/github/ui/components/issue-github-button';
@@ -25,7 +25,7 @@ export function EventHeader({
   githubLinks,
   githubConnected,
 }: {
-  issue: Issue;
+  issue: IssueResponse;
   projectId: number;
   titleType: string;
   message: string;

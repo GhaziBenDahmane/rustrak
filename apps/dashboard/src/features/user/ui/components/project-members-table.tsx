@@ -1,4 +1,4 @@
-import type { ProjectMember, ProjectRole } from '@rustrak/client';
+import type { ProjectMemberResponse, ProjectRole } from '@rustrak/client';
 import { Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslations } from 'use-intl';
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/shared/ui/components/shadcn/select';
 
-const helper = createAppColumnHelper<ProjectMember>();
+const helper = createAppColumnHelper<ProjectMemberResponse>();
 
 /**
  * Who can see this project, and at what level.
@@ -35,12 +35,12 @@ export function ProjectMembersTable({
   onRoleChange,
   onRemove,
 }: {
-  members: ProjectMember[];
+  members: ProjectMemberResponse[];
   currentUserId?: number;
   canManage: boolean;
   disabled: boolean;
-  onRoleChange: (member: ProjectMember, role: ProjectRole) => void;
-  onRemove: (member: ProjectMember) => void;
+  onRoleChange: (member: ProjectMemberResponse, role: ProjectRole) => void;
+  onRemove: (member: ProjectMemberResponse) => void;
 }) {
   const t = useTranslations('user');
 

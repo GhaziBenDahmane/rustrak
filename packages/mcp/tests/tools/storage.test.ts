@@ -54,7 +54,7 @@ describe('storage tools', () => {
         previewCleanup: vi.fn(),
         executeCleanup: vi.fn(),
         getCleanupStatus: vi.fn(),
-        previewGcSourceMaps: vi.fn(),
+        previewSourceMapGc: vi.fn(),
         gcSourceMaps: vi.fn(),
         getRetention: vi.fn(),
         updateRetention: vi.fn(),
@@ -115,8 +115,10 @@ describe('storage tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.events).toBe(20);
       expect(mockClient.storage.previewCleanup).toHaveBeenCalledWith({
-        older_than_days: 30,
-        project_id: 1,
+        body: {
+          older_than_days: 30,
+          project_id: 1,
+        },
       });
     });
 
@@ -133,14 +135,14 @@ describe('storage tools', () => {
         },
       });
 
-      expect(mockClient.storage.previewCleanup).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(mockClient.storage.previewCleanup).toHaveBeenCalledWith({
+        body: expect.objectContaining({
           older_than_days: 30,
           include_events: false,
           include_transactions: false,
           include_logs: true,
         }),
-      );
+      });
     });
   });
 
@@ -169,8 +171,10 @@ describe('storage tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.state).toBe('running');
       expect(mockClient.storage.executeCleanup).toHaveBeenCalledWith({
-        older_than_days: 30,
-        project_id: undefined,
+        body: {
+          older_than_days: 30,
+          project_id: undefined,
+        },
       });
     });
 
@@ -190,14 +194,14 @@ describe('storage tools', () => {
         },
       });
 
-      expect(mockClient.storage.executeCleanup).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(mockClient.storage.executeCleanup).toHaveBeenCalledWith({
+        body: expect.objectContaining({
           older_than_days: 30,
           include_events: false,
           include_transactions: true,
           include_logs: false,
         }),
-      );
+      });
     });
   });
 
@@ -221,7 +225,7 @@ describe('storage tools', () => {
 
   describe('preview_storage_source_maps_gc', () => {
     it('returns the orphaned files and bytes a GC would reclaim without deleting', async () => {
-      mockClient.storage.previewGcSourceMaps.mockResolvedValue(
+      mockClient.storage.previewSourceMapGc.mockResolvedValue(
         ok({
           files_removed: 4,
           bytes_freed: 81920,
@@ -236,7 +240,7 @@ describe('storage tools', () => {
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.files_removed).toBe(4);
-      expect(mockClient.storage.previewGcSourceMaps).toHaveBeenCalled();
+      expect(mockClient.storage.previewSourceMapGc).toHaveBeenCalled();
       expect(mockClient.storage.gcSourceMaps).not.toHaveBeenCalled();
     });
   });
@@ -311,9 +315,9 @@ describe('storage tools', () => {
         arguments: settings,
       });
       expect(result.isError).toBeFalsy();
-      expect(mockClient.storage.previewRetention).toHaveBeenCalledWith(
-        settings,
-      );
+      expect(mockClient.storage.previewRetention).toHaveBeenCalledWith({
+        body: settings,
+      });
     });
 
     it('update_retention sends the settings, without confirm', async () => {
@@ -325,7 +329,9 @@ describe('storage tools', () => {
         arguments: { ...settings, confirm: true },
       });
       expect(result.isError).toBeFalsy();
-      expect(mockClient.storage.updateRetention).toHaveBeenCalledWith(settings);
+      expect(mockClient.storage.updateRetention).toHaveBeenCalledWith({
+        body: settings,
+      });
     });
 
     it('update_retention refuses settings that delete without confirm:true', async () => {
@@ -346,7 +352,9 @@ describe('storage tools', () => {
         arguments: forever,
       });
       expect(result.isError).toBeFalsy();
-      expect(mockClient.storage.updateRetention).toHaveBeenCalledWith(forever);
+      expect(mockClient.storage.updateRetention).toHaveBeenCalledWith({
+        body: forever,
+      });
     });
 
     it('run_retention refuses without confirm:true', async () => {

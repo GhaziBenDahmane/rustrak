@@ -1,11 +1,10 @@
 import type {
   AlertIntegration,
-  AlertRule,
+  AlertRuleResponse,
   CreateAlertIntegration,
   CreateAlertRule,
   PreviewTemplateResponse,
   Result,
-  RoutingOverride,
   RustrakError,
   TestChannelResponse,
   UpdateAlertIntegration,
@@ -21,7 +20,7 @@ export async function createIntegration(
   input: CreateAlertIntegration,
 ): Promise<Result<AlertIntegration, RustrakError>> {
   const client = await createClient();
-  return client.alertIntegrations.create(input);
+  return client.alertChannels.create({ body: input });
 }
 
 export async function updateIntegration(
@@ -29,22 +28,28 @@ export async function updateIntegration(
   input: UpdateAlertIntegration,
 ): Promise<Result<AlertIntegration, RustrakError>> {
   const client = await createClient();
-  return client.alertIntegrations.update(id, input);
+  return client.alertChannels.update({ path: { id }, body: input });
 }
 
 export async function deleteIntegration(
   id: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.alertIntegrations.delete(id);
+  return client.alertChannels.delete({ path: { id } });
 }
 
 export async function testIntegration(
   id: number,
-  routingOverride?: RoutingOverride,
+  routingOverride?: Record<string, unknown>,
 ): Promise<Result<TestChannelResponse, RustrakError>> {
   const client = await createClient();
-  return client.alertIntegrations.test(id, routingOverride);
+  return client.alertChannels.test({
+    path: { id },
+    body:
+      routingOverride === undefined
+        ? undefined
+        : { routing_override: routingOverride },
+  });
 }
 
 /**
@@ -58,7 +63,7 @@ export async function previewTemplate(
   template: string,
 ): Promise<Result<PreviewTemplateResponse, RustrakError>> {
   const client = await createClient();
-  return client.alertIntegrations.previewTemplate(template);
+  return client.alertChannels.previewTemplate({ body: { template } });
 }
 
 // ============================================================================
@@ -68,18 +73,24 @@ export async function previewTemplate(
 export async function createAlertRule(
   projectId: number,
   input: CreateAlertRule,
-): Promise<Result<AlertRule, RustrakError>> {
+): Promise<Result<AlertRuleResponse, RustrakError>> {
   const client = await createClient();
-  return client.alertRules.create(projectId, input);
+  return client.alertRules.create({
+    path: { project_id: projectId },
+    body: input,
+  });
 }
 
 export async function updateAlertRule(
   projectId: number,
   ruleId: number,
   input: UpdateAlertRule,
-): Promise<Result<AlertRule, RustrakError>> {
+): Promise<Result<AlertRuleResponse, RustrakError>> {
   const client = await createClient();
-  return client.alertRules.update(projectId, ruleId, input);
+  return client.alertRules.update({
+    path: { project_id: projectId, rule_id: ruleId },
+    body: input,
+  });
 }
 
 export async function deleteAlertRule(
@@ -87,5 +98,7 @@ export async function deleteAlertRule(
   ruleId: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.alertRules.delete(projectId, ruleId);
+  return client.alertRules.delete({
+    path: { project_id: projectId, rule_id: ruleId },
+  });
 }

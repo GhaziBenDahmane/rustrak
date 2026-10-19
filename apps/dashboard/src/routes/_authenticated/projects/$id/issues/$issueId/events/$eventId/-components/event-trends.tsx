@@ -1,4 +1,4 @@
-import type { IssueAggregates, IssueStats } from '@rustrak/client';
+import type { IssueAggregates, IssueStatsResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import { TagDistribution } from '@/features/issue/ui/components/tag-distribution';
 import { EventChart } from '@/shared/ui/components/event-chart';
@@ -14,12 +14,14 @@ export function EventTrends({
   stats,
   aggregates,
 }: {
-  stats: IssueStats | null;
+  stats: IssueStatsResponse | null;
   aggregates: IssueAggregates | null;
 }) {
   const t = useTranslations('projectPages');
   const format = useFormatter();
-  const buckets = stats?.data ?? [];
+  // The spec types each bucket as `number[]`; the server sends a
+  // `[timestamp, count]` pair.
+  const buckets = (stats?.data ?? []) as [number, number][];
   const total = buckets.reduce((sum, [, count]) => sum + count, 0);
   const tags = aggregates?.tags ?? [];
 

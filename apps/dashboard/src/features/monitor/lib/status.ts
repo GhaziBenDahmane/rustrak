@@ -1,4 +1,4 @@
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 
 /**
  * One word for a monitor across its environments, for the list and the
@@ -6,7 +6,7 @@ import type { Monitor } from '@rustrak/client';
  */
 export type MonitorHealth = 'failing' | 'ok' | 'waiting';
 
-export function monitorHealth(monitor: Monitor): MonitorHealth {
+export function monitorHealth(monitor: MonitorResponse): MonitorHealth {
   const statuses = monitor.environments.map((env) => env.status);
   if (statuses.includes('error')) return 'failing';
   if (statuses.includes('ok')) return 'ok';
@@ -14,17 +14,17 @@ export function monitorHealth(monitor: Monitor): MonitorHealth {
 }
 
 /** The most recent real check-in of any environment. */
-export function lastCheckIn(monitor: Monitor): string | null {
+export function lastCheckIn(monitor: MonitorResponse): string | null {
   return pick(monitor, 'last_checkin', (a, b) => a > b);
 }
 
 /** The soonest expected check-in of any environment. */
-export function nextCheckIn(monitor: Monitor): string | null {
+export function nextCheckIn(monitor: MonitorResponse): string | null {
   return pick(monitor, 'next_checkin', (a, b) => a < b);
 }
 
 function pick(
-  monitor: Monitor,
+  monitor: MonitorResponse,
   field: 'last_checkin' | 'next_checkin',
   better: (a: number, b: number) => boolean,
 ): string | null {

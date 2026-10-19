@@ -1,6 +1,7 @@
 import type {
-  GitHubManifest,
+  GitHubLogin,
   IssueLink,
+  ManifestResponse,
   ProjectRepository,
   Result,
   RustrakError,
@@ -10,9 +11,9 @@ import { createClient } from '@/shared/api/rustrak';
 
 export async function getManifest(
   organization?: string,
-): Promise<Result<GitHubManifest, RustrakError>> {
+): Promise<Result<ManifestResponse, RustrakError>> {
   const client = await createClient();
-  return client.github.manifest(organization);
+  return client.github.manifest({ body: { organization } });
 }
 
 export async function disconnectGitHub(): Promise<Result<void, RustrakError>> {
@@ -25,21 +26,26 @@ export async function setProjectRepository(
   input: UpdateProjectRepository,
 ): Promise<Result<ProjectRepository, RustrakError>> {
   const client = await createClient();
-  return client.github.setProjectRepository(projectId, input);
+  return client.github.putProjectRepository({
+    path: { project_id: projectId },
+    body: input,
+  });
 }
 
 export async function removeProjectRepository(
   projectId: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.github.removeProjectRepository(projectId);
+  return client.github.deleteProjectRepository({
+    path: { project_id: projectId },
+  });
 }
 
 export async function syncCodeowners(
   projectId: number,
 ): Promise<Result<ProjectRepository, RustrakError>> {
   const client = await createClient();
-  return client.github.syncCodeowners(projectId);
+  return client.github.syncCodeowners({ path: { project_id: projectId } });
 }
 
 export async function createGitHubIssue(
@@ -47,7 +53,10 @@ export async function createGitHubIssue(
   issueId: string,
 ): Promise<Result<IssueLink, RustrakError>> {
   const client = await createClient();
-  return client.github.createIssue(projectId, issueId);
+  return client.github.createIssue({
+    path: { project_id: projectId, issue_id: issueId },
+    body: {},
+  });
 }
 
 export async function linkGitHubIssue(
@@ -56,7 +65,10 @@ export async function linkGitHubIssue(
   reference: string,
 ): Promise<Result<IssueLink, RustrakError>> {
   const client = await createClient();
-  return client.github.linkIssue(projectId, issueId, reference);
+  return client.github.linkIssue({
+    path: { project_id: projectId, issue_id: issueId },
+    body: { reference },
+  });
 }
 
 export async function unlinkGitHubIssue(
@@ -65,12 +77,14 @@ export async function unlinkGitHubIssue(
   linkId: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.github.unlinkIssue(projectId, issueId, linkId);
+  return client.github.unlinkIssue({
+    path: { project_id: projectId, issue_id: issueId, link_id: linkId },
+  });
 }
 
 export async function setMyGitHubLogin(
   login: string | null,
-): Promise<Result<{ login: string | null }, RustrakError>> {
+): Promise<Result<GitHubLogin, RustrakError>> {
   const client = await createClient();
-  return client.github.setMyLogin(login);
+  return client.github.putMyLogin({ body: { login } });
 }

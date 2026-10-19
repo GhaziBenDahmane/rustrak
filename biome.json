@@ -22,7 +22,8 @@
       "!**/playwright-report",
       "!**/test-results",
       "!**/src-tauri",
-      "!apps/dashboard/src/routeTree.gen.ts"
+      "!apps/dashboard/src/routeTree.gen.ts",
+      "!packages/client/src/generated"
     ]
   },
   "formatter": {
@@ -37,7 +38,8 @@
       "!**/playwright-report",
       "!**/test-results",
       "!**/src-tauri",
-      "!apps/dashboard/src/routeTree.gen.ts"
+      "!apps/dashboard/src/routeTree.gen.ts",
+      "!packages/client/src/generated"
     ],
     "enabled": true,
     "formatWithErrors": false,
@@ -126,7 +128,8 @@
       "!**/playwright-report",
       "!**/test-results",
       "!**/src-tauri",
-      "!apps/dashboard/src/routeTree.gen.ts"
+      "!apps/dashboard/src/routeTree.gen.ts",
+      "!packages/client/src/generated"
     ]
   },
   "overrides": [

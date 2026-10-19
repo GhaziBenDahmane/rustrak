@@ -50,13 +50,16 @@ export function registerSpanTools(
       trace_id,
       operation_type,
     }) => {
-      const result = await client.spans.list(project_id, {
-        page,
-        per_page,
-        op,
-        status,
-        trace_id,
-        operation_type,
+      const result = await client.spans.list({
+        path: { project_id },
+        query: {
+          page,
+          per_page,
+          op,
+          status,
+          trace_id,
+          operation_type,
+        },
       });
       return mcpJson(result);
     },

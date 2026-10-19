@@ -1,4 +1,4 @@
-import type { CleanupStatus, Retention } from '@rustrak/client';
+import type { CleanupStatus, RetentionResponse } from '@rustrak/client';
 import { Loader2 } from 'lucide-react';
 import { useFormatter, useTranslations } from 'use-intl';
 import {
@@ -28,7 +28,7 @@ export function StorageOverview({
   job,
 }: {
   summary: Summary;
-  retention: Retention;
+  retention: RetentionResponse;
   job: CleanupStatus | null;
 }) {
   const t = useTranslations('storage');
@@ -108,7 +108,7 @@ function CleanupLine({
   job,
 }: {
   summary: Summary;
-  retention: Retention;
+  retention: RetentionResponse;
   job: CleanupStatus | null;
 }) {
   const t = useTranslations('storage');

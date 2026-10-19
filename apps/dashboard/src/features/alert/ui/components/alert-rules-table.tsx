@@ -1,4 +1,4 @@
-import type { AlertIntegration, AlertRule } from '@rustrak/client';
+import type { AlertIntegration, AlertRuleResponse } from '@rustrak/client';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslations } from 'use-intl';
@@ -14,7 +14,7 @@ import { Badge } from '@/shared/ui/components/shadcn/badge';
 import { Button } from '@/shared/ui/components/shadcn/button';
 import { Switch } from '@/shared/ui/components/shadcn/switch';
 
-const helper = createAppColumnHelper<AlertRule>();
+const helper = createAppColumnHelper<AlertRuleResponse>();
 
 /**
  * The project's alert rules.
@@ -31,12 +31,12 @@ export function AlertRulesTable({
   onEdit,
   onDelete,
 }: {
-  rules: AlertRule[];
+  rules: AlertRuleResponse[];
   getIntegrationById: (id: number) => AlertIntegration | undefined;
   disabled: boolean;
-  onToggleEnabled: (rule: AlertRule) => void;
-  onEdit: (rule: AlertRule) => void;
-  onDelete: (rule: AlertRule) => void;
+  onToggleEnabled: (rule: AlertRuleResponse) => void;
+  onEdit: (rule: AlertRuleResponse) => void;
+  onDelete: (rule: AlertRuleResponse) => void;
 }) {
   const t = useTranslations('alerts');
   const columns = useMemo(

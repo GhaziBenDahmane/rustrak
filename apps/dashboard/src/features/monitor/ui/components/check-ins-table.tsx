@@ -1,4 +1,4 @@
-import type { CheckIn, OffsetPaginatedResponse } from '@rustrak/client';
+import type { MonitorsListCheckinsResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import { formatRunDuration } from '@/features/monitor/lib/duration';
 import { TablePagination } from '@/shared/ui/components/table-pagination';
@@ -12,7 +12,7 @@ export function CheckInsTable({
   pending,
   onPageChange,
 }: {
-  page: OffsetPaginatedResponse<CheckIn>;
+  page: MonitorsListCheckinsResponse;
   currentPage: number;
   /** Only worth a column when the monitor runs in more than one. */
   showEnvironment: boolean;
@@ -70,7 +70,7 @@ export function CheckInsTable({
                   {format.dateTime(new Date(checkIn.date_added), 'precise')}
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono tabular-nums text-muted-foreground">
-                  {checkIn.duration_ms === null
+                  {checkIn.duration_ms == null
                     ? '—'
                     : formatRunDuration(checkIn.duration_ms)}
                 </td>

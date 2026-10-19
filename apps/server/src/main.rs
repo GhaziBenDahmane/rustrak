@@ -172,7 +172,10 @@ async fn main() -> std::io::Result<()> {
     bootstrap_token(&db_pool).await;
 
     // Bootstrap: create superuser if CREATE_SUPERUSER is set
-    if let Err(e) = bootstrap::create_superuser_if_needed(&db_pool).await {
+    let create_superuser = std::env::var("CREATE_SUPERUSER").ok();
+    if let Err(e) =
+        bootstrap::create_superuser_if_needed(&db_pool, create_superuser.as_deref()).await
+    {
         log::error!("Failed to create superuser: {}", e);
     }
 

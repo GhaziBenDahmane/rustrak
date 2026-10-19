@@ -1,4 +1,4 @@
-import type { Span } from '@rustrak/client';
+import type { SpanResponse } from '@rustrak/client';
 import { defaultSelectedSpanId } from './filters';
 
 /** The header figures for one agent trace. */
@@ -17,7 +17,7 @@ export interface TraceSummary {
   models: string[];
 }
 
-function epochMs(iso: string | null): number | null {
+function epochMs(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const parsed = Date.parse(iso);
   return Number.isNaN(parsed) ? null : parsed;
@@ -31,7 +31,7 @@ function epochMs(iso: string | null): number | null {
  * fact about the gen_ai semantics, not about this route, and it is the kind of
  * thing that should be provable rather than commented.
  */
-export function summarizeTrace(spans: Span[]): TraceSummary {
+export function summarizeTrace(spans: SpanResponse[]): TraceSummary {
   const starts = spans
     .map((s) => epochMs(s.start_timestamp))
     .filter((v): v is number => v != null);
@@ -94,7 +94,7 @@ export interface SelectedSpan {
  * reach the request are ones already loaded from the server.
  */
 export function resolveSelectedSpan(
-  spans: Span[],
+  spans: SpanResponse[],
   requestedSpanId: string | undefined,
 ): SelectedSpan {
   if (requestedSpanId == null) {

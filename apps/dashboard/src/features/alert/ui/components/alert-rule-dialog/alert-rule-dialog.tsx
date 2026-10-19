@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { AlertIntegration, AlertRule } from '@rustrak/client';
+import type { AlertIntegration, AlertRuleResponse } from '@rustrak/client';
 import { Loader2 } from 'lucide-react';
 import { useMemo, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
@@ -43,7 +43,7 @@ export interface AlertRuleFormDialogProps {
   onOpenChange: (open: boolean) => void;
   projectId: number;
   integrations: AlertIntegration[];
-  existingRule: AlertRule | null;
+  existingRule: AlertRuleResponse | null;
   existingRuleTypes: string[];
   onSuccess: () => void;
 }
@@ -144,7 +144,6 @@ function AlertRuleForm({
             name: data.name,
             alert_type: data.alert_type,
             channels,
-            is_enabled: data.is_enabled,
             cooldown_minutes: data.cooldown_minutes,
             conditions,
           });

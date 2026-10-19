@@ -85,7 +85,7 @@ describe('RustrakClient', () => {
       expect(client.issues).toBeDefined();
       expect(typeof client.issues.list).toBe('function');
       expect(typeof client.issues.get).toBe('function');
-      expect(typeof client.issues.updateState).toBe('function');
+      expect(typeof client.issues.update).toBe('function');
       expect(typeof client.issues.delete).toBe('function');
     });
 
@@ -175,6 +175,30 @@ describe('RustrakClient', () => {
       );
 
       expect(headers.get('accept')).toBe('application/vnd.rustrak+json');
+    });
+
+    // A JSON write spreads the caller's headers into an object, which keeps
+    // nothing of a `Headers` instance or an array of pairs.
+    it.each([
+      ['Headers', new Headers({ Authorization: 'Bearer per-call' })],
+      ['pairs', [['Authorization', 'Bearer per-call']] as [string, string][]],
+    ])('keeps per-call %s on a JSON write', async (_, headers) => {
+      let seen: Headers | undefined;
+      server.use(
+        http.post('http://localhost:8080/api/projects', ({ request }) => {
+          seen = request.headers;
+          return new HttpResponse(null, { status: 500 });
+        }),
+      );
+
+      await new RustrakClient({
+        baseUrl: 'http://localhost:8080',
+      }).projects.create({
+        body: { name: 'Headers' },
+        headers,
+      });
+
+      expect(seen?.get('authorization')).toBe('Bearer per-call');
     });
   });
 

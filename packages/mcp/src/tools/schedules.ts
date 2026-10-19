@@ -39,8 +39,10 @@ export function registerScheduleTools(
     async ({ schedule, timezone }) =>
       mcpJson(
         await client.schedules.preview({
-          schedule,
-          ...(timezone === undefined ? {} : { timezone }),
+          body: {
+            schedule,
+            ...(timezone === undefined ? {} : { timezone }),
+          },
         }),
       ),
   );

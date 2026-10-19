@@ -1,8 +1,8 @@
-import type { Project } from '@rustrak/client';
+import type { ProjectResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 
 interface ProjectHeaderProps {
-  project: Project;
+  project: ProjectResponse;
 }
 
 export function ProjectHeader({ project }: ProjectHeaderProps) {

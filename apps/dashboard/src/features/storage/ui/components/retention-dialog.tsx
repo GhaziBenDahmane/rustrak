@@ -1,7 +1,7 @@
 import type {
   CleanupStatus,
   ProjectStorage,
-  Retention,
+  RetentionResponse,
   RetentionSettings,
 } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
@@ -40,9 +40,9 @@ export function RetentionDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  retention: Retention;
+  retention: RetentionResponse;
   projects: readonly ProjectStorage[];
-  onDone: (saved: Retention, job: CleanupStatus | null) => void;
+  onDone: (saved: RetentionResponse, job: CleanupStatus | null) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,9 +69,9 @@ function Editor({
   onDone,
   onCancel,
 }: {
-  retention: Retention;
+  retention: RetentionResponse;
   projects: readonly ProjectStorage[];
-  onDone: (saved: Retention, job: CleanupStatus | null) => void;
+  onDone: (saved: RetentionResponse, job: CleanupStatus | null) => void;
   onCancel: () => void;
 }) {
   const t = useTranslations('storage');

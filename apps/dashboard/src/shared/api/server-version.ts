@@ -1,7 +1,7 @@
 /**
  * The instance version, read by the About page and by the update check.
  */
-import type { Result, RustrakError, ServerVersion } from '@rustrak/client';
+import type { Result, RustrakError, VersionResponse } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
 /**
@@ -21,8 +21,8 @@ import { createClient } from '@/shared/api/rustrak';
  * caller is given the material to make it.
  */
 export async function getServerVersion(): Promise<
-  Result<ServerVersion, RustrakError>
+  Result<VersionResponse, RustrakError>
 > {
   const client = await createClient();
-  return client.health.getVersion();
+  return client.health.version();
 }
