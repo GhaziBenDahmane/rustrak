@@ -11,9 +11,16 @@ import type { AgentDurationPoint } from '@rustrak/client';
 // react-doctor-disable-next-line react-doctor/prefer-dynamic-import
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { useFormatter, useTranslations } from 'use-intl';
+import {
+  bucketWidth,
+  type TimeAxis,
+  timeLineAxis,
+} from '@/shared/lib/time-axis';
 
 interface AgentDurationChartProps {
   points: AgentDurationPoint[];
+  /** Bucket width the series was requested with. Inferred when omitted. */
+  intervalHours?: number;
   height?: number;
 }
 
@@ -25,9 +32,11 @@ function formatMs(ms: number): string {
 function ChartTooltip({
   active,
   payload,
+  axis,
 }: {
   active?: boolean;
   payload?: Array<{ payload: { t: number; avg: number; p95: number } }>;
+  axis: TimeAxis;
 }) {
   const format = useFormatter();
   const t = useTranslations('agents');
@@ -44,7 +53,7 @@ function ChartTooltip({
         })}
       </p>
       <p className="text-muted-foreground">
-        {format.dateTime(new Date(point.t), 'dateTime')}
+        {format.dateTime(new Date(point.t), axis.captionFormat, axis.zone)}
       </p>
     </div>
   );
@@ -57,6 +66,7 @@ function ChartTooltip({
  */
 export function AgentDurationChart({
   points,
+  intervalHours,
   height = 130,
 }: AgentDurationChartProps) {
   const format = useFormatter();
@@ -66,6 +76,11 @@ export function AgentDurationChart({
     avg: p.avg_ms,
     p95: p.p95_ms,
   }));
+  const times = chartData.map((p) => p.t);
+  const axis = timeLineAxis(
+    times,
+    bucketWidth(times, intervalHours ? intervalHours * 3_600_000 : undefined),
+  );
 
   if (chartData.length === 0) {
     return (
@@ -88,14 +103,18 @@ export function AgentDurationChart({
           dataKey="t"
           type="number"
           scale="time"
-          domain={['dataMin', 'dataMax']}
-          tickFormatter={(v) => format.dateTime(new Date(v), 'axisDay')}
+          domain={axis.domain}
+          ticks={axis.ticks}
+          interval="preserveStartEnd"
+          tickFormatter={(v) =>
+            format.dateTime(new Date(v), axis.format, axis.zone)
+          }
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
           minTickGap={48}
         />
-        <Tooltip content={<ChartTooltip />} />
+        <Tooltip content={<ChartTooltip axis={axis} />} />
         <Line
           type="monotone"
           dataKey="avg"

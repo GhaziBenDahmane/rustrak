@@ -120,7 +120,10 @@ export function ErrorVolumeTile({ projectId, period }: TileProps) {
 
   return (
     <TileShell title={t('overview.errorVolume')}>
-      <ErrorVolumeChart data={timeseries.data} />
+      <ErrorVolumeChart
+        data={timeseries.data}
+        intervalHours={overviewInterval(period)}
+      />
     </TileShell>
   );
 }
@@ -217,6 +220,7 @@ export function CrashFreeTile({ projectId, period }: TileProps) {
         usersRate={summary.crash_free_users_rate}
         totalSessions={summary.total}
         data={timeseries}
+        intervalHours={overviewInterval(period)}
       />
     </TileShell>
   );
@@ -246,7 +250,11 @@ export function SessionHealthTile({ projectId, period }: TileProps) {
       title={t('overview.sessionHealth')}
       subtitle={t('overview.sessionHealthSubtitle')}
     >
-      <SessionHealthArea data={timeseries.data} height={220} />
+      <SessionHealthArea
+        data={timeseries.data}
+        intervalHours={overviewInterval(period)}
+        height={220}
+      />
     </TileShell>
   );
 }

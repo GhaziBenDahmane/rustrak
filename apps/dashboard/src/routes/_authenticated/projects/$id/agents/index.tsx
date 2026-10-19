@@ -204,7 +204,12 @@ function AgentsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <AgentTimeseriesChart points={runs} />
+                  <AgentTimeseriesChart
+                    points={runs}
+                    intervalHours={
+                      resolveAgentFilters({ period }).intervalHours
+                    }
+                  />
                 </CardContent>
               </Card>
 
@@ -216,7 +221,12 @@ function AgentsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <AgentDurationChart points={duration} />
+                  <AgentDurationChart
+                    points={duration}
+                    intervalHours={
+                      resolveAgentFilters({ period }).intervalHours
+                    }
+                  />
                 </CardContent>
               </Card>
             </div>
@@ -259,7 +269,12 @@ function AgentsPage() {
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {/*
+              Stacked, not side by side: the models table is nine columns
+              wide, and at half the page it either wrapped model ids onto
+              four lines or scrolled its token columns out of sight.
+            */}
+            <div className="flex flex-col gap-4">
               <Card size="sm">
                 <CardHeader>
                   <CardTitle>{t('agents.cardModelsTable')}</CardTitle>

@@ -22,6 +22,11 @@ import {
 import { useFormatter, useTranslations } from 'use-intl';
 import { crashFreeColor, pct } from '@/features/release/model/session-health';
 import {
+  bucketWidth,
+  type TimeAxis,
+  timeLineAxis,
+} from '@/shared/lib/time-axis';
+import {
   ChartTooltipCaption,
   ChartTooltipRow,
   ChartTooltipSurface,
@@ -81,10 +86,11 @@ function makeIsolatedDot(points: ChartPoint[]) {
 function ChartTooltip(props: {
   active?: boolean;
   payload?: Array<{ payload: ChartPoint }>;
+  axis: TimeAxis;
 }) {
   const format = useFormatter();
   const t = useTranslations('releases');
-  const { active, payload } = props;
+  const { active, payload, axis } = props;
   if (!active || !payload?.length) {
     return null;
   }
@@ -102,7 +108,7 @@ function ChartTooltip(props: {
         value={format.number(point.crashed)}
       />
       <ChartTooltipCaption>
-        {format.dateTime(new Date(point.t), 'dateTime')}
+        {format.dateTime(new Date(point.t), axis.captionFormat, axis.zone)}
       </ChartTooltipCaption>
     </ChartTooltipSurface>
   );
@@ -117,6 +123,8 @@ interface CrashFreeTrendProps {
   totalSessions: number;
   /** Per-bucket rates behind the headline figure. */
   data: SessionsGetTimeseriesResponse;
+  /** Bucket width the series was requested with. Inferred when omitted. */
+  intervalHours?: number;
   height?: number;
 }
 
@@ -134,11 +142,12 @@ export function CrashFreeTrend({
   usersRate,
   totalSessions,
   data,
+  intervalHours,
   height = 132,
 }: CrashFreeTrendProps) {
   const format = useFormatter();
   const t = useTranslations('releases');
-  const { chartData, floor } = useMemo(() => {
+  const { chartData, floor, axis } = useMemo(() => {
     const points: ChartPoint[] = data.map((point) => ({
       t: new Date(point.bucket).getTime(),
       rate: point.crash_free_sessions_rate,
@@ -146,6 +155,7 @@ export function CrashFreeTrend({
       crashed: point.crashed,
     }));
 
+    const times = points.map((p) => p.t);
     const rates = points
       .map((p) => p.rate)
       .filter((r): r is number => r !== null);
@@ -155,8 +165,15 @@ export function CrashFreeTrend({
       // Let a bad window pull the floor down rather than clipping the dip
       // that made it interesting.
       floor: rates.length ? Math.min(DEFAULT_FLOOR, ...rates) : DEFAULT_FLOOR,
+      axis: timeLineAxis(
+        times,
+        bucketWidth(
+          times,
+          intervalHours ? intervalHours * 3_600_000 : undefined,
+        ),
+      ),
     };
-  }, [data]);
+  }, [data, intervalHours]);
 
   // Built once per dataset, not per render: `dot` is a component type, so a
   // fresh function each render remounts every marker. Declared before the
@@ -218,8 +235,12 @@ export function CrashFreeTrend({
                 dataKey="t"
                 type="number"
                 scale="time"
-                domain={['dataMin', 'dataMax']}
-                tickFormatter={(v) => format.dateTime(new Date(v), 'axisDay')}
+                domain={axis.domain}
+                ticks={axis.ticks}
+                interval="preserveStartEnd"
+                tickFormatter={(v) =>
+                  format.dateTime(new Date(v), axis.format, axis.zone)
+                }
                 tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
                 axisLine={false}
                 tickLine={false}
@@ -235,7 +256,7 @@ export function CrashFreeTrend({
               />
               <Tooltip
                 cursor={{ stroke: 'var(--muted-foreground)', strokeWidth: 1 }}
-                content={<ChartTooltip />}
+                content={<ChartTooltip axis={axis} />}
               />
               {/* The target, so the line is read against something rather
                   than against itself. */}

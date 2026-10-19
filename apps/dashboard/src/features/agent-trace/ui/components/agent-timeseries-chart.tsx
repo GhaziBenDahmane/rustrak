@@ -11,18 +11,27 @@ import type { AgentTimeseriesPoint } from '@rustrak/client';
 // react-doctor-disable-next-line react-doctor/prefer-dynamic-import
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { useFormatter, useTranslations } from 'use-intl';
+import {
+  bucketWidth,
+  type TimeAxis,
+  timeBarAxis,
+} from '@/shared/lib/time-axis';
 
 interface AgentTimeseriesChartProps {
   points: AgentTimeseriesPoint[];
+  /** Bucket width the series was requested with. Inferred when omitted. */
+  intervalHours?: number;
   height?: number;
 }
 
 function ChartTooltip({
   active,
   payload,
+  axis,
 }: {
   active?: boolean;
   payload?: Array<{ payload: { t: number; value: number } }>;
+  axis: TimeAxis;
 }) {
   const format = useFormatter();
   if (!active || !payload?.length) {
@@ -35,7 +44,7 @@ function ChartTooltip({
         {format.number(point.value)}
       </p>
       <p className="text-muted-foreground">
-        {format.dateTime(new Date(point.t), 'dateTime')}
+        {format.dateTime(new Date(point.t), axis.captionFormat, axis.zone)}
       </p>
     </div>
   );
@@ -48,6 +57,7 @@ function ChartTooltip({
  */
 export function AgentTimeseriesChart({
   points,
+  intervalHours,
   height = 130,
 }: AgentTimeseriesChartProps) {
   const format = useFormatter();
@@ -56,6 +66,11 @@ export function AgentTimeseriesChart({
     t: new Date(p.bucket).getTime(),
     value: p.value,
   }));
+  const times = chartData.map((p) => p.t);
+  const axis = timeBarAxis(
+    times,
+    bucketWidth(times, intervalHours ? intervalHours * 3_600_000 : undefined),
+  );
 
   if (chartData.length === 0) {
     return (
@@ -78,8 +93,12 @@ export function AgentTimeseriesChart({
           dataKey="t"
           type="number"
           scale="time"
-          domain={['dataMin', 'dataMax']}
-          tickFormatter={(v) => format.dateTime(new Date(v), 'axisDay')}
+          domain={axis.domain}
+          ticks={axis.ticks}
+          interval="preserveStartEnd"
+          tickFormatter={(v) =>
+            format.dateTime(new Date(v), axis.format, axis.zone)
+          }
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
@@ -87,7 +106,7 @@ export function AgentTimeseriesChart({
         />
         <Tooltip
           cursor={{ fill: 'var(--muted)', opacity: 0.5 }}
-          content={<ChartTooltip />}
+          content={<ChartTooltip axis={axis} />}
         />
         <Bar
           dataKey="value"
