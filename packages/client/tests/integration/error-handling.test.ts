@@ -622,6 +622,32 @@ describe('Error Handling', () => {
       expect(error.message).not.toContain('socket hang up');
     });
 
+    // A proxy's HTML page, a body with no Content-Type and an empty body are
+    // all a 200 that is not the JSON the operation promises.
+    it.each([
+      [
+        'an HTML page',
+        () =>
+          new HttpResponse('<html></html>', {
+            headers: { 'Content-Type': 'text/html' },
+          }),
+      ],
+      ['no Content-Type', () => new HttpResponse('<html></html>')],
+      [
+        'an empty body',
+        () => new HttpResponse(null, { headers: { 'Content-Length': '0' } }),
+      ],
+    ])(
+      'should report invalid_response on a 200 with %s',
+      async (_, response) => {
+        server.use(http.get('http://localhost:8080/api/projects', response));
+
+        const error = expectErr(await client.projects.list());
+
+        expect(error.kind).toBe('invalid_response');
+      },
+    );
+
     it('should report invalid_response on schema mismatch', async () => {
       server.use(
         http.get('http://localhost:8080/api/projects', () => {

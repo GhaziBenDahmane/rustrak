@@ -365,10 +365,14 @@ async function attempt(
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(timeout)]),
     });
     const body = await response.arrayBuffer();
+    // The generated client returns `{}` unvalidated for `Content-Length: 0`.
+    // Without it an empty 200 is parsed, and validated, like any other.
+    const headers = new Headers(response.headers);
+    headers.delete('Content-Length');
     return new Response(NULL_BODY.has(response.status) ? null : body, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers,
     });
   } catch (error) {
     if (request.signal.aborted) throw error;

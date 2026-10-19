@@ -3,7 +3,7 @@
  *
  * Walks the spec rather than a list, so an endpoint added to the server is
  * covered the day the client is regenerated. For each one it checks that the
- * method sends the documented HTTP method, path and required query, and that
+ * method sends the documented HTTP method, path, required query and body, and that
  * a response built from the spec's own schema comes back as `success: true`:
  * what the server is held to by `openapi_contract_test.rs`, the client's
  * validators must accept.
@@ -39,6 +39,7 @@ const spec = JSON.parse(
 };
 
 const BASE = 'http://rustrak.test';
+const CHUNK_NAME = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
 
 /** A value that satisfies `schema`, built from the spec alone. */
 function sample(schema: Schema | undefined): unknown {
@@ -105,7 +106,8 @@ function request(path: string, op: Operation) {
     ...(Object.keys(pathParams).length && { path: pathParams }),
     ...(Object.keys(query).length && { query }),
     ...(json && { body: sample(json.schema) }),
-    ...(multipart && { body: {} }),
+    // A sentry-cli chunk: the part's field name is its SHA-1.
+    ...(multipart && { body: { [CHUNK_NAME]: new Blob(['chunk']) } }),
   };
   return { options, url, query };
 }
@@ -134,9 +136,16 @@ describe('every operation in openapi.json', () => {
     const responseSchema = response.content?.['application/json']?.schema;
 
     let seen: Request | undefined;
+    let sent: unknown;
     server.use(
-      http.all(`${BASE}*`, ({ request }) => {
+      http.all(`${BASE}*`, async ({ request }) => {
         seen = request;
+        const type = request.headers.get('content-type') ?? '';
+        if (type.startsWith('application/json')) sent = await request.json();
+        if (type.startsWith('multipart/form-data')) {
+          const part = (await request.formData()).get(CHUNK_NAME);
+          sent = part instanceof Blob ? await part.text() : part;
+        }
         return status === '204' || status.startsWith('3') || !responseSchema
           ? new HttpResponse(null, { status: Number(status) })
           : HttpResponse.json(sample(responseSchema), {
@@ -149,10 +158,16 @@ describe('every operation in openapi.json', () => {
 
     expect(result).toMatchObject({ success: status.startsWith('2') });
     expect(seen?.method).toBe(method.toUpperCase());
-    const sent = new URL(seen!.url);
-    expect(decodeURIComponent(sent.pathname)).toBe(url);
+    const sentUrl = new URL(seen!.url);
+    expect(decodeURIComponent(sentUrl.pathname)).toBe(url);
     for (const [k, v] of Object.entries(query)) {
-      expect(sent.searchParams.get(k)).toBe(String(v));
+      expect(sentUrl.searchParams.get(k)).toBe(String(v));
+    }
+    const { requestBody } = op;
+    if (requestBody?.content['application/json']) {
+      expect(sent).toEqual(options.body);
+    } else if (requestBody?.content['multipart/form-data']) {
+      expect(sent).toBe('chunk');
     }
   });
 });

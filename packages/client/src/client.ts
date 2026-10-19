@@ -68,6 +68,9 @@ function createApi(config: ClientConfig): RustrakClient {
         baseUrl: config.baseUrl,
         credentials: 'include',
         fetch: createFetch(config),
+        // Every 2xx in the spec is JSON or empty. `auto` would hand back an
+        // HTML page or a stream as a success without validating it.
+        parseAs: 'json',
         headers: {
           // Without it a content-negotiating hop can answer with HTML.
           Accept: 'application/json',
@@ -90,8 +93,20 @@ function createApi(config: ClientConfig): RustrakClient {
       Object.getPrototypeOf(resource),
     )) {
       if (method === 'constructor') continue;
-      methods[method] = async (options: object = {}) =>
-        toResult(await resource[method]!({ ...options, throwOnError: false }));
+      methods[method] = async (options: { headers?: unknown } = {}) =>
+        toResult(
+          await resource[method]!({
+            ...options,
+            // A JSON write spreads these into an object, which keeps nothing
+            // of a `Headers` or an array of pairs.
+            headers:
+              options.headers instanceof Headers ||
+              Array.isArray(options.headers)
+                ? Object.fromEntries(new Headers(options.headers))
+                : options.headers,
+            throwOnError: false,
+          }),
+        );
     }
     api[name] = methods;
   }
