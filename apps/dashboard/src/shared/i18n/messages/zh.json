@@ -1748,7 +1748,7 @@
         "step1": "在此创建令牌：",
         "createToken": "API 令牌",
         "step2": "将下方配置添加到你的客户端。",
-        "step3": "将 YOUR_TOKEN 替换为你创建的令牌。",
+        "step3": "将 YOUR_TOKEN 替换为你创建的令牌（VS Code 会提示你输入并加密保存）。",
         "note": "它以令牌所有者的权限执行操作。撤销令牌即可断开。"
       },
       "clients": {

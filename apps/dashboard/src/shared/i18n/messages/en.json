@@ -1748,7 +1748,7 @@
         "step1": "Create a token in",
         "createToken": "API tokens",
         "step2": "Add the configuration below to your client.",
-        "step3": "Replace YOUR_TOKEN with the token you created.",
+        "step3": "Replace YOUR_TOKEN with the token you created (VS Code asks for it instead, and keeps it encrypted).",
         "note": "It acts with the permissions of the token's owner. Revoking the token cuts it off."
       },
       "clients": {

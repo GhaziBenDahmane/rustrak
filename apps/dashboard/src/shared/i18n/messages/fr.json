@@ -1748,7 +1748,7 @@
         "step1": "Créez un jeton dans",
         "createToken": "Jetons d'API",
         "step2": "Ajoutez la configuration ci-dessous à votre client.",
-        "step3": "Remplacez YOUR_TOKEN par le jeton créé.",
+        "step3": "Remplacez YOUR_TOKEN par le jeton créé (VS Code vous le demande et le garde chiffré).",
         "note": "Il agit avec les droits du propriétaire du jeton. Révoquer le jeton le coupe."
       },
       "clients": {

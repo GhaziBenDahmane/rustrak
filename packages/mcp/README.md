@@ -32,15 +32,24 @@ Cursor and other clients that read `mcpServers`:
 }
 ```
 
-VS Code (`.vscode/mcp.json`):
+VS Code (`.vscode/mcp.json`), which asks for the token and keeps it encrypted,
+so the file holds no secret:
 
 ```json
 {
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "rustrak-token",
+      "description": "Rustrak API token",
+      "password": true
+    }
+  ],
   "servers": {
     "rustrak": {
       "type": "http",
       "url": "https://<your-rustrak>/mcp",
-      "headers": { "Authorization": "Bearer <API token>" }
+      "headers": { "Authorization": "Bearer ${input:rustrak-token}" }
     }
   }
 }

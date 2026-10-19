@@ -1748,7 +1748,7 @@
         "step1": "Crea un token en",
         "createToken": "Tokens de API",
         "step2": "Añade la configuración de abajo a tu cliente.",
-        "step3": "Cambia YOUR_TOKEN por el token que creaste.",
+        "step3": "Cambia YOUR_TOKEN por el token que creaste (VS Code te lo pide y lo guarda cifrado).",
         "note": "Actúa con los permisos del dueño del token. Revocar el token lo desconecta."
       },
       "clients": {

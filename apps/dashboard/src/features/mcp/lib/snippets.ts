@@ -16,6 +16,10 @@ export interface Snippet {
 /** The placeholder a reader replaces with their own API token. */
 export const TOKEN_PLACEHOLDER = 'YOUR_TOKEN';
 
+/** VS Code's reference to the token it asks for: its syntax, not a template. */
+// biome-ignore lint/suspicious/noTemplateCurlyInString: VS Code input syntax, kept literal
+export const VSCODE_TOKEN_INPUT = '${input:rustrak-token}';
+
 export function mcpSnippet(
   method: ConnectMethod,
   client: SnippetClient,
@@ -33,6 +37,32 @@ export function mcpSnippet(
     };
   }
 
+  if (client === 'vscode') {
+    // VS Code asks for the token once and keeps it encrypted, so
+    // `.vscode/mcp.json` holds no secret and can be committed.
+    const server = { type: 'http', url };
+    const config =
+      method === 'oauth'
+        ? { servers: { rustrak: server } }
+        : {
+            inputs: [
+              {
+                type: 'promptString',
+                id: 'rustrak-token',
+                description: 'Rustrak API token',
+                password: true,
+              },
+            ],
+            servers: {
+              rustrak: {
+                ...server,
+                headers: { Authorization: `Bearer ${VSCODE_TOKEN_INPUT}` },
+              },
+            },
+          };
+    return { language: 'json', code: JSON.stringify(config, null, 2) };
+  }
+
   // `type` because a client that reads a URL without it (Claude Code's
   // `.mcp.json`) takes the entry for a local stdio server.
   const server =
@@ -43,11 +73,6 @@ export function mcpSnippet(
           url,
           headers: { Authorization: `Bearer ${TOKEN_PLACEHOLDER}` },
         };
-  // VS Code keeps its servers under `servers`; Cursor and most others under
-  // `mcpServers`.
-  const config =
-    client === 'vscode'
-      ? { servers: { rustrak: server } }
-      : { mcpServers: { rustrak: server } };
+  const config = { mcpServers: { rustrak: server } };
   return { language: 'json', code: JSON.stringify(config, null, 2) };
 }

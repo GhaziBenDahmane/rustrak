@@ -63,16 +63,24 @@ claude mcp add --transport http rustrak https://your-rustrak.example.com/mcp \
 }
 ```
 
-**VS Code** (`.vscode/mcp.json`, or **MCP: Open User Configuration**):
+**VS Code** (`.vscode/mcp.json`, or **MCP: Open User Configuration**). VS Code asks for the token the first time and keeps it encrypted, so the file holds no secret and can be committed:
 
 ```json
 {
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "rustrak-token",
+      "description": "Rustrak API token",
+      "password": true
+    }
+  ],
   "servers": {
     "rustrak": {
       "type": "http",
       "url": "https://your-rustrak.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer your-40-char-token"
+        "Authorization": "Bearer ${input:rustrak-token}"
       }
     }
   }
@@ -166,7 +174,7 @@ claude mcp add --transport http rustrak https://your-rustrak.example.com/mcp \
 
 ### Team, tokens and storage
 
-Team, invitation, token and storage tools need an admin token. Project-member tools need a global admin or an admin of that project. See [Team & Access](/usage/team).
+Team, invitation and storage tools need an admin. Token tools work on the caller's own tokens; an admin can also manage everyone else's. Project-member tools need a global admin or an admin of that project. See [Team & Access](/usage/team).
 
 | Tool | Description |
 |---|---|

@@ -1748,7 +1748,7 @@
         "step1": "Creează un token în",
         "createToken": "Tokenuri API",
         "step2": "Adaugă configurația de mai jos în client.",
-        "step3": "Înlocuiește YOUR_TOKEN cu tokenul creat.",
+        "step3": "Înlocuiește YOUR_TOKEN cu tokenul creat (VS Code ți-l cere și îl păstrează criptat).",
         "note": "Acționează cu permisiunile proprietarului tokenului. Revocarea tokenului îl deconectează."
       },
       "clients": {
