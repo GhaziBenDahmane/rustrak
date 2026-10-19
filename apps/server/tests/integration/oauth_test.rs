@@ -69,14 +69,25 @@ async fn app_with(
     pool: &DbPool,
     public_url: Option<&str>,
 ) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
+    app_configured(
+        pool,
+        Config {
+            public_url: public_url.map(str::to_string),
+            ..crate::integration::mcp_test::create_test_config()
+        },
+    )
+    .await
+}
+
+async fn app_configured(
+    pool: &DbPool,
+    config: Config,
+) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
     let clients: Arc<dyn ClientMetadataSource> = Arc::new(FakeClients);
     test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
-            .app_data(web::Data::new(Config {
-                public_url: public_url.map(str::to_string),
-                ..crate::integration::mcp_test::create_test_config()
-            }))
+            .app_data(web::Data::new(config))
             .app_data(web::Data::new(clients))
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::from(&[0u8; 64]))
@@ -677,4 +688,67 @@ async fn forwarded_headers_cannot_rename_the_issuer() {
     .await;
     // Without PUBLIC_URL, the address the server is configured to listen on.
     assert_eq!(server["issuer"], "http://127.0.0.1:0");
+}
+
+fn refresh_form(token: &str) -> [(&str, &str); 3] {
+    [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", token),
+        ("client_id", CLIENT_ID),
+    ]
+}
+
+#[actix_web::test]
+async fn a_reused_refresh_token_disconnects_the_assistant() {
+    let db = TestDb::new().await;
+    let app = app(&db.pool).await;
+    enable_mcp(&app, &db.pool).await;
+    let cookie = signed_in_member(&app, &db.pool).await;
+    let code = param(&decide(&app, &cookie, authorization(), true).await, "code").unwrap();
+    let first = exchange(&app, &code).await.1;
+    // Whoever refreshes first gets a new pair...
+    let old = first["refresh_token"].as_str().unwrap();
+    let rotated = token(&app, &refresh_form(old)).await.1;
+    let access = rotated["access_token"].as_str().unwrap();
+    assert_eq!(list_projects(&app, access).await.0, 200);
+
+    // ...and when the spent token comes back, one of the two holders stole
+    // it. Which one cannot be told, so the connection ends for both.
+    let (status, error) = token(&app, &refresh_form(old)).await;
+    assert_eq!(
+        (status, error["error"].clone()),
+        (400, json!("invalid_grant"))
+    );
+    assert_eq!(list_projects(&app, access).await.0, 401);
+    let newest = rotated["refresh_token"].as_str().unwrap();
+    let (status, _) = token(&app, &refresh_form(newest)).await;
+    assert_eq!(status, 400);
+}
+
+#[actix_web::test]
+async fn consent_happens_where_the_dashboard_is_served() {
+    let db = TestDb::new().await;
+    let mut config = crate::integration::mcp_test::create_test_config();
+    config.public_url = Some(ISSUER.into());
+    config.dashboard.url = Some("https://dashboard.example".into());
+    let app = app_configured(&db.pool, config).await;
+
+    let server: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::get()
+            .uri("/.well-known/oauth-authorization-server")
+            .to_request(),
+    )
+    .await;
+    // The consent page is a dashboard route; the issuer and the token
+    // endpoint stay with the API.
+    assert_eq!(
+        server["authorization_endpoint"],
+        "https://dashboard.example/oauth/authorize"
+    );
+    assert_eq!(server["issuer"], ISSUER);
+    assert_eq!(
+        server["token_endpoint"],
+        format!("{ISSUER}/api/oauth/token")
+    );
 }

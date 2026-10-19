@@ -58,9 +58,13 @@ async fn protected_resource(config: web::Data<Config>) -> HttpResponse {
 
 async fn authorization_server(config: web::Data<Config>) -> HttpResponse {
     let base = base_url(&config);
+    // The consent page is a dashboard route, so it lives wherever the
+    // dashboard is served (`DASHBOARD_URL` for one on its own host); the
+    // issuer and the token endpoint stay with the API.
+    let dashboard = config.dashboard_url();
     HttpResponse::Ok().json(json!({
         "issuer": base,
-        "authorization_endpoint": format!("{base}/oauth/authorize"),
+        "authorization_endpoint": format!("{dashboard}/oauth/authorize"),
         "token_endpoint": format!("{base}/api/oauth/token"),
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],

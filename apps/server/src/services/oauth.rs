@@ -367,6 +367,10 @@ impl OAuthService {
 
     /// Replaces a grant's tokens. `None` when the refresh token is unknown,
     /// already used, expired, or held by another client.
+    ///
+    /// A refresh token presented again after it was rotated means two parties
+    /// hold it, and the server cannot tell the thief from the client, so the
+    /// grant is revoked for both (RFC 9700 4.14.2). The user approves again.
     pub async fn refresh(
         pool: &DbPool,
         refresh_token: &str,
@@ -381,6 +385,10 @@ impl OAuthService {
         .fetch_optional(pool)
         .await?
         else {
+            sqlx::query("DELETE FROM oauth_grants WHERE previous_refresh_hash = $1")
+                .bind(&old)
+                .execute(pool)
+                .await?;
             return Ok(None);
         };
         if grant.client_id != client_id || grant.refresh_expires_at <= Utc::now() {
@@ -391,7 +399,8 @@ impl OAuthService {
         // same token cannot both win.
         let rotated = sqlx::query(
             "UPDATE oauth_grants SET access_hash = $1, access_expires_at = $2, \
-             refresh_hash = $3, refresh_expires_at = $4 WHERE id = $5 AND refresh_hash = $6",
+             refresh_hash = $3, refresh_expires_at = $4, previous_refresh_hash = $6 \
+             WHERE id = $5 AND refresh_hash = $6",
         )
         .bind(hash(&pair.access_token))
         .bind(access_expires)

@@ -14,7 +14,8 @@ CREATE TABLE oauth_codes (
 );
 
 -- One row per connected client: its current access and refresh token, both
--- replaced on every refresh.
+-- replaced on every refresh. The refresh token they replaced is kept so that
+-- its reuse, which means it was stolen, can end the connection.
 CREATE TABLE oauth_grants (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -25,6 +26,7 @@ CREATE TABLE oauth_grants (
     access_expires_at TIMESTAMPTZ NOT NULL,
     refresh_hash CHAR(64) NOT NULL UNIQUE,
     refresh_expires_at TIMESTAMPTZ NOT NULL,
+    previous_refresh_hash CHAR(64) UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
