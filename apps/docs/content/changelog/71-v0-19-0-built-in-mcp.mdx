@@ -1,0 +1,47 @@
+---
+version: v0.19.0
+title: Built-in MCP Server
+description: Rustrak serves MCP at /mcp, with OAuth sign-in for web assistants, and a client generated from the OpenAPI spec
+date: 2026-10-19
+tags: [server, dashboard, mcp, client]
+---
+
+## MCP at /mcp
+
+Rustrak now answers MCP clients itself. Claude, Cursor, VS Code and other
+assistants connect to `https://<your-rustrak>/mcp`, with no package to install
+next to them.
+
+- Off until an instance admin turns it on in **Settings → AI assistants (MCP)**.
+  While it is off, `/mcp` is a 404
+- The same tools `@rustrak/mcp` served, with the same names, acting with the
+  permissions of whoever connected
+- Connect with an API token, or sign in to Rustrak and approve the assistant.
+  Web assistants such as claude.ai and ChatGPT use sign-in, which needs
+  `PUBLIC_URL` set on the server
+- The settings page lists connected assistants and disconnects them
+
+## @rustrak/mcp is deprecated
+
+Its next release only explains where to connect instead. On an older server,
+pin `@rustrak/mcp@0.18.1`. See [MCP](/sdks/mcp) for the move.
+
+## Generated client
+
+`@rustrak/client` is generated from the server's OpenAPI spec, so it covers
+every documented endpoint and no longer drifts from the server.
+
+- **Breaking:** every method takes one `{ path, query, body }` object, and
+  several methods and types take the names the spec gives them
+- Methods still return `Result<T, RustrakError>`, and responses are validated
+  against the spec
+- HTTP is the platform's `fetch`. Only `GET`, `PUT` and `DELETE` are retried,
+  so a `POST` is never sent twice
+
+## Improvements
+
+- Logs and spans accept RFC 3339 timestamps, so logs from sentry-go are no
+  longer dropped
+- Time charts no longer clip their first and last bars, and day-wide buckets
+  are labelled in UTC ([@rookbreezy](https://github.com/rookbreezy))
+- Model ids in the agents tables stay on one line ([@rookbreezy](https://github.com/rookbreezy))
