@@ -414,12 +414,15 @@ impl OAuthService {
         client_id: &str,
     ) -> AppResult<Option<TokenPair>> {
         let old = hash(refresh_token);
+        // Read, rotate and record the spent token in one write transaction,
+        // so there is no moment where it is neither current nor recorded.
+        let mut tx = crate::db::begin_write(pool).await?;
         let Some(grant) = sqlx::query_as::<_, GrantRow>(
             "SELECT id, user_id, client_id, resource, access_expires_at, refresh_expires_at \
              FROM oauth_grants WHERE refresh_hash = $1",
         )
         .bind(&old)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?
         else {
             sqlx::query(
@@ -427,16 +430,15 @@ impl OAuthService {
                  (SELECT grant_id FROM oauth_spent_refresh_tokens WHERE refresh_hash = $1)",
             )
             .bind(&old)
-            .execute(pool)
+            .execute(&mut *tx)
             .await?;
+            tx.commit().await?;
             return Ok(None);
         };
         if grant.client_id != client_id || grant.refresh_expires_at <= Utc::now() {
             return Ok(None);
         }
         let (pair, access_expires, refresh_expires) = Self::new_pair();
-        // Conditional on the old hash, so two concurrent refreshes with the
-        // same token cannot both win.
         let rotated = sqlx::query(
             "UPDATE oauth_grants SET access_hash = $1, access_expires_at = $2, \
              refresh_hash = $3, refresh_expires_at = $4 WHERE id = $5 AND refresh_hash = $6",
@@ -447,10 +449,17 @@ impl OAuthService {
         .bind(refresh_expires)
         .bind(grant.id)
         .bind(&old)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
         if rotated != 1 {
+            // Another request rotated this same token first: it was presented
+            // twice, which is reuse like any other.
+            sqlx::query("DELETE FROM oauth_grants WHERE id = $1")
+                .bind(grant.id)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
             return Ok(None);
         }
         // Kept for the grant's lifetime (deleted with it), so that any spent
@@ -460,8 +469,9 @@ impl OAuthService {
         )
         .bind(&old)
         .bind(grant.id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+        tx.commit().await?;
         Ok(Some(pair))
     }
 

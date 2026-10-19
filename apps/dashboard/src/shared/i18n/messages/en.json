@@ -1738,7 +1738,8 @@
         "step1": "Copy the endpoint URL above.",
         "step2": "Add it to your assistant as an MCP server or custom connector.",
         "step3": "Sign in to Rustrak when it asks, and approve the access.",
-        "note": "It acts with your permissions. You can disconnect it at any time under Connected assistants."
+        "note": "It acts with your permissions. You can disconnect it at any time under Connected assistants.",
+        "needsPublicUrl": "Signing in is off: set PUBLIC_URL on the server to the address assistants reach it on (e.g. https://rustrak.example.com) and restart. Until then, use an API token."
       },
       "token": {
         "title": "API token",

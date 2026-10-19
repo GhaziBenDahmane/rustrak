@@ -12988,8 +12988,11 @@
             "type": "boolean"
           },
           "url": {
-            "type": "string",
-            "description": "The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks\nthe resource against; the browser's own origin may differ."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks\nthe resource against; the browser's own origin may differ. `null`\nwithout `PUBLIC_URL`, when signing in is off."
           }
         }
       },

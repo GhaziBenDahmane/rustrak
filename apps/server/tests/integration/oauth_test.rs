@@ -684,24 +684,40 @@ async fn a_signed_out_caller_is_told_to_sign_in_before_anything_else() {
 }
 
 #[actix_web::test]
-async fn forwarded_headers_cannot_rename_the_issuer() {
+async fn without_a_public_url_there_is_no_oauth_to_discover() {
     let db = TestDb::new().await;
     let app = app_with(&db.pool, None).await;
+    enable_mcp(&app, &db.pool).await;
 
-    // The issuer and the resource are configuration, not what a request
-    // claims about itself: a cache in front would otherwise serve the forged
-    // metadata to everyone.
-    let server: Value = test::call_and_read_body_json(
+    // The issuer has to be an address assistants can reach. The bind address
+    // (`0.0.0.0` by default) is not one, and a request's forwarded headers
+    // are the caller's to choose, so without PUBLIC_URL there is none.
+    for path in [
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-protected-resource/mcp",
+    ] {
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(path)
+                .insert_header(("X-Forwarded-Host", "evil.example"))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(resp.status(), 404, "{path}");
+    }
+
+    // /mcp still asks for a token, and points nowhere to get one.
+    let resp = test::call_service(
         &app,
-        test::TestRequest::get()
-            .uri("/.well-known/oauth-authorization-server")
-            .insert_header(("X-Forwarded-Host", "evil.example"))
-            .insert_header(("Forwarded", "host=evil.example;proto=https"))
+        test::TestRequest::post()
+            .uri("/mcp")
+            .set_payload("{}")
             .to_request(),
     )
     .await;
-    // Without PUBLIC_URL, the address the server is configured to listen on.
-    assert_eq!(server["issuer"], "http://127.0.0.1:0");
+    assert_eq!(resp.status(), 401);
+    assert_eq!(resp.headers().get("WWW-Authenticate").unwrap(), "Bearer");
 }
 
 fn refresh_form(token: &str) -> [(&str, &str); 3] {
@@ -792,5 +808,30 @@ async fn a_refresh_token_spent_generations_ago_still_disconnects() {
 
     // ...and the client's old token still gives the theft away.
     assert_eq!(token(&app, &refresh_form(&stolen)).await.0, 400);
+    assert_eq!(list_projects(&app, access).await.0, 401);
+}
+
+#[actix_web::test]
+async fn two_refreshes_with_one_token_at_once_disconnect_the_assistant() {
+    let db = TestDb::new().await;
+    let app = app(&db.pool).await;
+    enable_mcp(&app, &db.pool).await;
+    let cookie = signed_in_member(&app, &db.pool).await;
+    let code = param(&decide(&app, &cookie, authorization(), true).await, "code").unwrap();
+    let refresh = exchange(&app, &code).await.1["refresh_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // One of the two is not the client. Whichever wins, the token was
+    // presented twice, so neither keeps the connection.
+    let form = refresh_form(&refresh);
+    let (a, b) = futures_util::join!(token(&app, &form), token(&app, &form));
+    let winner = [&a, &b]
+        .into_iter()
+        .find(|(status, _)| *status == 200)
+        .expect("one refresh succeeds");
+    assert!([a.0, b.0].contains(&400));
+    let access = winner.1["access_token"].as_str().unwrap();
     assert_eq!(list_projects(&app, access).await.0, 401);
 }

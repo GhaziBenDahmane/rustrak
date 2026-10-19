@@ -28,12 +28,18 @@ use crate::services::oauth::{
     pkce_matches, same_resource, verify_client, ClientMetadata, ClientMetadataSource, OAuthService,
 };
 
-/// Where this server is reached, and so the issuer and the resource tokens
-/// are bound to. Configuration only (`PUBLIC_URL`): a request's `Host` or
-/// `X-Forwarded-Host` is the caller's to choose, and a cache in front would
-/// serve metadata naming the caller's server to everyone.
-pub fn base_url(config: &Config) -> String {
-    config.public_base_url()
+/// The issuer, and the base of the resource tokens are bound to: `PUBLIC_URL`,
+/// or nothing. Not what a request says (`Host`, `X-Forwarded-Host` are the
+/// caller's to choose, and a cache in front would serve metadata naming the
+/// caller's server to everyone), and not the bind address (`0.0.0.0` by
+/// default, which no assistant can reach). Without it there is no OAuth, and
+/// assistants connect with API tokens.
+pub fn issuer(config: &Config) -> Option<&str> {
+    config.public_url.as_deref()
+}
+
+fn no_issuer() -> AppError {
+    AppError::NotFound("Signing in needs PUBLIC_URL set on the server".to_string())
 }
 
 /// The resource a token for `/mcp` is issued for (RFC 8707).
@@ -46,23 +52,23 @@ pub fn resource_metadata_url(base: &str) -> String {
     format!("{base}/.well-known/oauth-protected-resource/mcp")
 }
 
-async fn protected_resource(config: web::Data<Config>) -> HttpResponse {
-    let base = base_url(&config);
-    HttpResponse::Ok().json(json!({
-        "resource": mcp_resource(&base),
+async fn protected_resource(config: web::Data<Config>) -> AppResult<HttpResponse> {
+    let base = issuer(&config).ok_or_else(no_issuer)?;
+    Ok(HttpResponse::Ok().json(json!({
+        "resource": mcp_resource(base),
         "authorization_servers": [base],
         "bearer_methods_supported": ["header"],
         "resource_name": "Rustrak",
-    }))
+    })))
 }
 
-async fn authorization_server(config: web::Data<Config>) -> HttpResponse {
-    let base = base_url(&config);
+async fn authorization_server(config: web::Data<Config>) -> AppResult<HttpResponse> {
+    let base = issuer(&config).ok_or_else(no_issuer)?;
     // The consent page is a dashboard route, so it lives wherever the
     // dashboard is served (`DASHBOARD_URL` for one on its own host); the
     // issuer and the token endpoint stay with the API.
     let dashboard = config.dashboard_url();
-    HttpResponse::Ok().json(json!({
+    Ok(HttpResponse::Ok().json(json!({
         "issuer": base,
         "authorization_endpoint": format!("{dashboard}/oauth/authorize"),
         "token_endpoint": format!("{base}/api/oauth/token"),
@@ -72,7 +78,7 @@ async fn authorization_server(config: web::Data<Config>) -> HttpResponse {
         "token_endpoint_auth_methods_supported": ["none"],
         "client_id_metadata_document_supported": true,
         "authorization_response_iss_parameter_supported": true,
-    }))
+    })))
 }
 
 /// An authorization request, as the client put it in the authorize URL.
@@ -162,8 +168,8 @@ pub async fn get_authorization(
     _user: AuthenticatedUser,
     query: web::Query<AuthorizationRequest>,
 ) -> AppResult<HttpResponse> {
-    let base = base_url(&config);
-    let (client, _) = verify(&query, &base, clients.get_ref().as_ref()).await?;
+    let base = issuer(&config).ok_or_else(no_issuer)?;
+    let (client, _) = verify(&query, base, clients.get_ref().as_ref()).await?;
     let redirect_host = url::Url::parse(&query.redirect_uri)
         .ok()
         .and_then(|u| u.host_str().map(str::to_string))
@@ -195,10 +201,10 @@ pub async fn decide_authorization(
     user: AuthenticatedUser,
     body: web::Json<AuthorizationDecision>,
 ) -> AppResult<HttpResponse> {
-    let base = base_url(&config);
+    let base = issuer(&config).ok_or_else(no_issuer)?;
     let request = &body.request;
     // Verified again: the page could have been handed anything since.
-    let (client, resource) = verify(request, &base, clients.get_ref().as_ref()).await?;
+    let (client, resource) = verify(request, base, clients.get_ref().as_ref()).await?;
 
     let mut redirect = url::Url::parse(&request.redirect_uri)
         .map_err(|_| AppError::Validation("redirect_uri is not a URL".into()))?;
@@ -223,7 +229,7 @@ pub async fn decide_authorization(
         }
         // RFC 9207: names the issuer, so a client cannot be tricked into
         // redeeming this code at another server's token endpoint.
-        query.append_pair("iss", &base);
+        query.append_pair("iss", base);
     }
     Ok(HttpResponse::Ok().json(AuthorizationRedirect {
         redirect_to: redirect.into(),

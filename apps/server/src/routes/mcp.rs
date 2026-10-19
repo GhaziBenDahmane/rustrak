@@ -39,15 +39,17 @@ pub struct McpSettings {
 pub struct McpStatus {
     pub enabled: bool,
     /// The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks
-    /// the resource against; the browser's own origin may differ.
-    pub url: String,
+    /// the resource against; the browser's own origin may differ. `null`
+    /// without `PUBLIC_URL`, when signing in is off.
+    #[cfg_attr(feature = "openapi", schema(required))]
+    pub url: Option<String>,
 }
 
 impl McpStatus {
     fn new(enabled: bool, config: &Config) -> Self {
         Self {
             enabled,
-            url: oauth::mcp_resource(&oauth::base_url(config)),
+            url: oauth::issuer(config).map(oauth::mcp_resource),
         }
     }
 }
@@ -115,7 +117,11 @@ pub async fn update_settings(
 /// token. `None` when neither checks out. Bearer only: an MCP client has no
 /// dashboard cookie, and refusing one keeps a browser tab from calling tools
 /// on its user's behalf.
-async fn caller(req: &HttpRequest, pool: &DbPool, resource: &str) -> AppResult<Option<ApiActor>> {
+async fn caller(
+    req: &HttpRequest,
+    pool: &DbPool,
+    resource: Option<&str>,
+) -> AppResult<Option<ApiActor>> {
     let Some(token) = req
         .headers()
         .get(AUTHORIZATION)
@@ -125,6 +131,10 @@ async fn caller(req: &HttpRequest, pool: &DbPool, resource: &str) -> AppResult<O
         return Ok(None);
     };
     let user_id = if token.starts_with(ACCESS_PREFIX) {
+        // Without an issuer no OAuth token was ever valid here.
+        let Some(resource) = resource else {
+            return Ok(None);
+        };
         match OAuthService::authenticate(pool, token.trim(), resource).await? {
             Some(user_id) => Some(user_id),
             None => return Ok(None),
@@ -153,17 +163,20 @@ pub async fn serve(
     if !is_enabled(pool.get_ref()).await? {
         return Err(AppError::NotFound("Not found".to_string()));
     }
-    let base = oauth::base_url(&config);
-    let Some(actor) = caller(&req, pool.get_ref(), &oauth::mcp_resource(&base)).await? else {
-        // RFC 9728: tells an OAuth client where to start authorizing.
+    let base = oauth::issuer(&config);
+    let resource = base.map(oauth::mcp_resource);
+    let Some(actor) = caller(&req, pool.get_ref(), resource.as_deref()).await? else {
+        // RFC 9728: tells an OAuth client where to start authorizing, when
+        // there is an issuer to send it to.
+        let challenge = match base {
+            Some(base) => format!(
+                "Bearer resource_metadata=\"{}\"",
+                oauth::resource_metadata_url(base)
+            ),
+            None => "Bearer".to_string(),
+        };
         return Ok(HttpResponse::Unauthorized()
-            .insert_header((
-                WWW_AUTHENTICATE,
-                format!(
-                    "Bearer resource_metadata=\"{}\"",
-                    oauth::resource_metadata_url(&base)
-                ),
-            ))
+            .insert_header((WWW_AUTHENTICATE, challenge))
             .json(serde_json::json!({
                 "error": { "type": "Unauthorized", "message": "A valid bearer token is required" }
             })));

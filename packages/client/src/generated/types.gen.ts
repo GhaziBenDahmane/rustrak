@@ -1034,9 +1034,10 @@ export type McpStatus = {
     enabled: boolean;
     /**
      * The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks
-     * the resource against; the browser's own origin may differ.
+     * the resource against; the browser's own origin may differ. `null`
+     * without `PUBLIC_URL`, when signing in is off.
      */
-    url: string;
+    url: string | null;
 };
 
 /**

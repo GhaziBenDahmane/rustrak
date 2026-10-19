@@ -194,15 +194,6 @@ impl Config {
     /// `DASHBOARD_URL`, else `PUBLIC_URL` (the server serves the dashboard, so
     /// the address SDKs reach is also the one people open), else the bind
     /// address.
-    /// Where this server is reached from outside: `PUBLIC_URL`, or the
-    /// address it listens on. Names DSNs and the OAuth issuer, so it is never
-    /// read from a request, whose headers are the caller's to choose.
-    pub fn public_base_url(&self) -> String {
-        self.public_url
-            .clone()
-            .unwrap_or_else(|| format!("http://{}:{}", self.host, self.port))
-    }
-
     pub fn dashboard_url(&self) -> String {
         self.dashboard
             .url

@@ -810,7 +810,7 @@ export const zMcpSettings = z.object({
  */
 export const zMcpStatus = z.object({
     enabled: z.boolean(),
-    url: z.string()
+    url: z.string().nullable()
 });
 
 /**
