@@ -254,6 +254,16 @@ fn test_parse_container_accepts_rfc3339_timestamp() {
             r#"{{"items":[{{"timestamp":"{ts}","trace_id":"5b8efff798038103d269b633813fc60c","level":"info","body":"hello"}}]}}"#
         );
         let logs = LogContainer::parse(body.as_bytes()).expect(ts);
-        assert_eq!(logs.len(), 1);
+        let expected = chrono::DateTime::parse_from_rfc3339(ts).unwrap();
+        assert_eq!(logs[0].timestamp, Some(expected.to_utc()));
     }
+}
+
+/// Relay rejects a timestamp at or before the epoch, not one just after it.
+#[test]
+fn test_parse_container_keeps_sub_millisecond_after_epoch() {
+    let logs =
+        LogContainer::parse(br#"{"items":[{"timestamp":0.0005},{"timestamp":0.0}]}"#).unwrap();
+    assert!(logs[0].timestamp.is_some());
+    assert!(logs[1].timestamp.is_none());
 }

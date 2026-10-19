@@ -44,8 +44,8 @@ where
 
 /// A Relay `Timestamp` field: epoch seconds or RFC 3339. An unparseable value
 /// is `None`, as Relay annotates it away instead of failing the whole item, and
-/// so is one at or before 1970, which Relay's `TimestampProcessor` rejects
-/// (relay-event-normalization/src/timestamp.rs).
+/// so is one at or before 1970, far past what Relay's `eap::time::normalize`
+/// lets through for logs and spans (relay-event-normalization/src/eap/time.rs).
 pub(crate) fn deserialize_timestamp<'de, D>(
     deserializer: D,
 ) -> Result<Option<chrono::DateTime<chrono::Utc>>, D::Error>
@@ -56,7 +56,7 @@ where
     Ok(raw
         .as_ref()
         .and_then(crate::digest::processors::timestamp_from_value)
-        .filter(|dt| dt.timestamp_millis() > 0))
+        .filter(|dt| *dt > chrono::DateTime::UNIX_EPOCH))
 }
 
 pub mod alert;
