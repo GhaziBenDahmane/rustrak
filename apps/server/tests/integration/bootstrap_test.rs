@@ -5,17 +5,14 @@
 use crate::common::TestDb;
 use rustrak::bootstrap;
 use rustrak::services::UsersService;
-use std::env;
 
 #[tokio::test]
 async fn test_bootstrap_creates_superuser_when_empty() {
     let db = TestDb::new().await;
-
-    // Set CREATE_SUPERUSER environment variable
-    env::set_var("CREATE_SUPERUSER", "admin@example.com:password123");
+    let spec = Some("admin@example.com:password123");
 
     // Run bootstrap
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     // Verify user was created
@@ -27,9 +24,6 @@ async fn test_bootstrap_creates_superuser_when_empty() {
     assert_eq!(user.email, "admin@example.com");
     assert!(user.is_admin());
     assert!(user.is_active);
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
@@ -44,12 +38,10 @@ async fn test_bootstrap_skips_when_users_exist() {
     UsersService::create_user(&db.pool, &req, rustrak::models::UserRole::Member)
         .await
         .unwrap();
-
-    // Set CREATE_SUPERUSER environment variable
-    env::set_var("CREATE_SUPERUSER", "admin@example.com:password123");
+    let spec = Some("admin@example.com:password123");
 
     // Run bootstrap - should skip
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     // Verify admin was NOT created
@@ -57,20 +49,14 @@ async fn test_bootstrap_skips_when_users_exist() {
         .await
         .unwrap();
     assert!(admin.is_none());
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
 async fn test_bootstrap_skips_when_env_not_set() {
     let db = TestDb::new().await;
-
-    // Ensure CREATE_SUPERUSER is not set
-    env::remove_var("CREATE_SUPERUSER");
-
+    let spec = None;
     // Run bootstrap
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     // Verify no users were created
@@ -83,13 +69,10 @@ async fn test_bootstrap_fails_with_invalid_format() {
     let db = TestDb::new().await;
 
     // Invalid format (missing colon)
-    env::set_var("CREATE_SUPERUSER", "admin@example.com");
+    let spec = Some("admin@example.com");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_err());
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
@@ -97,17 +80,14 @@ async fn test_bootstrap_fails_with_empty_password() {
     let db = TestDb::new().await;
 
     // Empty password should be rejected
-    env::set_var("CREATE_SUPERUSER", "admin@example.com:");
+    let spec = Some("admin@example.com:");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_err());
 
     // Verify no user was created
     let count = UsersService::user_count(&db.pool).await.unwrap();
     assert_eq!(count, 0);
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
@@ -115,29 +95,23 @@ async fn test_bootstrap_with_empty_string() {
     let db = TestDb::new().await;
 
     // Empty string
-    env::set_var("CREATE_SUPERUSER", "");
+    let spec = Some("");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     // Verify no users were created
     let count = UsersService::user_count(&db.pool).await.unwrap();
     assert_eq!(count, 0);
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
 async fn test_bootstrap_creates_admin_user() {
     let db = TestDb::new().await;
 
-    env::set_var(
-        "CREATE_SUPERUSER",
-        "superadmin@example.com:superpassword123",
-    );
+    let spec = Some("superadmin@example.com:superpassword123");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     let user = UsersService::get_by_email(&db.pool, "superadmin@example.com")
@@ -147,18 +121,15 @@ async fn test_bootstrap_creates_admin_user() {
 
     // Verify it's an admin user
     assert!(user.is_admin());
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
 async fn test_bootstrap_password_is_hashed() {
     let db = TestDb::new().await;
 
-    env::set_var("CREATE_SUPERUSER", "hashcheck@example.com:testpassword123");
+    let spec = Some("hashcheck@example.com:testpassword123");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     let user = UsersService::get_by_email(&db.pool, "hashcheck@example.com")
@@ -172,9 +143,6 @@ async fn test_bootstrap_password_is_hashed() {
 
     // Verify password can be verified
     assert!(user.verify_password("testpassword123").unwrap());
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
@@ -183,25 +151,22 @@ async fn test_bootstrap_with_email_containing_colon() {
 
     // Email with colon in local part is invalid according to our email regex constraint
     // This tests splitn behavior - splits on first colon
-    env::set_var("CREATE_SUPERUSER", "test:email@example.com:password123");
+    let spec = Some("test:email@example.com:password123");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
 
     // Should fail because email doesn't match regex constraint
     assert!(result.is_err());
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
 async fn test_bootstrap_idempotent_across_restarts() {
     let db = TestDb::new().await;
 
-    env::set_var("CREATE_SUPERUSER", "restart@example.com:password123");
+    let spec = Some("restart@example.com:password123");
 
     // First "startup"
-    let result1 = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result1 = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result1.is_ok());
 
     let user1 = UsersService::get_by_email(&db.pool, "restart@example.com")
@@ -210,7 +175,7 @@ async fn test_bootstrap_idempotent_across_restarts() {
         .unwrap();
 
     // Second "startup" - should skip
-    let result2 = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result2 = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result2.is_ok());
 
     // Verify no duplicate was created
@@ -224,9 +189,6 @@ async fn test_bootstrap_idempotent_across_restarts() {
 
     // Same user ID confirms no duplicate
     assert_eq!(user1.id, user2.id);
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }
 
 #[tokio::test]
@@ -234,9 +196,9 @@ async fn test_bootstrap_with_whitespace_in_email() {
     let db = TestDb::new().await;
 
     // Email with surrounding whitespace
-    env::set_var("CREATE_SUPERUSER", "  whitespace@example.com  :password123");
+    let spec = Some("  whitespace@example.com  :password123");
 
-    let result = bootstrap::create_superuser_if_needed(&db.pool).await;
+    let result = bootstrap::create_superuser_if_needed(&db.pool, spec).await;
     assert!(result.is_ok());
 
     // Email should be trimmed
@@ -246,7 +208,4 @@ async fn test_bootstrap_with_whitespace_in_email() {
         .unwrap();
 
     assert_eq!(user.email, "whitespace@example.com");
-
-    // Clean up
-    env::remove_var("CREATE_SUPERUSER");
 }

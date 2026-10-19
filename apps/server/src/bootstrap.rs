@@ -1,17 +1,20 @@
 use log::{info, warn};
-use std::env;
 
 use crate::db::DbPool;
 use crate::error::AppResult;
 use crate::models::{CreateUserRequest, UserRole};
 use crate::services::UsersService;
 
-/// Bootstrap initial superuser from CREATE_SUPERUSER env var
+/// Bootstrap initial superuser from the CREATE_SUPERUSER env var, which the
+/// caller reads, so nothing here depends on process-wide state.
 /// Format: "email:password"
 /// Only creates user if database is empty
-pub async fn create_superuser_if_needed(pool: &DbPool) -> AppResult<()> {
-    let create_superuser = match env::var("CREATE_SUPERUSER") {
-        Ok(val) if !val.is_empty() => val,
+pub async fn create_superuser_if_needed(
+    pool: &DbPool,
+    create_superuser: Option<&str>,
+) -> AppResult<()> {
+    let create_superuser = match create_superuser {
+        Some(val) if !val.is_empty() => val,
         _ => {
             info!("CREATE_SUPERUSER not set, skipping superuser creation");
             return Ok(());
