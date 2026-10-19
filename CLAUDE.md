@@ -29,7 +29,7 @@ who never installs Node.
 | `apps/docs` | Public documentation site (Nextra) |
 | `packages/ui` | `@rustrak/ui`, the design system. Storybook only for now |
 | `packages/client` | `@rustrak/client`, the TypeScript API client |
-| `packages/mcp` | `@rustrak/mcp`, MCP server over the client |
+| `packages/mcp` | `@rustrak/mcp`, deprecated: a stub that points to `/mcp`. Removed after its last release |
 | `packages/test-sentry` | CLI to send test events to a DSN |
 | `packages/benchmarks` | Load and throughput benchmarks |
 

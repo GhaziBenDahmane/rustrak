@@ -127,8 +127,8 @@ export function McpSettings({ initial, isAdmin }: McpSettingsProps) {
 
 /** The tabs each way in offers: signing in also covers the web apps. */
 const TABS: Record<ConnectMethod, readonly (SnippetClient | 'web')[]> = {
-  oauth: ['web', 'claudeCode', 'json'],
-  token: ['claudeCode', 'json'],
+  oauth: ['web', 'claudeCode', 'json', 'vscode'],
+  token: ['claudeCode', 'json', 'vscode'],
 };
 
 function MethodCard({

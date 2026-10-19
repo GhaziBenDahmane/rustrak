@@ -1748,14 +1748,15 @@
         "step1": "Crea un token en",
         "createToken": "Tokens de API",
         "step2": "Añade la configuración de abajo a tu cliente.",
-        "step3": "Cambia YOUR_TOKEN por el token que creaste.",
+        "step3": "Cambia YOUR_TOKEN por el token que creaste (VS Code te lo pide y lo guarda cifrado).",
         "note": "Actúa con los permisos del dueño del token. Revocar el token lo desconecta."
       },
       "clients": {
         "web": "claude.ai / ChatGPT",
         "claudeCode": "Claude Code",
-        "json": "Cursor / VS Code",
-        "webSteps": "En claude.ai, abre Settings → Connectors → Add custom connector; en ChatGPT, añade un conector personalizado. Pega la URL del endpoint y guarda: te traerá aquí para iniciar sesión y aprobar."
+        "json": "Cursor / otros",
+        "webSteps": "En claude.ai, abre Settings → Connectors → Add custom connector; en ChatGPT, añade un conector personalizado. Pega la URL del endpoint y guarda: te traerá aquí para iniciar sesión y aprobar.",
+        "vscode": "VS Code"
       },
       "connected": {
         "title": "Asistentes conectados",
