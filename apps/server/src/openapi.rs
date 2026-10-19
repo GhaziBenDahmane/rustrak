@@ -171,6 +171,7 @@ impl Modify for SecurityAddon {
     ),
     components(schemas(
         crate::routes::mcp::McpSettings,
+        crate::routes::mcp::McpStatus,
         crate::routes::oauth::AuthorizationRequest,
         crate::routes::oauth::AuthorizationInfo,
         crate::routes::oauth::AuthorizationDecision,

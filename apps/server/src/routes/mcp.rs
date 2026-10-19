@@ -26,11 +26,30 @@ use crate::mcp::RustrakMcp;
 use crate::routes::oauth;
 use crate::services::oauth::{OAuthService, ACCESS_PREFIX};
 
-/// Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
-#[derive(Debug, Serialize, Deserialize)]
+/// Turns `/mcp` on or off: the body of `PUT /api/settings/mcp`.
+#[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpSettings {
     pub enabled: bool,
+}
+
+/// Whether `/mcp` answers, and the URL to give an assistant.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct McpStatus {
+    pub enabled: bool,
+    /// The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks
+    /// the resource against; the browser's own origin may differ.
+    pub url: String,
+}
+
+impl McpStatus {
+    fn new(enabled: bool, config: &Config) -> Self {
+        Self {
+            enabled,
+            url: oauth::mcp_resource(&oauth::base_url(config)),
+        }
+    }
 }
 
 async fn is_enabled(pool: &DbPool) -> AppResult<bool> {
@@ -47,16 +66,19 @@ async fn is_enabled(pool: &DbPool) -> AppResult<bool> {
     operation_id = "settings.getMcp",
     tag = "Settings",
     responses(
-        (status = 200, description = "Whether the MCP endpoint is on", body = McpSettings),
+        (status = 200, description = "Whether the MCP endpoint is on, and its URL", body = McpStatus),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
 ))]
 /// Whether the MCP endpoint at `/mcp` is on.
-pub async fn get_settings(pool: web::Data<DbPool>, _actor: ApiActor) -> AppResult<HttpResponse> {
-    Ok(HttpResponse::Ok().json(McpSettings {
-        enabled: is_enabled(pool.get_ref()).await?,
-    }))
+pub async fn get_settings(
+    pool: web::Data<DbPool>,
+    config: web::Data<Config>,
+    _actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let enabled = is_enabled(pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(McpStatus::new(enabled, &config)))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -66,7 +88,7 @@ pub async fn get_settings(pool: web::Data<DbPool>, _actor: ApiActor) -> AppResul
     tag = "Settings",
     request_body = McpSettings,
     responses(
-        (status = 200, description = "The MCP endpoint's new state", body = McpSettings),
+        (status = 200, description = "The MCP endpoint's new state, and its URL", body = McpStatus),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Not an instance admin", body = crate::error::ErrorResponse),
     ),
@@ -75,6 +97,7 @@ pub async fn get_settings(pool: web::Data<DbPool>, _actor: ApiActor) -> AppResul
 /// Turns the MCP endpoint at `/mcp` on or off. Instance admins only.
 pub async fn update_settings(
     pool: web::Data<DbPool>,
+    config: web::Data<Config>,
     actor: ApiActor,
     body: web::Json<McpSettings>,
 ) -> AppResult<HttpResponse> {
@@ -85,7 +108,7 @@ pub async fn update_settings(
         .bind(body.enabled)
         .execute(pool.get_ref())
         .await?;
-    Ok(HttpResponse::Ok().json(body.into_inner()))
+    Ok(HttpResponse::Ok().json(McpStatus::new(body.enabled, &config)))
 }
 
 /// Who is calling `/mcp`: an OAuth access token issued for it, or an API

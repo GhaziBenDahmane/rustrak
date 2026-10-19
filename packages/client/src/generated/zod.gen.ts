@@ -799,10 +799,18 @@ export const zManifestResponse = z.object({
 });
 
 /**
- * Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
+ * Turns `/mcp` on or off: the body of `PUT /api/settings/mcp`.
  */
 export const zMcpSettings = z.object({
     enabled: z.boolean()
+});
+
+/**
+ * Whether `/mcp` answers, and the URL to give an assistant.
+ */
+export const zMcpStatus = z.object({
+    enabled: z.boolean(),
+    url: z.string()
 });
 
 /**
@@ -3032,16 +3040,16 @@ export const zSchedulesPreviewBody = zPreviewSchedule;
 export const zSchedulesPreviewResponse = zSchedulePreview;
 
 /**
- * Whether the MCP endpoint is on
+ * Whether the MCP endpoint is on, and its URL
  */
-export const zSettingsGetMcpResponse = zMcpSettings;
+export const zSettingsGetMcpResponse = zMcpStatus;
 
 export const zSettingsUpdateMcpBody = zMcpSettings;
 
 /**
- * The MCP endpoint's new state
+ * The MCP endpoint's new state, and its URL
  */
-export const zSettingsUpdateMcpResponse = zMcpSettings;
+export const zSettingsUpdateMcpResponse = zMcpStatus;
 
 /**
  * How long ago each project's data arrived, per kind

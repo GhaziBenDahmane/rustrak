@@ -1,4 +1,4 @@
-import type { McpSettings as McpSettingsData } from '@rustrak/client';
+import type { McpStatus } from '@rustrak/client';
 import { Check, Copy, KeyRound, LogIn, TriangleAlert } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useTransition } from 'react';
@@ -32,16 +32,16 @@ import { type CopyFlags, useCopyFlags } from '@/shared/ui/hooks/use-copy-flags';
 import { useSyntaxHighlighter } from '@/shared/ui/hooks/use-syntax-highlighter';
 
 interface McpSettingsProps {
-  initial: McpSettingsData;
+  initial: McpStatus;
   isAdmin: boolean;
 }
 
 /**
  * The switch that opens `/mcp`, and the two ways to connect to it.
  *
- * The URL is this page's own origin: the dashboard and the API are one
- * process, so wherever the reader opened this page from is where their
- * assistant connects.
+ * The URL comes from the server, not this page's origin: OAuth checks the
+ * resource against the configured `PUBLIC_URL`, which a dashboard on its own
+ * host, or one opened by another name, does not share.
  */
 export function McpSettings({ initial, isAdmin }: McpSettingsProps) {
   const t = useTranslations('settings');
@@ -51,7 +51,7 @@ export function McpSettings({ initial, isAdmin }: McpSettingsProps) {
     unavailable: t('mcp.copyUnavailable'),
     hint: (label) => t('mcp.copyUnavailableHint', { label }),
   });
-  const url = `${window.location.origin}/mcp`;
+  const url = initial.url;
 
   const toggle = (next: boolean) => {
     setEnabled(next);

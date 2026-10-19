@@ -52,7 +52,21 @@ pub async fn verify_client(
     client_id: &str,
     redirect_uri: &str,
 ) -> AppResult<ClientMetadata> {
+    // The columns these are stored in hold 2048 and 255 characters; checked
+    // here, so a client outgrowing them is refused before consent rather
+    // than failing the insert after it.
+    if client_id.chars().count() > 2048 || redirect_uri.chars().count() > 2048 {
+        return Err(AppError::Validation(
+            "client_id and redirect_uri must be at most 2048 characters".into(),
+        ));
+    }
     let client = source.fetch(client_id).await?;
+    let name = client.client_name.trim();
+    if name.is_empty() || name.chars().count() > 255 {
+        return Err(AppError::Validation(
+            "The client's name must be 1 to 255 characters".into(),
+        ));
+    }
     if client.client_id != client_id {
         return Err(AppError::Validation(
             "The client's metadata document names a different client_id".into(),
@@ -217,7 +231,29 @@ pub fn is_public(ip: IpAddr) -> bool {
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_public(IpAddr::V4(v4));
             }
-            let first = v6.segments()[0];
+            let s = v6.segments();
+            let embedded = |hi: u16, lo: u16| {
+                let [a, b] = hi.to_be_bytes();
+                let [c, d] = lo.to_be_bytes();
+                IpAddr::V4(std::net::Ipv4Addr::new(a, b, c, d))
+            };
+            // Addresses that carry an IPv4 one are as public as it is: NAT64
+            // (64:ff9b::/96, which DNS64 also hands out for public hosts on an
+            // IPv6-only network), IPv4-compatible (::a.b.c.d) and 6to4.
+            if s[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+                return is_public(embedded(s[6], s[7]));
+            }
+            if s[..6] == [0; 6] && !v6.is_loopback() && !v6.is_unspecified() {
+                return is_public(embedded(s[6], s[7]));
+            }
+            if s[0] == 0x2002 {
+                return is_public(embedded(s[1], s[2]));
+            }
+            // Teredo and local-use NAT64 hide or vary where they lead.
+            if (s[0] == 0x2001 && s[1] == 0) || (s[0] == 0x64 && s[1] == 0xff9b && s[2] == 1) {
+                return false;
+            }
+            let first = s[0];
             !(v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_multicast()
@@ -368,9 +404,10 @@ impl OAuthService {
     /// Replaces a grant's tokens. `None` when the refresh token is unknown,
     /// already used, expired, or held by another client.
     ///
-    /// A refresh token presented again after it was rotated means two parties
-    /// hold it, and the server cannot tell the thief from the client, so the
-    /// grant is revoked for both (RFC 9700 4.14.2). The user approves again.
+    /// A refresh token presented again after it was rotated, however many
+    /// rotations ago, means two parties hold it, and the server cannot tell
+    /// the thief from the client, so the grant is revoked for both
+    /// (RFC 9700 4.14.2). The user approves again.
     pub async fn refresh(
         pool: &DbPool,
         refresh_token: &str,
@@ -385,10 +422,13 @@ impl OAuthService {
         .fetch_optional(pool)
         .await?
         else {
-            sqlx::query("DELETE FROM oauth_grants WHERE previous_refresh_hash = $1")
-                .bind(&old)
-                .execute(pool)
-                .await?;
+            sqlx::query(
+                "DELETE FROM oauth_grants WHERE id = \
+                 (SELECT grant_id FROM oauth_spent_refresh_tokens WHERE refresh_hash = $1)",
+            )
+            .bind(&old)
+            .execute(pool)
+            .await?;
             return Ok(None);
         };
         if grant.client_id != client_id || grant.refresh_expires_at <= Utc::now() {
@@ -399,8 +439,7 @@ impl OAuthService {
         // same token cannot both win.
         let rotated = sqlx::query(
             "UPDATE oauth_grants SET access_hash = $1, access_expires_at = $2, \
-             refresh_hash = $3, refresh_expires_at = $4, previous_refresh_hash = $6 \
-             WHERE id = $5 AND refresh_hash = $6",
+             refresh_hash = $3, refresh_expires_at = $4 WHERE id = $5 AND refresh_hash = $6",
         )
         .bind(hash(&pair.access_token))
         .bind(access_expires)
@@ -411,7 +450,19 @@ impl OAuthService {
         .execute(pool)
         .await?
         .rows_affected();
-        Ok((rotated == 1).then_some(pair))
+        if rotated != 1 {
+            return Ok(None);
+        }
+        // Kept for the grant's lifetime (deleted with it), so that any spent
+        // token coming back is recognised.
+        sqlx::query(
+            "INSERT INTO oauth_spent_refresh_tokens (refresh_hash, grant_id) VALUES ($1, $2)",
+        )
+        .bind(&old)
+        .bind(grant.id)
+        .execute(pool)
+        .await?;
+        Ok(Some(pair))
     }
 
     /// The user an access token acts for, if it is current and was issued for
@@ -502,10 +553,23 @@ mod tests {
             "fd00::1",
             "fe80::1",
             "::ffff:127.0.0.1",
+            // NAT64, 6to4 and IPv4-compatible addresses carry an IPv4 one.
+            "64:ff9b::a00:1",
+            "2002:a00:1::1",
+            "::10.0.0.1",
+            // Teredo and local-use NAT64 hide or vary where they lead.
+            "2001:0:4136:e378::1",
+            "64:ff9b:1::a00:1",
         ] {
             assert!(!is_public(private.parse().unwrap()), "{private}");
         }
-        for public in ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"] {
+        for public in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "2606:4700:4700::1111",
+            // On an IPv6-only network DNS64 answers this for an IPv4 host.
+            "64:ff9b::808:808",
+        ] {
             assert!(is_public(public.parse().unwrap()), "{public}");
         }
     }

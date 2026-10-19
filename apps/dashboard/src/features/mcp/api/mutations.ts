@@ -1,7 +1,7 @@
 import type {
   AuthorizationRedirect,
   AuthorizationRequest,
-  McpSettings,
+  McpStatus,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -10,7 +10,7 @@ import { createClient } from '@/shared/api/rustrak';
 /** Opens or closes `/mcp`. Instance admins only; anyone else gets a 403. */
 export async function updateMcpSettings(
   enabled: boolean,
-): Promise<Result<McpSettings, RustrakError>> {
+): Promise<Result<McpStatus, RustrakError>> {
   const client = await createClient();
   return client.settings.updateMcp({ body: { enabled } });
 }

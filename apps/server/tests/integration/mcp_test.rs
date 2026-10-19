@@ -185,7 +185,12 @@ async fn mcp_is_off_until_an_admin_turns_it_on() {
         .insert_header(("Authorization", format!("Bearer {admin}")))
         .to_request();
     let body: Value = test::call_and_read_body_json(&app, req).await;
-    assert_eq!(body, json!({ "enabled": true }));
+    // The URL to give an assistant is the server's configured one, which OAuth
+    // checks the resource against; the browser's origin may not be it.
+    assert_eq!(
+        body,
+        json!({ "enabled": true, "url": "http://127.0.0.1:0/mcp" })
+    );
 
     let resp = test::call_service(
         &app,

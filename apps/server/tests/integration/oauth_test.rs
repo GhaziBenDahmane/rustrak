@@ -34,20 +34,25 @@ const VERIFIER: &str = "a-verifier-that-is-long-enough-to-be-valid-0123456789";
 const SCRIPT_CLIENT: &str = "https://evil.example/oauth/metadata.json";
 const SCRIPT_REDIRECT: &str = "javascript:alert(document.domain)//";
 
-/// Serves two clients' metadata, and refuses every other `client_id`.
+/// A client whose document names it with more than the 255 characters a
+/// connection's name may hold.
+const LONG_NAME_CLIENT: &str = "https://long.example/oauth/metadata.json";
+
+/// Serves these clients' metadata, and refuses every other `client_id`.
 struct FakeClients;
 
 #[async_trait::async_trait]
 impl ClientMetadataSource for FakeClients {
     async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata> {
-        let redirect = match client_id {
-            CLIENT_ID => REDIRECT,
-            SCRIPT_CLIENT => SCRIPT_REDIRECT,
+        let (redirect, name) = match client_id {
+            CLIENT_ID => (REDIRECT, "Example Assistant".to_string()),
+            SCRIPT_CLIENT => (SCRIPT_REDIRECT, "Example Assistant".to_string()),
+            LONG_NAME_CLIENT => (REDIRECT, "x".repeat(256)),
             _ => return Err(AppError::Validation("unknown client".into())),
         };
         Ok(serde_json::from_value(json!({
             "client_id": client_id,
-            "client_name": "Example Assistant",
+            "client_name": name,
             "redirect_uris": [redirect],
             "token_endpoint_auth_method": "none"
         }))
@@ -523,6 +528,15 @@ async fn a_request_that_cannot_be_trusted_is_never_redirected() {
     script["client_id"] = json!(SCRIPT_CLIENT);
     script["redirect_uri"] = json!(SCRIPT_REDIRECT);
     cases.push(("a redirect that runs script", script));
+    let mut long_name = authorization();
+    long_name["client_id"] = json!(LONG_NAME_CLIENT);
+    cases.push(("a name longer than a connection can hold", long_name));
+    let mut long_redirect = authorization();
+    long_redirect["redirect_uri"] = json!(format!("{REDIRECT}?{}", "x".repeat(2048)));
+    cases.push((
+        "a redirect longer than a connection can hold",
+        long_redirect,
+    ));
     let mut unknown = authorization();
     unknown["client_id"] = json!("https://unknown.example/metadata.json");
     cases.push(("an unknown client", unknown));
@@ -751,4 +765,32 @@ async fn consent_happens_where_the_dashboard_is_served() {
         server["token_endpoint"],
         format!("{ISSUER}/api/oauth/token")
     );
+}
+
+#[actix_web::test]
+async fn a_refresh_token_spent_generations_ago_still_disconnects() {
+    let db = TestDb::new().await;
+    let app = app(&db.pool).await;
+    enable_mcp(&app, &db.pool).await;
+    let cookie = signed_in_member(&app, &db.pool).await;
+    let code = param(&decide(&app, &cookie, authorization(), true).await, "code").unwrap();
+    let stolen = exchange(&app, &code).await.1["refresh_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // The thief rotates twice before the client next refreshes...
+    let second = token(&app, &refresh_form(&stolen)).await.1;
+    let third = token(
+        &app,
+        &refresh_form(second["refresh_token"].as_str().unwrap()),
+    )
+    .await
+    .1;
+    let access = third["access_token"].as_str().unwrap();
+    assert_eq!(list_projects(&app, access).await.0, 200);
+
+    // ...and the client's old token still gives the theft away.
+    assert_eq!(token(&app, &refresh_form(&stolen)).await.0, 400);
+    assert_eq!(list_projects(&app, access).await.0, 401);
 }

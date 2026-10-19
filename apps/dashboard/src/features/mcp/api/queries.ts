@@ -1,7 +1,7 @@
 import type {
   AuthorizationInfo,
   AuthorizationRequest,
-  McpSettings,
+  McpStatus,
   OAuthGrant,
   Result,
   RustrakError,
@@ -10,7 +10,7 @@ import { createClient } from '@/shared/api/rustrak';
 
 /** Whether the server answers MCP clients at `/mcp`. */
 export async function getMcpSettings(): Promise<
-  Result<McpSettings, RustrakError>
+  Result<McpStatus, RustrakError>
 > {
   const client = await createClient();
   return client.settings.getMcp();

@@ -8689,11 +8689,11 @@
         "operationId": "settings.getMcp",
         "responses": {
           "200": {
-            "description": "Whether the MCP endpoint is on",
+            "description": "Whether the MCP endpoint is on, and its URL",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/McpSettings"
+                  "$ref": "#/components/schemas/McpStatus"
                 }
               }
             }
@@ -8733,11 +8733,11 @@
         },
         "responses": {
           "200": {
-            "description": "The MCP endpoint's new state",
+            "description": "The MCP endpoint's new state, and its URL",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/McpSettings"
+                  "$ref": "#/components/schemas/McpStatus"
                 }
               }
             }
@@ -12966,13 +12966,30 @@
       },
       "McpSettings": {
         "type": "object",
-        "description": "Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.",
+        "description": "Turns `/mcp` on or off: the body of `PUT /api/settings/mcp`.",
         "required": [
           "enabled"
         ],
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "McpStatus": {
+        "type": "object",
+        "description": "Whether `/mcp` answers, and the URL to give an assistant.",
+        "required": [
+          "enabled",
+          "url"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": "string",
+            "description": "The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks\nthe resource against; the browser's own origin may differ."
           }
         }
       },
