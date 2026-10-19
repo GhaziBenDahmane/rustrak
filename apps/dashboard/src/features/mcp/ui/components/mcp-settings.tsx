@@ -1,4 +1,4 @@
-import type { McpSettings as McpSettingsData } from '@rustrak/client';
+import type { McpStatus } from '@rustrak/client';
 import { Check, Copy, KeyRound, LogIn, TriangleAlert } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useTransition } from 'react';
@@ -32,16 +32,17 @@ import { type CopyFlags, useCopyFlags } from '@/shared/ui/hooks/use-copy-flags';
 import { useSyntaxHighlighter } from '@/shared/ui/hooks/use-syntax-highlighter';
 
 interface McpSettingsProps {
-  initial: McpSettingsData;
+  initial: McpStatus;
   isAdmin: boolean;
 }
 
 /**
  * The switch that opens `/mcp`, and the two ways to connect to it.
  *
- * The URL is this page's own origin: the dashboard and the API are one
- * process, so wherever the reader opened this page from is where their
- * assistant connects.
+ * The URL comes from the server, not this page's origin: OAuth checks the
+ * resource against the configured `PUBLIC_URL`, which a dashboard on its own
+ * host, or one opened by another name, does not share. Without `PUBLIC_URL`
+ * there is no signing in, and tokens work against this page's origin.
  */
 export function McpSettings({ initial, isAdmin }: McpSettingsProps) {
   const t = useTranslations('settings');
@@ -51,7 +52,8 @@ export function McpSettings({ initial, isAdmin }: McpSettingsProps) {
     unavailable: t('mcp.copyUnavailable'),
     hint: (label) => t('mcp.copyUnavailableHint', { label }),
   });
-  const url = `${window.location.origin}/mcp`;
+  const signIn = initial.url !== null;
+  const url = initial.url ?? `${window.location.origin}/mcp`;
 
   const toggle = (next: boolean) => {
     setEnabled(next);
@@ -111,7 +113,12 @@ export function McpSettings({ initial, isAdmin }: McpSettingsProps) {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <MethodCard method="oauth" url={url} copyFlags={copyFlags} />
+        <MethodCard
+          method="oauth"
+          url={url}
+          copyFlags={copyFlags}
+          unavailable={!signIn}
+        />
         <MethodCard method="token" url={url} copyFlags={copyFlags} />
       </div>
     </div>
@@ -128,10 +135,13 @@ function MethodCard({
   method,
   url,
   copyFlags,
+  unavailable = false,
 }: {
   method: ConnectMethod;
   url: string;
   copyFlags: CopyFlags;
+  /** Signing in needs `PUBLIC_URL`, which this server lacks. */
+  unavailable?: boolean;
 }) {
   const t = useTranslations('settings');
   const Icon = method === 'oauth' ? LogIn : KeyRound;
@@ -149,6 +159,12 @@ function MethodCard({
         <CardDescription>{t(`mcp.${method}.description`)}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {unavailable && (
+          <p className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
+            {t('mcp.oauth.needsPublicUrl')}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">
           {t(`mcp.${method}.clients`)}
         </p>

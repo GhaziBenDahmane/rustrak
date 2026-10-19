@@ -52,7 +52,21 @@ pub async fn verify_client(
     client_id: &str,
     redirect_uri: &str,
 ) -> AppResult<ClientMetadata> {
+    // The columns these are stored in hold 2048 and 255 characters; checked
+    // here, so a client outgrowing them is refused before consent rather
+    // than failing the insert after it.
+    if client_id.chars().count() > 2048 || redirect_uri.chars().count() > 2048 {
+        return Err(AppError::Validation(
+            "client_id and redirect_uri must be at most 2048 characters".into(),
+        ));
+    }
     let client = source.fetch(client_id).await?;
+    let name = client.client_name.trim();
+    if name.is_empty() || name.chars().count() > 255 {
+        return Err(AppError::Validation(
+            "The client's name must be 1 to 255 characters".into(),
+        ));
+    }
     if client.client_id != client_id {
         return Err(AppError::Validation(
             "The client's metadata document names a different client_id".into(),
@@ -68,6 +82,11 @@ pub async fn verify_client(
             "Only public clients (token_endpoint_auth_method \"none\") are supported".into(),
         ));
     }
+    if !redirect_allowed(redirect_uri) {
+        return Err(AppError::Validation(
+            "redirect_uri must be https, http on loopback, or an app's own scheme".into(),
+        ));
+    }
     if !client
         .redirect_uris
         .iter()
@@ -78,6 +97,24 @@ pub async fn verify_client(
         ));
     }
     Ok(client)
+}
+
+/// Whether the browser may be sent to `redirect_uri` after consent. The
+/// client's own document registers it, so it must not be able to name
+/// something the browser runs in the dashboard's origin (`javascript:`) or
+/// reads locally: https, plain http only to a loopback address (RFC 8252 7.3),
+/// or a native app's own scheme such as `cursor://` (RFC 8252 7.1).
+pub fn redirect_allowed(redirect_uri: &str) -> bool {
+    let Ok(url) = url::Url::parse(redirect_uri) else {
+        return false;
+    };
+    match url.scheme() {
+        "https" => true,
+        "http" => matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")),
+        "javascript" | "data" | "vbscript" | "file" | "blob" | "about" | "filesystem"
+        | "view-source" => false,
+        _ => !url.cannot_be_a_base(),
+    }
 }
 
 /// Whether `requested` is the redirect `registered` stands for: the same
@@ -111,56 +148,65 @@ const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
 #[async_trait::async_trait]
 impl ClientMetadataSource for HttpClientMetadata {
     async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata> {
-        let invalid = |why: &str| AppError::Validation(format!("client_id: {why}"));
-        let url = url::Url::parse(client_id).map_err(|_| invalid("not a URL"))?;
-        if url.scheme() != "https" || url.path() == "/" || url.fragment().is_some() {
-            return Err(invalid("must be an https URL with a path"));
-        }
-        let host = url.host_str().ok_or_else(|| invalid("has no host"))?;
-        let port = url.port_or_known_default().unwrap_or(443);
-
-        // The URL comes from whoever starts an authorization, so it must not
-        // reach anything a public request could not. The address checked is
-        // the one connected to: resolving again at connect time would let a
-        // rebinding DNS answer differently the second time.
-        let addr: SocketAddr = tokio::net::lookup_host((host, port))
+        // One budget for the whole lookup: a DNS server that never answers
+        // must not hold the consent page past it.
+        tokio::time::timeout(Duration::from_secs(5), fetch_metadata(client_id))
             .await
-            .map_err(|_| invalid("its host does not resolve"))?
-            .next()
-            .ok_or_else(|| invalid("its host does not resolve"))?;
-        if !is_public(addr.ip()) {
-            return Err(invalid("its host is not on the public internet"));
-        }
-
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(5))
-            .resolve(host, addr)
-            .build()
-            .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
-        let mut response = client
-            .get(url.clone())
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|_| invalid("its metadata document could not be fetched"))?;
-        if !response.status().is_success() {
-            return Err(invalid("its metadata document could not be fetched"));
-        }
-        let mut body = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|_| invalid("its metadata document could not be read"))?
-        {
-            body.extend_from_slice(&chunk);
-            if body.len() > MAX_DOCUMENT_BYTES {
-                return Err(invalid("its metadata document is too large"));
-            }
-        }
-        serde_json::from_slice(&body)
-            .map_err(|_| invalid("its metadata document is not valid client metadata"))
+            .map_err(|_| {
+                AppError::Validation("client_id: its metadata document timed out".into())
+            })?
     }
+}
+
+async fn fetch_metadata(client_id: &str) -> AppResult<ClientMetadata> {
+    let invalid = |why: &str| AppError::Validation(format!("client_id: {why}"));
+    let url = url::Url::parse(client_id).map_err(|_| invalid("not a URL"))?;
+    if url.scheme() != "https" || url.path() == "/" || url.fragment().is_some() {
+        return Err(invalid("must be an https URL with a path"));
+    }
+    let host = url.host_str().ok_or_else(|| invalid("has no host"))?;
+    let port = url.port_or_known_default().unwrap_or(443);
+
+    // The URL comes from whoever starts an authorization, so it must not
+    // reach anything a public request could not. The address checked is
+    // the one connected to: resolving again at connect time would let a
+    // rebinding DNS answer differently the second time.
+    let addr: SocketAddr = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|_| invalid("its host does not resolve"))?
+        .next()
+        .ok_or_else(|| invalid("its host does not resolve"))?;
+    if !is_public(addr.ip()) {
+        return Err(invalid("its host is not on the public internet"));
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve(host, addr)
+        .build()
+        .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
+    let mut response = client
+        .get(url.clone())
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|_| invalid("its metadata document could not be fetched"))?;
+    if !response.status().is_success() {
+        return Err(invalid("its metadata document could not be fetched"));
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| invalid("its metadata document could not be read"))?
+    {
+        body.extend_from_slice(&chunk);
+        if body.len() > MAX_DOCUMENT_BYTES {
+            return Err(invalid("its metadata document is too large"));
+        }
+    }
+    serde_json::from_slice(&body)
+        .map_err(|_| invalid("its metadata document is not valid client metadata"))
 }
 
 /// Whether an address is reachable from the public internet: not loopback,
@@ -185,7 +231,29 @@ pub fn is_public(ip: IpAddr) -> bool {
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_public(IpAddr::V4(v4));
             }
-            let first = v6.segments()[0];
+            let s = v6.segments();
+            let embedded = |hi: u16, lo: u16| {
+                let [a, b] = hi.to_be_bytes();
+                let [c, d] = lo.to_be_bytes();
+                IpAddr::V4(std::net::Ipv4Addr::new(a, b, c, d))
+            };
+            // Addresses that carry an IPv4 one are as public as it is: NAT64
+            // (64:ff9b::/96, which DNS64 also hands out for public hosts on an
+            // IPv6-only network), IPv4-compatible (::a.b.c.d) and 6to4.
+            if s[..6] == [0x64, 0xff9b, 0, 0, 0, 0] {
+                return is_public(embedded(s[6], s[7]));
+            }
+            if s[..6] == [0; 6] && !v6.is_loopback() && !v6.is_unspecified() {
+                return is_public(embedded(s[6], s[7]));
+            }
+            if s[0] == 0x2002 {
+                return is_public(embedded(s[1], s[2]));
+            }
+            // Teredo and local-use NAT64 hide or vary where they lead.
+            if (s[0] == 0x2001 && s[1] == 0) || (s[0] == 0x64 && s[1] == 0xff9b && s[2] == 1) {
+                return false;
+            }
+            let first = s[0];
             !(v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_multicast()
@@ -335,28 +403,42 @@ impl OAuthService {
 
     /// Replaces a grant's tokens. `None` when the refresh token is unknown,
     /// already used, expired, or held by another client.
+    ///
+    /// A refresh token presented again after it was rotated, however many
+    /// rotations ago, means two parties hold it, and the server cannot tell
+    /// the thief from the client, so the grant is revoked for both
+    /// (RFC 9700 4.14.2). The user approves again.
     pub async fn refresh(
         pool: &DbPool,
         refresh_token: &str,
         client_id: &str,
     ) -> AppResult<Option<TokenPair>> {
         let old = hash(refresh_token);
+        // Read, rotate and record the spent token in one write transaction,
+        // so there is no moment where it is neither current nor recorded.
+        let mut tx = crate::db::begin_write(pool).await?;
         let Some(grant) = sqlx::query_as::<_, GrantRow>(
             "SELECT id, user_id, client_id, resource, access_expires_at, refresh_expires_at \
              FROM oauth_grants WHERE refresh_hash = $1",
         )
         .bind(&old)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?
         else {
+            sqlx::query(
+                "DELETE FROM oauth_grants WHERE id = \
+                 (SELECT grant_id FROM oauth_spent_refresh_tokens WHERE refresh_hash = $1)",
+            )
+            .bind(&old)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
             return Ok(None);
         };
         if grant.client_id != client_id || grant.refresh_expires_at <= Utc::now() {
             return Ok(None);
         }
         let (pair, access_expires, refresh_expires) = Self::new_pair();
-        // Conditional on the old hash, so two concurrent refreshes with the
-        // same token cannot both win.
         let rotated = sqlx::query(
             "UPDATE oauth_grants SET access_hash = $1, access_expires_at = $2, \
              refresh_hash = $3, refresh_expires_at = $4 WHERE id = $5 AND refresh_hash = $6",
@@ -367,10 +449,30 @@ impl OAuthService {
         .bind(refresh_expires)
         .bind(grant.id)
         .bind(&old)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
-        Ok((rotated == 1).then_some(pair))
+        if rotated != 1 {
+            // Another request rotated this same token first: it was presented
+            // twice, which is reuse like any other.
+            sqlx::query("DELETE FROM oauth_grants WHERE id = $1")
+                .bind(grant.id)
+                .execute(&mut *tx)
+                .await?;
+            tx.commit().await?;
+            return Ok(None);
+        }
+        // Kept for the grant's lifetime (deleted with it), so that any spent
+        // token coming back is recognised.
+        sqlx::query(
+            "INSERT INTO oauth_spent_refresh_tokens (refresh_hash, grant_id) VALUES ($1, $2)",
+        )
+        .bind(&old)
+        .bind(grant.id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(Some(pair))
     }
 
     /// The user an access token acts for, if it is current and was issued for
@@ -461,10 +563,23 @@ mod tests {
             "fd00::1",
             "fe80::1",
             "::ffff:127.0.0.1",
+            // NAT64, 6to4 and IPv4-compatible addresses carry an IPv4 one.
+            "64:ff9b::a00:1",
+            "2002:a00:1::1",
+            "::10.0.0.1",
+            // Teredo and local-use NAT64 hide or vary where they lead.
+            "2001:0:4136:e378::1",
+            "64:ff9b:1::a00:1",
         ] {
             assert!(!is_public(private.parse().unwrap()), "{private}");
         }
-        for public in ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"] {
+        for public in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "2606:4700:4700::1111",
+            // On an IPv6-only network DNS64 answers this for an IPv4 host.
+            "64:ff9b::808:808",
+        ] {
             assert!(is_public(public.parse().unwrap()), "{public}");
         }
     }
@@ -491,6 +606,33 @@ mod tests {
             err.to_string().contains("not on the public internet"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn only_redirects_that_load_a_page_or_open_an_app_are_allowed() {
+        for allowed in [
+            "https://claude.ai/api/mcp/auth_callback",
+            "http://localhost:49581/callback",
+            "http://127.0.0.1/callback",
+            "cursor://anysphere.cursor-mcp/oauth/callback",
+            "com.example.app:/oauth2redirect",
+        ] {
+            assert!(redirect_allowed(allowed), "{allowed}");
+        }
+        for refused in [
+            "javascript:alert(document.domain)//",
+            "javascript://%0aalert(1)",
+            "JavaScript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "vbscript:msgbox(1)",
+            "file:///etc/passwd",
+            "blob:https://evil.example/x",
+            "about:blank",
+            "http://evil.example/callback",
+            "not a url",
+        ] {
+            assert!(!redirect_allowed(refused), "{refused}");
+        }
     }
 
     #[test]

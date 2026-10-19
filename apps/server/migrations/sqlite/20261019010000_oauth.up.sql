@@ -29,3 +29,12 @@ CREATE TABLE oauth_grants (
 );
 
 CREATE INDEX idx_oauth_grants_user ON oauth_grants(user_id);
+
+-- Every refresh token a grant has spent, kept as long as the grant: one coming
+-- back means it was stolen, and ends the connection (RFC 9700 4.14.2).
+CREATE TABLE oauth_spent_refresh_tokens (
+    refresh_hash TEXT PRIMARY KEY,
+    grant_id INTEGER NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_oauth_spent_refresh_tokens_grant ON oauth_spent_refresh_tokens(grant_id);

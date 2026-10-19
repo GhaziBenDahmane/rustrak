@@ -12,6 +12,7 @@ use actix_web::cookie::{Cookie, Key};
 use actix_web::dev::{Service, ServiceResponse};
 use actix_web::{test, web, App};
 use base64::Engine;
+use rustrak::config::Config;
 use rustrak::db::DbPool;
 use rustrak::error::{AppError, AppResult};
 use rustrak::models::{CreateAuthToken, CreateProject, CreateUserRequest, ProjectRole, UserRole};
@@ -29,19 +30,30 @@ const ISSUER: &str = "http://localhost:8080";
 const RESOURCE: &str = "http://localhost:8080/mcp";
 const VERIFIER: &str = "a-verifier-that-is-long-enough-to-be-valid-0123456789";
 
-/// Serves one client's metadata, and refuses every other `client_id`.
+/// A client whose document registers a script as its redirect.
+const SCRIPT_CLIENT: &str = "https://evil.example/oauth/metadata.json";
+const SCRIPT_REDIRECT: &str = "javascript:alert(document.domain)//";
+
+/// A client whose document names it with more than the 255 characters a
+/// connection's name may hold.
+const LONG_NAME_CLIENT: &str = "https://long.example/oauth/metadata.json";
+
+/// Serves these clients' metadata, and refuses every other `client_id`.
 struct FakeClients;
 
 #[async_trait::async_trait]
 impl ClientMetadataSource for FakeClients {
     async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata> {
-        if client_id != CLIENT_ID {
-            return Err(AppError::Validation("unknown client".into()));
-        }
+        let (redirect, name) = match client_id {
+            CLIENT_ID => (REDIRECT, "Example Assistant".to_string()),
+            SCRIPT_CLIENT => (SCRIPT_REDIRECT, "Example Assistant".to_string()),
+            LONG_NAME_CLIENT => (REDIRECT, "x".repeat(256)),
+            _ => return Err(AppError::Validation("unknown client".into())),
+        };
         Ok(serde_json::from_value(json!({
-            "client_id": CLIENT_ID,
-            "client_name": "Example Assistant",
-            "redirect_uris": [REDIRECT],
+            "client_id": client_id,
+            "client_name": name,
+            "redirect_uris": [redirect],
             "token_endpoint_auth_method": "none"
         }))
         .unwrap())
@@ -55,13 +67,32 @@ fn challenge(verifier: &str) -> String {
 async fn app(
     pool: &DbPool,
 ) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
+    app_with(pool, Some(ISSUER)).await
+}
+
+async fn app_with(
+    pool: &DbPool,
+    public_url: Option<&str>,
+) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
+    app_configured(
+        pool,
+        Config {
+            public_url: public_url.map(str::to_string),
+            ..crate::integration::mcp_test::create_test_config()
+        },
+    )
+    .await
+}
+
+async fn app_configured(
+    pool: &DbPool,
+    config: Config,
+) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
     let clients: Arc<dyn ClientMetadataSource> = Arc::new(FakeClients);
     test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
-            .app_data(web::Data::new(
-                crate::integration::mcp_test::create_test_config(),
-            ))
+            .app_data(web::Data::new(config))
             .app_data(web::Data::new(clients))
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::from(&[0u8; 64]))
@@ -493,6 +524,19 @@ async fn a_request_that_cannot_be_trusted_is_never_redirected() {
     let mut unregistered = authorization();
     unregistered["redirect_uri"] = json!("https://attacker.example/steal");
     cases.push(("an unregistered redirect_uri", unregistered));
+    let mut script = authorization();
+    script["client_id"] = json!(SCRIPT_CLIENT);
+    script["redirect_uri"] = json!(SCRIPT_REDIRECT);
+    cases.push(("a redirect that runs script", script));
+    let mut long_name = authorization();
+    long_name["client_id"] = json!(LONG_NAME_CLIENT);
+    cases.push(("a name longer than a connection can hold", long_name));
+    let mut long_redirect = authorization();
+    long_redirect["redirect_uri"] = json!(format!("{REDIRECT}?{}", "x".repeat(2048)));
+    cases.push((
+        "a redirect longer than a connection can hold",
+        long_redirect,
+    ));
     let mut unknown = authorization();
     unknown["client_id"] = json!("https://unknown.example/metadata.json");
     cases.push(("an unknown client", unknown));
@@ -637,4 +681,157 @@ async fn a_signed_out_caller_is_told_to_sign_in_before_anything_else() {
     )
     .await;
     assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn without_a_public_url_there_is_no_oauth_to_discover() {
+    let db = TestDb::new().await;
+    let app = app_with(&db.pool, None).await;
+    enable_mcp(&app, &db.pool).await;
+
+    // The issuer has to be an address assistants can reach. The bind address
+    // (`0.0.0.0` by default) is not one, and a request's forwarded headers
+    // are the caller's to choose, so without PUBLIC_URL there is none.
+    for path in [
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/oauth-protected-resource/mcp",
+    ] {
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(path)
+                .insert_header(("X-Forwarded-Host", "evil.example"))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(resp.status(), 404, "{path}");
+    }
+
+    // /mcp still asks for a token, and points nowhere to get one.
+    let resp = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/mcp")
+            .set_payload("{}")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(resp.status(), 401);
+    assert_eq!(resp.headers().get("WWW-Authenticate").unwrap(), "Bearer");
+}
+
+fn refresh_form(token: &str) -> [(&str, &str); 3] {
+    [
+        ("grant_type", "refresh_token"),
+        ("refresh_token", token),
+        ("client_id", CLIENT_ID),
+    ]
+}
+
+#[actix_web::test]
+async fn a_reused_refresh_token_disconnects_the_assistant() {
+    let db = TestDb::new().await;
+    let app = app(&db.pool).await;
+    enable_mcp(&app, &db.pool).await;
+    let cookie = signed_in_member(&app, &db.pool).await;
+    let code = param(&decide(&app, &cookie, authorization(), true).await, "code").unwrap();
+    let first = exchange(&app, &code).await.1;
+    // Whoever refreshes first gets a new pair...
+    let old = first["refresh_token"].as_str().unwrap();
+    let rotated = token(&app, &refresh_form(old)).await.1;
+    let access = rotated["access_token"].as_str().unwrap();
+    assert_eq!(list_projects(&app, access).await.0, 200);
+
+    // ...and when the spent token comes back, one of the two holders stole
+    // it. Which one cannot be told, so the connection ends for both.
+    let (status, error) = token(&app, &refresh_form(old)).await;
+    assert_eq!(
+        (status, error["error"].clone()),
+        (400, json!("invalid_grant"))
+    );
+    assert_eq!(list_projects(&app, access).await.0, 401);
+    let newest = rotated["refresh_token"].as_str().unwrap();
+    let (status, _) = token(&app, &refresh_form(newest)).await;
+    assert_eq!(status, 400);
+}
+
+#[actix_web::test]
+async fn consent_happens_where_the_dashboard_is_served() {
+    let db = TestDb::new().await;
+    let mut config = crate::integration::mcp_test::create_test_config();
+    config.public_url = Some(ISSUER.into());
+    config.dashboard.url = Some("https://dashboard.example".into());
+    let app = app_configured(&db.pool, config).await;
+
+    let server: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::get()
+            .uri("/.well-known/oauth-authorization-server")
+            .to_request(),
+    )
+    .await;
+    // The consent page is a dashboard route; the issuer and the token
+    // endpoint stay with the API.
+    assert_eq!(
+        server["authorization_endpoint"],
+        "https://dashboard.example/oauth/authorize"
+    );
+    assert_eq!(server["issuer"], ISSUER);
+    assert_eq!(
+        server["token_endpoint"],
+        format!("{ISSUER}/api/oauth/token")
+    );
+}
+
+#[actix_web::test]
+async fn a_refresh_token_spent_generations_ago_still_disconnects() {
+    let db = TestDb::new().await;
+    let app = app(&db.pool).await;
+    enable_mcp(&app, &db.pool).await;
+    let cookie = signed_in_member(&app, &db.pool).await;
+    let code = param(&decide(&app, &cookie, authorization(), true).await, "code").unwrap();
+    let stolen = exchange(&app, &code).await.1["refresh_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // The thief rotates twice before the client next refreshes...
+    let second = token(&app, &refresh_form(&stolen)).await.1;
+    let third = token(
+        &app,
+        &refresh_form(second["refresh_token"].as_str().unwrap()),
+    )
+    .await
+    .1;
+    let access = third["access_token"].as_str().unwrap();
+    assert_eq!(list_projects(&app, access).await.0, 200);
+
+    // ...and the client's old token still gives the theft away.
+    assert_eq!(token(&app, &refresh_form(&stolen)).await.0, 400);
+    assert_eq!(list_projects(&app, access).await.0, 401);
+}
+
+#[actix_web::test]
+async fn two_refreshes_with_one_token_at_once_disconnect_the_assistant() {
+    let db = TestDb::new().await;
+    let app = app(&db.pool).await;
+    enable_mcp(&app, &db.pool).await;
+    let cookie = signed_in_member(&app, &db.pool).await;
+    let code = param(&decide(&app, &cookie, authorization(), true).await, "code").unwrap();
+    let refresh = exchange(&app, &code).await.1["refresh_token"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // One of the two is not the client. Whichever wins, the token was
+    // presented twice, so neither keeps the connection.
+    let form = refresh_form(&refresh);
+    let (a, b) = futures_util::join!(token(&app, &form), token(&app, &form));
+    let winner = [&a, &b]
+        .into_iter()
+        .find(|(status, _)| *status == 200)
+        .expect("one refresh succeeds");
+    assert!([a.0, b.0].contains(&400));
+    let access = winner.1["access_token"].as_str().unwrap();
+    assert_eq!(list_projects(&app, access).await.0, 401);
 }

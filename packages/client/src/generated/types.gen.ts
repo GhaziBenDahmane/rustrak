@@ -1021,10 +1021,23 @@ export type ManifestResponse = {
 };
 
 /**
- * Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
+ * Turns `/mcp` on or off: the body of `PUT /api/settings/mcp`.
  */
 export type McpSettings = {
     enabled: boolean;
+};
+
+/**
+ * Whether `/mcp` answers, and the URL to give an assistant.
+ */
+export type McpStatus = {
+    enabled: boolean;
+    /**
+     * The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks
+     * the resource against; the browser's own origin may differ. `null`
+     * without `PUBLIC_URL`, when signing in is off.
+     */
+    url: string | null;
 };
 
 /**
@@ -6363,9 +6376,9 @@ export type SettingsGetMcpError = SettingsGetMcpErrors[keyof SettingsGetMcpError
 
 export type SettingsGetMcpResponses = {
     /**
-     * Whether the MCP endpoint is on
+     * Whether the MCP endpoint is on, and its URL
      */
-    200: McpSettings;
+    200: McpStatus;
 };
 
 export type SettingsGetMcpResponse = SettingsGetMcpResponses[keyof SettingsGetMcpResponses];
@@ -6392,9 +6405,9 @@ export type SettingsUpdateMcpError = SettingsUpdateMcpErrors[keyof SettingsUpdat
 
 export type SettingsUpdateMcpResponses = {
     /**
-     * The MCP endpoint's new state
+     * The MCP endpoint's new state, and its URL
      */
-    200: McpSettings;
+    200: McpStatus;
 };
 
 export type SettingsUpdateMcpResponse = SettingsUpdateMcpResponses[keyof SettingsUpdateMcpResponses];

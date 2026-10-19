@@ -1738,7 +1738,8 @@
         "step1": "Copiază URL-ul endpointului de mai sus.",
         "step2": "Adaugă-l în asistent ca server MCP sau conector personalizat.",
         "step3": "Autentifică-te în Rustrak când ți se cere și aprobă accesul.",
-        "note": "Acționează cu permisiunile tale. Îl poți deconecta oricând din Asistenți conectați."
+        "note": "Acționează cu permisiunile tale. Îl poți deconecta oricând din Asistenți conectați.",
+        "needsPublicUrl": "Autentificarea este dezactivată: setează PUBLIC_URL pe server la adresa la care îl accesează asistenții (de ex. https://rustrak.example.com) și repornește-l. Până atunci, folosește un token API."
       },
       "token": {
         "title": "Token API",

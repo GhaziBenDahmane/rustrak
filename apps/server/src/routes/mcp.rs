@@ -26,11 +26,32 @@ use crate::mcp::RustrakMcp;
 use crate::routes::oauth;
 use crate::services::oauth::{OAuthService, ACCESS_PREFIX};
 
-/// Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
-#[derive(Debug, Serialize, Deserialize)]
+/// Turns `/mcp` on or off: the body of `PUT /api/settings/mcp`.
+#[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct McpSettings {
     pub enabled: bool,
+}
+
+/// Whether `/mcp` answers, and the URL to give an assistant.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct McpStatus {
+    pub enabled: bool,
+    /// The configured endpoint (`PUBLIC_URL` + `/mcp`), which OAuth checks
+    /// the resource against; the browser's own origin may differ. `null`
+    /// without `PUBLIC_URL`, when signing in is off.
+    #[cfg_attr(feature = "openapi", schema(required))]
+    pub url: Option<String>,
+}
+
+impl McpStatus {
+    fn new(enabled: bool, config: &Config) -> Self {
+        Self {
+            enabled,
+            url: oauth::issuer(config).map(oauth::mcp_resource),
+        }
+    }
 }
 
 async fn is_enabled(pool: &DbPool) -> AppResult<bool> {
@@ -47,16 +68,19 @@ async fn is_enabled(pool: &DbPool) -> AppResult<bool> {
     operation_id = "settings.getMcp",
     tag = "Settings",
     responses(
-        (status = 200, description = "Whether the MCP endpoint is on", body = McpSettings),
+        (status = 200, description = "Whether the MCP endpoint is on, and its URL", body = McpStatus),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
 ))]
 /// Whether the MCP endpoint at `/mcp` is on.
-pub async fn get_settings(pool: web::Data<DbPool>, _actor: ApiActor) -> AppResult<HttpResponse> {
-    Ok(HttpResponse::Ok().json(McpSettings {
-        enabled: is_enabled(pool.get_ref()).await?,
-    }))
+pub async fn get_settings(
+    pool: web::Data<DbPool>,
+    config: web::Data<Config>,
+    _actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let enabled = is_enabled(pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(McpStatus::new(enabled, &config)))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -66,7 +90,7 @@ pub async fn get_settings(pool: web::Data<DbPool>, _actor: ApiActor) -> AppResul
     tag = "Settings",
     request_body = McpSettings,
     responses(
-        (status = 200, description = "The MCP endpoint's new state", body = McpSettings),
+        (status = 200, description = "The MCP endpoint's new state, and its URL", body = McpStatus),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Not an instance admin", body = crate::error::ErrorResponse),
     ),
@@ -75,6 +99,7 @@ pub async fn get_settings(pool: web::Data<DbPool>, _actor: ApiActor) -> AppResul
 /// Turns the MCP endpoint at `/mcp` on or off. Instance admins only.
 pub async fn update_settings(
     pool: web::Data<DbPool>,
+    config: web::Data<Config>,
     actor: ApiActor,
     body: web::Json<McpSettings>,
 ) -> AppResult<HttpResponse> {
@@ -85,14 +110,18 @@ pub async fn update_settings(
         .bind(body.enabled)
         .execute(pool.get_ref())
         .await?;
-    Ok(HttpResponse::Ok().json(body.into_inner()))
+    Ok(HttpResponse::Ok().json(McpStatus::new(body.enabled, &config)))
 }
 
 /// Who is calling `/mcp`: an OAuth access token issued for it, or an API
 /// token. `None` when neither checks out. Bearer only: an MCP client has no
 /// dashboard cookie, and refusing one keeps a browser tab from calling tools
 /// on its user's behalf.
-async fn caller(req: &HttpRequest, pool: &DbPool, resource: &str) -> AppResult<Option<ApiActor>> {
+async fn caller(
+    req: &HttpRequest,
+    pool: &DbPool,
+    resource: Option<&str>,
+) -> AppResult<Option<ApiActor>> {
     let Some(token) = req
         .headers()
         .get(AUTHORIZATION)
@@ -102,6 +131,10 @@ async fn caller(req: &HttpRequest, pool: &DbPool, resource: &str) -> AppResult<O
         return Ok(None);
     };
     let user_id = if token.starts_with(ACCESS_PREFIX) {
+        // Without an issuer no OAuth token was ever valid here.
+        let Some(resource) = resource else {
+            return Ok(None);
+        };
         match OAuthService::authenticate(pool, token.trim(), resource).await? {
             Some(user_id) => Some(user_id),
             None => return Ok(None),
@@ -130,17 +163,20 @@ pub async fn serve(
     if !is_enabled(pool.get_ref()).await? {
         return Err(AppError::NotFound("Not found".to_string()));
     }
-    let base = oauth::base_url(&req, &config);
-    let Some(actor) = caller(&req, pool.get_ref(), &oauth::mcp_resource(&base)).await? else {
-        // RFC 9728: tells an OAuth client where to start authorizing.
+    let base = oauth::issuer(&config);
+    let resource = base.map(oauth::mcp_resource);
+    let Some(actor) = caller(&req, pool.get_ref(), resource.as_deref()).await? else {
+        // RFC 9728: tells an OAuth client where to start authorizing, when
+        // there is an issuer to send it to.
+        let challenge = match base {
+            Some(base) => format!(
+                "Bearer resource_metadata=\"{}\"",
+                oauth::resource_metadata_url(base)
+            ),
+            None => "Bearer".to_string(),
+        };
         return Ok(HttpResponse::Unauthorized()
-            .insert_header((
-                WWW_AUTHENTICATE,
-                format!(
-                    "Bearer resource_metadata=\"{}\"",
-                    oauth::resource_metadata_url(&base)
-                ),
-            ))
+            .insert_header((WWW_AUTHENTICATE, challenge))
             .json(serde_json::json!({
                 "error": { "type": "Unauthorized", "message": "A valid bearer token is required" }
             })));
@@ -153,10 +189,13 @@ pub async fn serve(
     for (name, value) in req.headers() {
         request = request.header(name.as_str(), value.as_bytes());
     }
-    // rmcp rejects a request without `Host`, which HTTP/2 carries as
-    // `:authority` instead.
+    // rmcp rejects a request without `Host` (an HTTP/1.0 client may send
+    // none). It reads the value only for the DNS-rebinding check, which is
+    // disabled below, so any name satisfies it. A fixed one, because the
+    // request's own idea of its host (`X-Forwarded-Host`) is the caller's to
+    // choose and would reach rmcp's logs.
     if !req.headers().contains_key(HOST) {
-        request = request.header("host", req.connection_info().host());
+        request = request.header("host", "localhost");
     }
     let request = request
         .body(Full::new(body))
