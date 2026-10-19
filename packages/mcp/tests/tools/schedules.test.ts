@@ -28,8 +28,10 @@ describe('schedule tools', () => {
       },
     });
     expect(mockClient.schedules.preview).toHaveBeenCalledWith({
-      schedule: { type: 'crontab', value: '0 3 * * *' },
-      timezone: 'Europe/Madrid',
+      body: {
+        schedule: { type: 'crontab', value: '0 3 * * *' },
+        timezone: 'Europe/Madrid',
+      },
     });
     expect(JSON.parse(result.content[0].text).next_runs).toHaveLength(1);
   });

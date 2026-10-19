@@ -34,7 +34,7 @@
 
 ---
 
-`@rustrak/client` is the official TypeScript client for [Rustrak](https://rustrak.dev) — an ultra-lightweight, self-hosted error tracking system compatible with any Sentry SDK. This package wraps the Rustrak REST API with full type safety, runtime validation via Zod, built-in retry logic, and structured error handling. Total bundle size: ~28 KB.
+`@rustrak/client` is the official TypeScript client for [Rustrak](https://rustrak.dev) — an ultra-lightweight, self-hosted error tracking system compatible with any Sentry SDK. It is generated from the server's OpenAPI spec, so it covers every endpoint the server documents, and wraps each one with runtime validation, retries and structured errors. No runtime dependency besides Zod; HTTP is the platform's `fetch`.
 
 ## Installation
 
@@ -46,7 +46,7 @@ pnpm add @rustrak/client
 yarn add @rustrak/client
 ```
 
-**Requirements**: Node.js ≥ 18, TypeScript ≥ 5
+**Requirements**: Node.js ≥ 20 (or any runtime with `fetch`), TypeScript ≥ 5
 
 ## Quick Start
 
@@ -66,15 +66,16 @@ if (!projects.success) {
 }
 console.log(projects.data.items);
 
-// Paginate through open issues
-const issues = await client.issues.list(1, { sort: 'last_seen', order: 'desc' });
-if (issues.success) {
-  const { items, next_cursor, has_more } = issues.data;
-}
+// Path parameters, query and body go in one object, named as the API names them
+const issues = await client.issues.list({
+  path: { project_id: 1 },
+  query: { sort: 'last_seen', order: 'desc', per_page: 50 },
+});
 
 // Resolve an issue
-const resolved = await client.issues.updateState(1, 'issue-id', {
-  is_resolved: true,
+const resolved = await client.issues.update({
+  path: { project_id: 1, issue_id: 'issue-id' },
+  body: { status: 'resolved' },
 });
 ```
 
@@ -82,78 +83,31 @@ const resolved = await client.issues.updateState(1, 'issue-id', {
 
 ## Features
 
-- **Type-safe** — All API responses validated at runtime with Zod; types are inferred from schemas
-- **Lightweight** — ~28 KB total (ky 3 KB + zod 10 KB + client 15 KB)
-- **Automatic retry** — Exponential backoff on transient failures (408, 429, 5xx)
+- **Complete**: one method per operation in the server's OpenAPI spec, regenerated with the server, never written by hand
+- **Validated both ways**: requests and responses are checked against Zod schemas generated from the same spec; a mismatch is a typed error, not a crash
 - **No exceptions**: every method returns `Result<T, RustrakError>`, so failure is in the type, and the value survives the React server/client boundary
-- **Cursor pagination** — First-class support for paginated responses across all list endpoints
+- **Tree-shakeable**: ESM is published one module per file with `sideEffects: false`
+- **Retries**: exponential backoff on 408 and 5xx for idempotent methods (`GET`, `PUT`, `DELETE`)
 - **Redacted 5xx**: a server error never carries a server-supplied message, so internal detail cannot reach a UI
-- **High test coverage**: 430+ tests (unit + integration with MSW)
 
-## API Reference
-
-### Configuration
+## Configuration
 
 ```typescript
 const client = new RustrakClient({
   baseUrl: 'https://rustrak.example.com', // required
-  token: 'your-bearer-token',             // required
-  timeout: 30000,                         // optional, ms (default: 30000)
+  token: 'your-bearer-token',             // optional: omit to use the session cookie
+  timeout: 30000,                         // optional, ms per attempt (default: 30000)
   maxRetries: 2,                          // optional (default: 2)
   headers: {},                            // optional custom headers
 });
 ```
 
-### Projects
-
-```typescript
-const projects = await client.projects.list();
-const project  = await client.projects.get(1);
-const created  = await client.projects.create({ name: 'My App', slug: 'my-app' });
-const updated  = await client.projects.update(1, { name: 'New Name' });
-await client.projects.delete(1);
-```
-
-### Issues
-
-```typescript
-// List with filters and cursor pagination
-const { items, next_cursor, has_more } = await client.issues.list(projectId, {
-  sort: 'last_seen',        // 'digest_order' | 'last_seen'
-  order: 'desc',            // 'asc' | 'desc'
-  include_resolved: false,
-  cursor: 'eyJzb3J0...',    // from previous response
-});
-
-const issue = await client.issues.get(projectId, issueId);
-await client.issues.updateState(projectId, issueId, { is_resolved: true });
-await client.issues.delete(projectId, issueId);
-```
-
-### Events
-
-```typescript
-const { items } = await client.events.list(projectId, issueId, { order: 'desc' });
-const event     = await client.events.get(projectId, issueId, eventId);
-// Resolve the ID returned by a Sentry SDK without knowing its issue first.
-const captured  = await client.events.getBySentryId(projectId, sentryEventId);
-console.log(event.data); // Full Sentry event payload
-```
-
-### Auth Tokens
-
-```typescript
-const tokens  = await client.tokens.list();
-const created = await client.tokens.create({ description: 'CI token' });
-if (created.success) {
-  console.log(created.data.token); // Save this, shown only once
-}
-await client.tokens.delete(1);
-```
+Every method takes the request's own parts and nothing else: `path`, `query`,
+`body`, plus `headers` and an `AbortSignal` as `signal`.
 
 ## Error Handling
 
-Resource methods do not throw. Each returns a `Result`, a plain discriminated
+Methods do not throw. Each returns a `Result`, a plain discriminated
 union mirroring Zod's `safeParse`:
 
 ```typescript
@@ -188,7 +142,7 @@ if (!result.success) {
   return;
 }
 
-console.log(result.data.items);
+console.log(result.data);
 ```
 
 ### The error union
@@ -207,7 +161,7 @@ console.log(result.data.items);
 | `server_error` | 5xx | ✅ | ✅ | **Message is always a fixed generic string** |
 | `network` | n/a | no | ✅ | DNS, refused connection, TLS, timeout |
 | `invalid_response` | n/a | no | ❌ | 2xx whose body failed its schema |
-| `invalid_request` | n/a | no | ❌ | Your input failed a pre-flight check; nothing was sent |
+| `invalid_request` | n/a | no | ❌ | Your input failed its schema; nothing was sent |
 
 `status` is `number`, never a literal, so a proxy-generated 502 or a future
 status is a value you can log rather than a type error.
@@ -229,9 +183,10 @@ information that must not cross a serialization boundary:
 ```typescript
 import { Ok, Err, unwrap, unwrapOr, mapResult } from '@rustrak/client';
 
-mapResult(await client.projects.get(1), (project) => project.name);
-unwrap(await client.projects.get(1)); // throws on failure: opting back in
-unwrapOr(await client.stats.summary(1, "24h"), null); // see the warning below
+const project = await client.projects.get({ path: { id: 1 } });
+mapResult(project, (p) => p.name);
+unwrap(project); // throws on failure: opting back in
+unwrapOr(project, null); // see the warning below
 ```
 
 > **`unwrapOr` is not for rendering.** `unwrapOr(await client.projects.list(),
@@ -248,68 +203,286 @@ what lets a failure be returned from a Server Component or a Server Action and
 read in a Client Component: React's Flight serializer rejects class instances,
 which is why there are no error classes here.
 
-## Next.js Integration
-
-### Server Component
-
-```typescript
-import { RustrakClient } from '@rustrak/client';
-
-export default async function ProjectsPage() {
-  const client = new RustrakClient({
-    baseUrl: process.env.RUSTRAK_API_URL!,
-    token: process.env.RUSTRAK_API_TOKEN!,
-  });
-  const projects = await client.projects.list();
-
-  if (!projects.success) {
-    // `kind` is what decides: only 'unauthenticated' means "send to login".
-    // Redirecting on 'network' or 'server_error' turns a flaky connection
-    // into a login loop.
-    if (projects.error.kind === 'unauthenticated') redirect('/login');
-    return <LoadFailed error={projects.error} />;
-  }
-
-  return <ProjectsList projects={projects.data.items} />;
-}
-```
-
-### Server Action
-
-```typescript
-'use server';
-import { RustrakClient } from '@rustrak/client';
-
-export async function resolveIssue(projectId: number, issueId: string) {
-  const client = new RustrakClient({
-    baseUrl: process.env.RUSTRAK_API_URL!,
-    token: process.env.RUSTRAK_API_TOKEN!,
-  });
-  // The Result is returned as-is: it is serializable, so the client component
-  // receives the failure instead of an opaque "An error occurred" digest.
-  return client.issues.updateState(projectId, issueId, { is_resolved: true });
-}
-```
-
 ## TypeScript
 
-All types are exported and inferred from Zod schemas — single source of truth:
+Every request and response type in the spec is exported under the name the
+spec gives it:
 
 ```typescript
 import type {
-  Project,
-  Issue,
-  Event,
-  EventDetail,
-  AuthToken,
-  PaginatedResponse,
-  CreateProject,
-  UpdateIssueState,
+  IssueResponse,     // a schema
+  ProjectResponse,
+  IssuesListData,    // what `client.issues.list` takes
+  IssuesListResponse, // what it returns on success
   Result,
   RustrakError,
-  RustrakErrorKind,
 } from '@rustrak/client';
 ```
+
+## API Reference
+
+Every method, grouped as it hangs off the client (`client.issues.list(...)`).
+
+<!-- api:start -->
+<!-- Generated by `pnpm generate` from openapi.json. Do not edit by hand. -->
+
+### Agents
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `agents.duration({ path, query? })` | `GET /api/projects/{project_id}/agents/duration` | Time-bucketed avg/p95 duration for `agent`/`ai_client` spans. |
+| `agents.environments({ path })` | `GET /api/projects/{project_id}/agents/environments` | The options the environment filter offers, read from the data rather than hardcoded — an installation may name its environments anything. |
+| `agents.modelsCalls({ path, query? })` | `GET /api/projects/{project_id}/agents/models/calls` | Top models by LLM call count (`gen_ai.operation.type:ai_client`). |
+| `agents.modelsTable({ path, query? })` | `GET /api/projects/{project_id}/agents/models` |  |
+| `agents.modelsTokens({ path, query? })` | `GET /api/projects/{project_id}/agents/models/tokens` | Top models by total tokens used (`gen_ai.operation.type:ai_client`). |
+| `agents.runs({ path, query? })` | `GET /api/projects/{project_id}/agents/runs` | Time-bucketed count of agent-run spans (`gen_ai.operation.type:agent`). |
+| `agents.summary({ path, query? })` | `GET /api/projects/{project_id}/agents/summary` | Agent runs, LLM calls, tool calls, errors, tokens and latency over the selected window — the numbers the six charts cannot state outright. |
+| `agents.tools({ path, query? })` | `GET /api/projects/{project_id}/agents/tools` | Top tools by call count (`gen_ai.operation.type:tool`). |
+| `agents.toolsTable({ path, query? })` | `GET /api/projects/{project_id}/agents/tools/stats` |  |
+| `agents.traces({ path, query? })` | `GET /api/projects/{project_id}/agents/traces` | Paginated per-trace_id aggregate (duration, tokens, tool usage) across all AI spans sharing that trace, regardless of origin. |
+
+### Alert Channels
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `alertChannels.create({ body })` | `POST /api/integrations` |  |
+| `alertChannels.delete({ path })` | `DELETE /api/integrations/{id}` |  |
+| `alertChannels.get({ path })` | `GET /api/integrations/{id}` |  |
+| `alertChannels.list()` | `GET /api/integrations` |  |
+| `alertChannels.previewTemplate({ body })` | `POST /api/integrations/preview-template` | Renders a Custom Webhook template against a sample payload and hands back the body that would be sent. |
+| `alertChannels.test({ path, body })` | `POST /api/integrations/{id}/test` |  |
+| `alertChannels.update({ path, body })` | `PATCH /api/integrations/{id}` |  |
+
+### Alert Rules
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `alertRules.create({ path, body })` | `POST /api/projects/{project_id}/alert-rules` |  |
+| `alertRules.delete({ path })` | `DELETE /api/projects/{project_id}/alert-rules/{rule_id}` |  |
+| `alertRules.get({ path })` | `GET /api/projects/{project_id}/alert-rules/{rule_id}` |  |
+| `alertRules.list({ path })` | `GET /api/projects/{project_id}/alert-rules` |  |
+| `alertRules.listHistory({ path, query? })` | `GET /api/projects/{project_id}/alert-history` |  |
+| `alertRules.update({ path, body })` | `PATCH /api/projects/{project_id}/alert-rules/{rule_id}` |  |
+
+### Auth
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `auth.acceptInvitation({ body })` | `POST /auth/accept-invitation` | Accept a pending invitation: creates the user (with the invite's email + role) and logs in. |
+| `auth.changePassword({ body })` | `POST /auth/me/password` | Change the current user's password |
+| `auth.confirmSsoLink({ body })` | `POST /auth/sso/link` | Link the pending SSO identity to its account once the account's password is given, and sign in. |
+| `auth.getCurrentUser()` | `GET /auth/me` | Get current authenticated user |
+| `auth.getInvitation({ path })` | `GET /auth/invitation/{token}` | Returns the invitation's details if it is still acceptable (for the accept page). |
+| `auth.login({ body })` | `POST /auth/login` | Authenticate user and create session |
+| `auth.logout()` | `POST /auth/logout` | Clear session |
+| `auth.register({ body })` | `POST /auth/register` | Registration is invite-only — always rejected. |
+| `auth.ssoCallback({ query? })` | `GET /auth/sso/callback` | Validate the provider response, resolve or provision the local account, and establish the normal Rustrak session. |
+| `auth.ssoConfig()` | `GET /auth/sso/config` | Public, non-sensitive information used to render the login page. |
+| `auth.ssoLink()` | `GET /auth/sso/link` | The account an SSO login matched, shown while its owner confirms. |
+| `auth.ssoStart()` | `POST /auth/sso/start` | Create a one-time OIDC authorization request and retain its protections in the encrypted session cookie. |
+| `auth.updateCurrentUser({ body })` | `PATCH /auth/me` | Update the current user's presentation preferences |
+
+### Events
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `events.get({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}` | Gets a single event with full data |
+| `events.getBySentryId({ path })` | `GET /api/projects/{project_id}/events/sentry/{event_id}` | Resolve the ID returned by a Sentry SDK without already knowing the issue. |
+| `events.list({ path, query? })` | `GET /api/projects/{project_id}/issues/{issue_id}/events` | Lists events for an issue with cursor-based pagination |
+
+### GitHub
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `github.callback({ query })` | `GET /api/github/callback` | GitHub sends the browser here after creating the app; the code trades for its credentials. |
+| `github.createIssue({ path, body })` | `POST /api/projects/{project_id}/issues/{issue_id}/github/issues` | Opens a GitHub issue and links it. |
+| `github.deleteProjectRepository({ path })` | `DELETE /api/projects/{project_id}/github` |  |
+| `github.disconnect()` | `DELETE /api/github` |  |
+| `github.getMyLogin()` | `GET /api/github/me` | The GitHub username assignees sync through. |
+| `github.getProjectRepository({ path })` | `GET /api/projects/{project_id}/github` |  |
+| `github.installed({ query })` | `GET /api/github/installed` | GitHub sends the browser here after the app is installed on an account. |
+| `github.issue({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/github` | The issue's links, the commits that may have caused it, and who owns its culprit file. |
+| `github.linkIssue({ path, body })` | `POST /api/projects/{project_id}/issues/{issue_id}/github/links` | Links an existing GitHub issue or pull request. |
+| `github.manifest({ body })` | `POST /api/github/manifest` | What the dashboard posts to GitHub so GitHub creates an app already configured for this server. |
+| `github.putMyLogin({ body })` | `PUT /api/github/me` |  |
+| `github.putProjectRepository({ path, body })` | `PUT /api/projects/{project_id}/github` |  |
+| `github.repositories({ query })` | `GET /api/github/repositories` | The repositories a project can point at, for whoever may change that project's settings. |
+| `github.status()` | `GET /api/github` |  |
+| `github.syncCodeowners({ path })` | `POST /api/projects/{project_id}/github/codeowners` | Copies the repository's CODEOWNERS so ownership can be answered without asking GitHub each time. |
+| `github.unlinkIssue({ path })` | `DELETE /api/projects/{project_id}/issues/{issue_id}/github/links/{link_id}` |  |
+| `github.webhook({ body })` | `POST /api/github/webhook` | Public, and trusted only through the signature GitHub computes with the app's webhook secret. |
+
+### Health
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `health.liveness()` | `GET /health` | Liveness check - is the process running? |
+| `health.readiness()` | `GET /health/ready` | Readiness check - is the service ready to handle requests? |
+| `health.version()` | `GET /health/version` | Version check - returns the server version compiled from Cargo.toml. |
+
+### Invitations
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `invitations.create({ body })` | `POST /api/invitations` | Create an invitation (admin only) |
+| `invitations.list()` | `GET /api/invitations` | List invitations (admin only) |
+| `invitations.revoke({ path })` | `DELETE /api/invitations/{token}` | Revoke a pending invitation (admin only) |
+
+### Issues
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `issues.bulkDelete({ path, body })` | `DELETE /api/projects/{project_id}/issues` | Bulk delete by ids or filter |
+| `issues.bulkUpdate({ path, body })` | `PUT /api/projects/{project_id}/issues` | Bulk mutate |
+| `issues.createComment({ path, body })` | `POST /api/projects/{project_id}/issues/{issue_id}/comments` | Add a note. |
+| `issues.createUserReport({ path, body })` | `POST /api/projects/{project_id}/issues/{issue_id}/user-reports` | Attach user feedback to an issue. |
+| `issues.delete({ path })` | `DELETE /api/projects/{project_id}/issues/{issue_id}` | Hard-deletes an issue and all associated events |
+| `issues.get({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}` | Gets a single issue by ID |
+| `issues.getActivity({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/activity` | Chronological activity log (incl. comments). |
+| `issues.getAggregates({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/aggregates` | Returns the unique user count and top tags for the issue. |
+| `issues.getHashes({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/hashes` | Lists the grouping hashes that map to an issue. |
+| `issues.getStats({ path, query? })` | `GET /api/projects/{project_id}/issues/{issue_id}/stats` | Zero-filled event-count timeseries. |
+| `issues.getTagValues({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/tags/{key}` | Lists the distinct values (with counts) for a tag key across the issue. |
+| `issues.list({ path, query? })` | `GET /api/projects/{project_id}/issues` | Lists issues for a project with offset-based pagination |
+| `issues.listUserReports({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/user-reports` | List user feedback for an issue. |
+| `issues.markSeen({ path })` | `POST /api/projects/{project_id}/issues/{issue_id}/seen` | Mark the issue as seen by the current user. |
+| `issues.setBookmark({ path, body })` | `PUT /api/projects/{project_id}/issues/{issue_id}/bookmark` | Set/clear the per-user bookmark. |
+| `issues.setSubscription({ path, body })` | `PUT /api/projects/{project_id}/issues/{issue_id}/subscription` | Set/clear the per-user subscription. |
+| `issues.update({ path, body })` | `PATCH /api/projects/{project_id}/issues/{issue_id}` | Updates issue state (resolve, mute, etc.) |
+
+### Logs
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `logs.list({ path, query? })` | `GET /api/projects/{project_id}/logs` | Lists logs for a project with offset-based pagination (newest first by log timestamp), optionally filtered by level/trace_id. |
+
+### Members
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `members.list({ path })` | `GET /api/projects/{project_id}/members` |  |
+| `members.remove({ path })` | `DELETE /api/projects/{project_id}/members/{user_id}` |  |
+| `members.upsert({ path, body })` | `PUT /api/projects/{project_id}/members` |  |
+
+### Monitors
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `monitors.create({ path, body })` | `POST /api/projects/{project_id}/monitors` |  |
+| `monitors.delete({ path })` | `DELETE /api/projects/{project_id}/monitors/{slug}` |  |
+| `monitors.get({ path })` | `GET /api/projects/{project_id}/monitors/{slug}` |  |
+| `monitors.list({ path })` | `GET /api/projects/{project_id}/monitors` |  |
+| `monitors.listCheckins({ path, query? })` | `GET /api/projects/{project_id}/monitors/{slug}/checkins` |  |
+| `monitors.update({ path, body })` | `PUT /api/projects/{project_id}/monitors/{slug}` |  |
+
+### Projects
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `projects.create({ body })` | `POST /api/projects` | Create a new project |
+| `projects.delete({ path })` | `DELETE /api/projects/{id}` | Delete a project |
+| `projects.get({ path })` | `GET /api/projects/{id}` | Get a project by ID |
+| `projects.getRateLimits()` | `GET /api/rate-limits` | What a project without limits of its own follows |
+| `projects.list({ query? })` | `GET /api/projects` | List projects with pagination |
+| `projects.update({ path, body })` | `PATCH /api/projects/{id}` | Update a project |
+
+### Releases
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `releases.create({ path, body })` | `POST /api/0/projects/{org_slug}/{project_slug}/releases/` | Sentry-compatible release creation. |
+| `releases.finalize({ path, body })` | `PUT /api/0/projects/{org_slug}/{project_slug}/releases/{version}/` | Generic partial update (`ref`, `url`, `dateReleased`). |
+| `releases.newIssues({ path, query? })` | `GET /api/projects/{project_id}/releases/{release}/new-issues` |  |
+
+### Schedules
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `schedules.preview({ body })` | `POST /api/schedules/preview` | Validates a schedule and lists its next five runs from now, so no client ever parses a crontab itself. |
+
+### Sessions
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `sessions.getStats({ path, query? })` | `GET /api/projects/{project_id}/sessions/stats` |  |
+| `sessions.getSummary({ path, query? })` | `GET /api/projects/{project_id}/sessions/summary` |  |
+| `sessions.getTimeseries({ path, query? })` | `GET /api/projects/{project_id}/sessions/timeseries` |  |
+
+### Source Maps
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `sourceMaps.artifactBundleAssemble({ path, body })` | `POST /api/0/organizations/{org_slug}/artifactbundle/assemble/` |  |
+| `sourceMaps.chunkUpload({ path, body })` | `POST /api/0/organizations/{org_slug}/chunk-upload/` |  |
+| `sourceMaps.chunkUploadCapability({ path })` | `GET /api/0/organizations/{org_slug}/chunk-upload/` |  |
+| `sourceMaps.list({ path })` | `GET /api/0/projects/{org_slug}/{project_slug}/files/source-maps/` |  |
+| `sourceMaps.orgDetails({ path })` | `GET /api/0/organizations/{org_slug}/` | Always returns 200 with synthetic org data — sentry-cli validates this before uploading. |
+
+### Spans
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `spans.get({ path })` | `GET /api/projects/{project_id}/spans/{span_id}` | Returns one span together with its attributes and tags — the `gen_ai.*` payload (prompts, responses, tool arguments and results) that the list response deliberately omits, since `spans.data` is untrimmed and a whole trace's worth of it would dwarf the waterfall it is drawn from. |
+| `spans.list({ path, query? })` | `GET /api/projects/{project_id}/spans` | Lists spans for a project with offset-based pagination (newest by start_timestamp first), optionally filtered by op/status/trace_id. |
+
+### Stats
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `stats.getEventTimeseries({ path, query? })` | `GET /api/projects/{project_id}/events/stats` |  |
+| `stats.getSummary({ path, query? })` | `GET /api/projects/{project_id}/stats/summary` |  |
+
+### Storage
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `storage.executeCleanup({ body })` | `POST /api/storage/cleanup` | Starts deleting old data and the issues it empties. |
+| `storage.gcSourceMaps()` | `POST /api/storage/source-maps/gc` | Delete orphaned source maps (DB + disk). |
+| `storage.getAge()` | `GET /api/storage/age` | Rows per age bucket, per project and kind. |
+| `storage.getCleanupStatus()` | `GET /api/storage/cleanup/status` | Progress of the running cleanup, or the outcome of the last one. |
+| `storage.getProjects()` | `GET /api/storage/projects` | Per-project counts and estimated weight. |
+| `storage.getRetention()` | `GET /api/storage/retention` |  |
+| `storage.getSummary()` | `GET /api/storage/summary` | Row counts, DB size, and source-map weight. |
+| `storage.previewCleanup({ body })` | `POST /api/storage/cleanup/preview` | Dry-run count, mutates nothing. |
+| `storage.previewRetention({ body })` | `POST /api/storage/retention/preview` | What saving these settings would delete on the next cleanup, without saving or deleting anything. |
+| `storage.previewSourceMapGc()` | `POST /api/storage/source-maps/gc/preview` | Dry-run orphan count, deletes nothing. |
+| `storage.runRetention()` | `POST /api/storage/retention/run` | Enforces the saved retention now, without waiting for the schedule. |
+| `storage.updateRetention({ body })` | `PUT /api/storage/retention` |  |
+
+### Team
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `team.deleteUser({ path })` | `DELETE /api/team/{user_id}` | Remove a user from the instance (admin only) |
+| `team.list()` | `GET /api/team` | List all users (admin only) |
+| `team.updateRole({ path, body })` | `PATCH /api/team/{user_id}/role` | Change a user's global role (admin only) |
+
+### Telemetry
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `telemetry.preview()` | `GET /api/telemetry/preview` |  |
+
+### Tokens
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `tokens.create({ body })` | `POST /api/tokens` | Create a new token (scoped to the acting user) |
+| `tokens.delete({ path })` | `DELETE /api/tokens/{id}` | Revoke a token |
+| `tokens.get({ path })` | `GET /api/tokens/{id}` | Reveal full token value |
+| `tokens.list()` | `GET /api/tokens` | List tokens (masked) |
+
+### Transactions
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `transactions.get({ path })` | `GET /api/projects/{project_id}/transactions/{transaction_id}` | Returns a single transaction with its full Sentry payload (spans, contexts, measurements, tags) for the performance detail view. |
+| `transactions.getSpans({ path })` | `GET /api/projects/{project_id}/transactions/{transaction_id}/spans` | Returns the indexed spans extracted from a transaction, ordered for the waterfall view (by start_timestamp ascending). |
+| `transactions.getStatGroup({ path, query })` | `GET /api/projects/{project_id}/transactions/stats/group` | Returns the aggregate stats for a single transaction group — a direct lookup so the summary header works regardless of how many groups the project has. |
+| `transactions.getStats({ path, query? })` | `GET /api/projects/{project_id}/transactions/stats` | Returns paginated aggregate performance stats (count, p50/p95/p99 latency, failure rate) grouped by transaction name + op, most frequent first. |
+| `transactions.list({ path, query? })` | `GET /api/projects/{project_id}/transactions` | Lists transactions for a project with offset-based pagination (newest first). |
+
+<!-- api:end -->
 
 ## Related Packages
 

@@ -18,7 +18,7 @@ interface AgentTracesTableProps {
   filters: { period?: string; environment?: string };
 }
 
-function formatMs(ms: number | null): string {
+function formatMs(ms: number | null | undefined): string {
   if (ms == null) return '—';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;

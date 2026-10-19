@@ -23,9 +23,9 @@ export function registerEventTools(
       },
     },
     async ({ project_id, issue_id, cursor, order }) => {
-      const result = await client.events.list(project_id, issue_id, {
-        cursor,
-        order,
+      const result = await client.events.list({
+        path: { project_id, issue_id },
+        query: { cursor, order },
       });
       return mcpJson(result);
     },
@@ -43,7 +43,9 @@ export function registerEventTools(
       },
     },
     async ({ project_id, issue_id, event_id }) => {
-      const result = await client.events.get(project_id, issue_id, event_id);
+      const result = await client.events.get({
+        path: { project_id, issue_id, event_id },
+      });
       return mcpJson(result);
     },
   );

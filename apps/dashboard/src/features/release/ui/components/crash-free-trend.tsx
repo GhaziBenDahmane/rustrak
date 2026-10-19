@@ -1,4 +1,4 @@
-import type { SessionTimeseries } from '@rustrak/client';
+import type { SessionsGetTimeseriesResponse } from '@rustrak/client';
 import { useMemo } from 'react';
 // Not loaded through next/dynamic, deliberately.
 //
@@ -116,7 +116,7 @@ interface CrashFreeTrendProps {
   /** Total sessions the rates are computed from. */
   totalSessions: number;
   /** Per-bucket rates behind the headline figure. */
-  data: SessionTimeseries;
+  data: SessionsGetTimeseriesResponse;
   height?: number;
 }
 

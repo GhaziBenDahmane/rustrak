@@ -1,4 +1,4 @@
-import type { User } from '@rustrak/client';
+import type { UserResponse } from '@rustrak/client';
 import { LogOut, Settings } from 'lucide-react';
 import { type ReactNode, useTransition } from 'react';
 import { useTranslations } from 'use-intl';
@@ -16,7 +16,7 @@ import {
 import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface HeaderProps {
-  user: User;
+  user: UserResponse;
   /**
    * Passed in rather than rendered here: the command bar spans several slices,
    * and this one only knows about `user`.

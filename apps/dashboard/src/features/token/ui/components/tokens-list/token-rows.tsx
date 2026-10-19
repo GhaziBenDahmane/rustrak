@@ -1,4 +1,4 @@
-import type { AuthToken } from '@rustrak/client';
+import type { AuthTokenResponse } from '@rustrak/client';
 import { useMemo } from 'react';
 import { useFormatter, useTranslations } from 'use-intl';
 import { DataTable } from '@/shared/ui/components/data-table/data-table';
@@ -19,7 +19,7 @@ type Formatter = ReturnType<typeof useFormatter>;
 
 /** When a token was last used, or that it never has been. */
 function lastUsed(
-  token: AuthToken,
+  token: AuthTokenResponse,
   t: (key: string) => string,
   format: Formatter,
 ): string {
@@ -28,14 +28,14 @@ function lastUsed(
     : t('never');
 }
 
-const created = (token: AuthToken, format: Formatter) =>
+const created = (token: AuthTokenResponse, format: Formatter) =>
   format.dateTime(new Date(token.created_at), 'date');
 
 export interface TokenListProps {
-  tokens: AuthToken[];
-  isBusy: (token: AuthToken) => boolean;
-  onCopy: (token: AuthToken) => void;
-  onDelete: (token: AuthToken) => void;
+  tokens: AuthTokenResponse[];
+  isBusy: (token: AuthTokenResponse) => boolean;
+  onCopy: (token: AuthTokenResponse) => void;
+  onDelete: (token: AuthTokenResponse) => void;
 }
 
 /**
@@ -87,7 +87,7 @@ export function TokenCards({
   );
 }
 
-const helper = createAppColumnHelper<AuthToken>();
+const helper = createAppColumnHelper<AuthTokenResponse>();
 
 /** The desktop layout: the same tokens as a table. */
 export function TokenTable({

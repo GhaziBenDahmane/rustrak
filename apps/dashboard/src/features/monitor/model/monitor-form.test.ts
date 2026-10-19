@@ -1,4 +1,4 @@
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 import { describe, expect, it } from 'vitest';
 import type { Translate } from '@/shared/lib/error-copy';
 import {
@@ -119,7 +119,7 @@ describe('formFromMonitor', () => {
       failure_issue_threshold: 3,
       recovery_threshold: 2,
     };
-    const monitor: Monitor = {
+    const monitor: MonitorResponse = {
       id: crypto.randomUUID(),
       slug: 'job',
       name: 'Job',

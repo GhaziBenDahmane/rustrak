@@ -1,4 +1,4 @@
-import type { EventTimeseries } from '@rustrak/client';
+import type { StatsGetEventTimeseriesResponse } from '@rustrak/client';
 import { type ReactElement, useMemo } from 'react';
 // Not loaded through next/dynamic, deliberately.
 //
@@ -249,7 +249,7 @@ function makeTooltip(
 }
 
 interface ErrorVolumeChartProps {
-  data: EventTimeseries;
+  data: StatsGetEventTimeseriesResponse;
   height?: number;
 }
 

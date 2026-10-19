@@ -1,4 +1,4 @@
-import type { Invitation } from '@rustrak/client';
+import type { InvitationResponse } from '@rustrak/client';
 import { Copy, Mail, X } from 'lucide-react';
 import { useTransition } from 'react';
 import { toast } from 'sonner';
@@ -18,7 +18,7 @@ import {
 import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface PendingInvitationsProps {
-  invitations: Invitation[];
+  invitations: InvitationResponse[];
 }
 
 /**
@@ -27,7 +27,7 @@ interface PendingInvitationsProps {
  * Module scope: it reads  and the invitation it is handed, and closes
  * over nothing in the component.
  */
-async function handleCopy(invitation: Invitation, t: Translate) {
+async function handleCopy(invitation: InvitationResponse, t: Translate) {
   const link = `${window.location.origin}/invite/${invitation.token}`;
   if (await copyToClipboard(link)) {
     toast.success(t('toast.linkCopied'));
@@ -42,7 +42,7 @@ export function PendingInvitations({ invitations }: PendingInvitationsProps) {
   const format = useFormatter();
   const [isPending, startTransition] = useTransition();
 
-  const handleRevoke = (invitation: Invitation) => {
+  const handleRevoke = (invitation: InvitationResponse) => {
     startTransition(async () => {
       const result = await revokeInvitation(invitation.token);
       if (result.success) {

@@ -1,4 +1,4 @@
-import type { Project } from '@rustrak/client';
+import type { ProjectResponse } from '@rustrak/client';
 import { MoreVertical, Trash2 } from 'lucide-react';
 import { PlatformIcon } from 'platformicons';
 import { useFormatter, useTranslations } from 'use-intl';
@@ -20,10 +20,10 @@ export function ProjectRow({
   onToggleSelect,
   onDelete,
 }: {
-  project: Project;
+  project: ProjectResponse;
   selected: boolean;
   onToggleSelect: () => void;
-  onDelete: (project: Project) => void;
+  onDelete: (project: ProjectResponse) => void;
 }) {
   const format = useFormatter();
   const t = useTranslations('projects');
@@ -56,7 +56,7 @@ export function ProjectRow({
       </div>
 
       <ProjectStatsCells
-        stats={project.stats}
+        stats={project.stats ?? undefined}
         totalEvents={project.digested_event_count}
       />
 

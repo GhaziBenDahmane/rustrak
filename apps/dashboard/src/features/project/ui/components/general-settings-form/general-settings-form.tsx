@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { Project, RateLimits } from '@rustrak/client';
+import type { ProjectResponse, RateLimitsResponse } from '@rustrak/client';
 import { useMemo, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -43,8 +43,8 @@ export type GeneralSettingsFormData = z.infer<
 >;
 
 interface GeneralSettingsFormProps {
-  project: Project;
-  serverLimits: RateLimits | null;
+  project: ProjectResponse;
+  serverLimits: RateLimitsResponse | null;
 }
 
 export function GeneralSettingsForm({

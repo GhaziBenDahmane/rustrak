@@ -23,7 +23,7 @@ export function registerProjectTools(
       },
     },
     async ({ page, per_page }) => {
-      const result = await client.projects.list({ page, per_page });
+      const result = await client.projects.list({ query: { page, per_page } });
       return mcpJson(result);
     },
   );
@@ -37,7 +37,7 @@ export function registerProjectTools(
       },
     },
     async ({ project_id }) => {
-      const result = await client.projects.get(project_id);
+      const result = await client.projects.get({ path: { id: project_id } });
       return mcpJson(result);
     },
   );
@@ -55,7 +55,7 @@ export function registerProjectTools(
       },
     },
     async ({ name, slug }) => {
-      const result = await client.projects.create({ name, slug });
+      const result = await client.projects.create({ body: { name, slug } });
       return mcpJson(result);
     },
   );

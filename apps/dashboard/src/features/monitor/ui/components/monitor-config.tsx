@@ -1,9 +1,9 @@
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
 import { ScheduleText } from '@/shared/ui/components/schedule-text';
 
 /** What the monitor expects, as the sidebar of its page. */
-export function MonitorConfigCard({ monitor }: { monitor: Monitor }) {
+export function MonitorConfigCard({ monitor }: { monitor: MonitorResponse }) {
   const t = useTranslations('crons');
   const { config } = monitor;
   const rows: [string, React.ReactNode][] = [

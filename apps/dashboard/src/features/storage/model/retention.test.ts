@@ -1,7 +1,7 @@
 import type {
   CleanupCounts,
   ProjectStorage,
-  Retention,
+  RetentionResponse,
   RetentionSettings,
   StorageAge,
 } from '@rustrak/client';
@@ -230,7 +230,7 @@ describe('removedParts', () => {
 });
 
 describe('runStatus', () => {
-  const state = (patch: Partial<Retention>): Retention => ({
+  const state = (patch: Partial<RetentionResponse>): RetentionResponse => ({
     settings,
     next_run_at: '2026-01-02T03:00:00Z',
     last_run: null,
@@ -256,7 +256,7 @@ describe('runStatus', () => {
 
 describe('nextReadIn', () => {
   const now = Date.parse('2026-01-02T02:00:00Z');
-  const state = (patch: Partial<Retention>): Retention => ({
+  const state = (patch: Partial<RetentionResponse>): RetentionResponse => ({
     settings,
     next_run_at: '2026-01-02T03:00:00Z',
     last_run: null,

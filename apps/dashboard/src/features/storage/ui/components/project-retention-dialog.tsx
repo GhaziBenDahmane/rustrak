@@ -1,7 +1,7 @@
 import type {
   CleanupStatus,
   ProjectStorage,
-  Retention,
+  RetentionResponse,
   RetentionWindows,
 } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
@@ -35,9 +35,9 @@ export function ProjectRetentionDialog({
   /** The project to edit; `null` closes the dialog. */
   project: { id: number; name: string } | null;
   onClose: () => void;
-  retention: Retention;
+  retention: RetentionResponse;
   projects: readonly ProjectStorage[];
-  onDone: (saved: Retention, job: CleanupStatus | null) => void;
+  onDone: (saved: RetentionResponse, job: CleanupStatus | null) => void;
 }) {
   return (
     <Dialog open={project !== null} onOpenChange={(open) => !open && onClose()}>
@@ -68,9 +68,9 @@ function Editor({
   onCancel,
 }: {
   project: { id: number; name: string };
-  retention: Retention;
+  retention: RetentionResponse;
   projects: readonly ProjectStorage[];
-  onDone: (saved: Retention, job: CleanupStatus | null) => void;
+  onDone: (saved: RetentionResponse, job: CleanupStatus | null) => void;
   onCancel: () => void;
 }) {
   const t = useTranslations('storage');
@@ -78,7 +78,7 @@ function Editor({
     retention.settings,
     onDone,
   );
-  const own = draft.overrides.find((o) => o.project_id === project.id);
+  const own = draft.overrides?.find((o) => o.project_id === project.id);
   const keep = (days: number | null) =>
     days === null ? t('keep.forever') : t('keep.days', { count: days });
   const general = KINDS.map(

@@ -1,4 +1,4 @@
-import type { Project } from '@rustrak/client';
+import type { ProjectResponse } from '@rustrak/client';
 import { Loader2, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'use-intl';
@@ -25,7 +25,7 @@ export function DangerZone({
   project,
   onRemove,
 }: {
-  project: Project;
+  project: ProjectResponse;
   /** Resolves once the request is done, whether it succeeded or not. */
   onRemove: () => Promise<void>;
 }) {

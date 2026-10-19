@@ -1,14 +1,15 @@
 import type {
   AcceptInvitation,
   CreateInvitation,
-  GlobalRole,
-  Invitation,
+  InvitationResponse,
   LoginRequest,
+  ProjectMember,
   Result,
   RustrakError,
-  TeamMember,
+  TeamMemberResponse,
   UpsertProjectMember,
-  User,
+  UserResponse,
+  UserRole,
 } from '@rustrak/client';
 import { Ok } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
@@ -33,8 +34,7 @@ import { listTeam as listTeamQuery } from './queries';
  * out of `result.data` and replayed onto the Next cookie store by hand — three
  * helpers and a parser, all of them a workaround for the request being made by
  * a process that was not the browser. The browser makes it now, same origin,
- * so it stores the cookie itself. `result.data.cookies` is still on the wire
- * and is simply not read.
+ * so it stores the cookie itself.
  *
  * The session store is told directly rather than left to re-ask: the sign-in
  * response already carries the user, and a second `/auth/me` to learn what we
@@ -42,9 +42,9 @@ import { listTeam as listTeamQuery } from './queries';
  */
 export async function login(
   credentials: LoginRequest,
-): Promise<Result<User, RustrakError>> {
+): Promise<Result<UserResponse, RustrakError>> {
   const client = await createClient();
-  const result = await client.auth.login(credentials);
+  const result = await client.auth.login({ body: credentials });
 
   if (!result.success) return result;
 
@@ -56,19 +56,19 @@ export async function login(
 /** Start OIDC login. */
 export async function startSso(): Promise<Result<string, RustrakError>> {
   const client = await createClient();
-  const result = await client.auth.startSso();
+  const result = await client.auth.ssoStart();
 
   if (!result.success) return result;
 
-  return Ok(result.data.authorizationUrl);
+  return Ok(result.data.authorization_url);
 }
 
 /** Link the pending SSO identity with the account's password and sign in. */
 export async function confirmSsoLink(
   password: string,
-): Promise<Result<User, RustrakError>> {
+): Promise<Result<UserResponse, RustrakError>> {
   const client = await createClient();
-  const result = await client.auth.confirmSsoLink(password);
+  const result = await client.auth.confirmSsoLink({ body: { password } });
 
   if (!result.success) return result;
 
@@ -101,9 +101,9 @@ export async function logout(): Promise<void> {
  */
 export async function acceptInvitation(
   input: AcceptInvitation,
-): Promise<Result<User, RustrakError>> {
+): Promise<Result<UserResponse, RustrakError>> {
   const client = await createClient();
-  const result = await client.auth.acceptInvitation(input);
+  const result = await client.auth.acceptInvitation({ body: input });
 
   if (!result.success) return result;
 
@@ -128,10 +128,10 @@ export async function acceptInvitation(
  */
 export async function updateUserRole(
   userId: number,
-  role: GlobalRole,
+  role: UserRole,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.team.updateRole(userId, role);
+  return client.team.updateRole({ path: { user_id: userId }, body: { role } });
 }
 
 /**
@@ -155,7 +155,7 @@ export async function updatePreferences(preferences: {
   timezone?: string | null;
 }): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  const result = await client.auth.updatePreferences(preferences);
+  const result = await client.auth.updateCurrentUser({ body: preferences });
 
   if (!result.success) return result;
 
@@ -170,7 +170,7 @@ export async function changePassword(request: {
   new_password: string;
 }): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.auth.changePassword(request);
+  return client.auth.changePassword({ body: request });
 }
 
 /**
@@ -186,7 +186,7 @@ export async function removeTeamMember(
   userId: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.team.remove(userId);
+  return client.team.deleteUser({ path: { user_id: userId } });
 }
 
 /**
@@ -206,9 +206,12 @@ export async function removeTeamMember(
 export async function upsertProjectMember(
   projectId: number,
   input: UpsertProjectMember,
-): Promise<Result<void, RustrakError>> {
+): Promise<Result<ProjectMember, RustrakError>> {
   const client = await createClient();
-  return client.members.upsert(projectId, input);
+  return client.members.upsert({
+    path: { project_id: projectId },
+    body: input,
+  });
 }
 
 /**
@@ -223,7 +226,9 @@ export async function removeProjectMember(
   userId: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.members.remove(projectId, userId);
+  return client.members.remove({
+    path: { project_id: projectId, user_id: userId },
+  });
 }
 
 /**
@@ -242,9 +247,9 @@ export async function removeProjectMember(
  */
 export async function createInvitation(
   input: CreateInvitation,
-): Promise<Result<Invitation, RustrakError>> {
+): Promise<Result<InvitationResponse, RustrakError>> {
   const client = await createClient();
-  return client.invitations.create(input);
+  return client.invitations.create({ body: input });
 }
 
 /**
@@ -257,7 +262,7 @@ export async function revokeInvitation(
   token: string,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.invitations.revoke(token);
+  return client.invitations.revoke({ path: { token } });
 }
 
 /**
@@ -270,6 +275,8 @@ export async function revokeInvitation(
  * — it is kept for now so that this commit changes the framework and not the
  * shape of the feature, and it is the first thing to delete afterwards.
  */
-export async function listTeam(): Promise<Result<TeamMember[], RustrakError>> {
+export async function listTeam(): Promise<
+  Result<TeamMemberResponse[], RustrakError>
+> {
   return listTeamQuery();
 }

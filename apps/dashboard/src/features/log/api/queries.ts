@@ -6,9 +6,8 @@
  * a browser bundle that holds the session cookie.
  */
 import type {
-  ListLogsOptions,
-  Log,
-  OffsetPaginatedResponse,
+  LogsListData,
+  LogsListResponse,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -16,8 +15,8 @@ import { createClient } from '@/shared/api/rustrak';
 
 export async function listLogs(
   projectId: number,
-  options?: ListLogsOptions,
-): Promise<Result<OffsetPaginatedResponse<Log>, RustrakError>> {
+  options?: NonNullable<LogsListData['query']>,
+): Promise<Result<LogsListResponse, RustrakError>> {
   const client = await createClient();
-  return client.logs.list(projectId, options);
+  return client.logs.list({ path: { project_id: projectId }, query: options });
 }

@@ -6,27 +6,31 @@
  * instance, who is on this project, and who has been asked to join.
  */
 import type {
-  Invitation,
-  InvitationInfo,
-  ProjectMember,
+  InvitationInfoResponse,
+  InvitationResponse,
+  ProjectMemberResponse,
   Result,
   RustrakError,
-  SsoConfig,
-  SsoLink,
-  TeamMember,
+  SsoConfigResponse,
+  SsoLinkResponse,
+  TeamMemberResponse,
 } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
 /** Public SSO configuration for the unauthenticated login page. */
-export async function getSsoConfig(): Promise<Result<SsoConfig, RustrakError>> {
+export async function getSsoConfig(): Promise<
+  Result<SsoConfigResponse, RustrakError>
+> {
   const client = await createClient();
-  return client.auth.getSsoConfig();
+  return client.auth.ssoConfig();
 }
 
 /** The account an SSO login is waiting to link, or `not_found` if none. */
-export async function getSsoLink(): Promise<Result<SsoLink, RustrakError>> {
+export async function getSsoLink(): Promise<
+  Result<SsoLinkResponse, RustrakError>
+> {
   const client = await createClient();
-  return client.auth.getSsoLink();
+  return client.auth.ssoLink();
 }
 
 /**
@@ -41,9 +45,9 @@ export async function getSsoLink(): Promise<Result<SsoLink, RustrakError>> {
  */
 export async function getInvitation(
   token: string,
-): Promise<Result<InvitationInfo, RustrakError>> {
+): Promise<Result<InvitationInfoResponse, RustrakError>> {
   const client = await createClient();
-  return client.auth.getInvitation(token);
+  return client.auth.getInvitation({ path: { token } });
 }
 
 /**
@@ -51,7 +55,9 @@ export async function getInvitation(
  *
  * @returns List of team members with their global role and status
  */
-export async function listTeam(): Promise<Result<TeamMember[], RustrakError>> {
+export async function listTeam(): Promise<
+  Result<TeamMemberResponse[], RustrakError>
+> {
   const client = await createClient();
   return client.team.list();
 }
@@ -64,9 +70,9 @@ export async function listTeam(): Promise<Result<TeamMember[], RustrakError>> {
  */
 export async function listProjectMembers(
   projectId: number,
-): Promise<Result<ProjectMember[], RustrakError>> {
+): Promise<Result<ProjectMemberResponse[], RustrakError>> {
   const client = await createClient();
-  return client.members.list(projectId);
+  return client.members.list({ path: { project_id: projectId } });
 }
 
 /**
@@ -75,7 +81,7 @@ export async function listProjectMembers(
  * @returns List of invitations
  */
 export async function listInvitations(): Promise<
-  Result<Invitation[], RustrakError>
+  Result<InvitationResponse[], RustrakError>
 > {
   const client = await createClient();
   return client.invitations.list();

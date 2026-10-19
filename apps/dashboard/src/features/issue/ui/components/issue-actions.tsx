@@ -1,6 +1,6 @@
 import type {
-  Issue,
   IssuePriority,
+  IssueResponse,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -52,7 +52,7 @@ import {
 import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface IssueActionsProps {
-  issue: Issue;
+  issue: IssueResponse;
   projectId: number;
   /** Composed in by the page, e.g. the GitHub button, after the overflow menu. */
   extra?: React.ReactNode;

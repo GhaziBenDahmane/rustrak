@@ -104,23 +104,23 @@ describe('MCP server integration', () => {
 
   beforeEach(async () => {
     mockClient = {
-      stats: { timeseries: vi.fn(), summary: vi.fn() },
+      stats: { getEventTimeseries: vi.fn(), getSummary: vi.fn() },
       projects: { list: vi.fn(), get: vi.fn(), create: vi.fn() },
       issues: {
         list: vi.fn(),
         get: vi.fn(),
-        updateState: vi.fn(),
+        update: vi.fn(),
         delete: vi.fn(),
       },
       events: { list: vi.fn(), get: vi.fn() },
       tokens: { list: vi.fn(), get: vi.fn(), create: vi.fn(), delete: vi.fn() },
-      alertIntegrations: { list: vi.fn(), test: vi.fn() },
+      alertChannels: { list: vi.fn(), test: vi.fn() },
       alertRules: { list: vi.fn() },
-      team: { list: vi.fn(), updateRole: vi.fn(), remove: vi.fn() },
+      team: { list: vi.fn(), updateRole: vi.fn(), deleteUser: vi.fn() },
       invitations: { create: vi.fn(), list: vi.fn(), revoke: vi.fn() },
       members: { list: vi.fn(), upsert: vi.fn(), remove: vi.fn() },
-      health: { getVersion: vi.fn() },
-      sessions: { stats: vi.fn() },
+      health: { version: vi.fn() },
+      sessions: { getStats: vi.fn() },
       transactions: {
         list: vi.fn(),
         get: vi.fn(),
@@ -133,19 +133,19 @@ describe('MCP server integration', () => {
         previewCleanup: vi.fn(),
         executeCleanup: vi.fn(),
         getCleanupStatus: vi.fn(),
-        previewGcSourceMaps: vi.fn(),
+        previewSourceMapGc: vi.fn(),
         gcSourceMaps: vi.fn(),
       },
       spans: {
         list: vi.fn(),
       },
       agents: {
-        getRuns: vi.fn(),
-        getDuration: vi.fn(),
-        getModelsByCalls: vi.fn(),
-        getModelsByTokens: vi.fn(),
-        getTools: vi.fn(),
-        getTraces: vi.fn(),
+        runs: vi.fn(),
+        duration: vi.fn(),
+        modelsCalls: vi.fn(),
+        modelsTokens: vi.fn(),
+        tools: vi.fn(),
+        traces: vi.fn(),
       },
     };
     testEnv = await createTestEnv(mockClient);

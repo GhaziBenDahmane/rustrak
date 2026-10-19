@@ -46,7 +46,7 @@ export function useSchedulePreview(
     let cancelled = false;
     const timer = setTimeout(async () => {
       const client = await createClient();
-      const result = await client.schedules.preview(JSON.parse(key));
+      const result = await client.schedules.preview({ body: JSON.parse(key) });
       if (cancelled) return;
       if (result.success) {
         setAnswer({ key, state: { ...IDLE, runs: result.data.next_runs } });

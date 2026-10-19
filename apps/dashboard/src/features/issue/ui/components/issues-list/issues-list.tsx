@@ -1,4 +1,4 @@
-import type { Issue, OffsetPaginatedResponse } from '@rustrak/client';
+import type { IssueResponse, IssuesListResponse } from '@rustrak/client';
 import { AlertCircle, Check, Trash2, VolumeX, X } from 'lucide-react';
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -21,7 +21,7 @@ import { IssueFilters } from './issue-filters';
 
 interface IssuesListProps {
   projectId: number;
-  initialIssues: OffsetPaginatedResponse<Issue>;
+  initialIssues: IssuesListResponse;
   currentFilter: string;
   currentPage: number;
 }
@@ -40,7 +40,9 @@ export function IssuesList({
 
   // Null means "no single issue targeted", which is how the dialog tells a row
   // delete from a batch delete without a second flag to keep in step.
-  const [pendingDelete, setPendingDelete] = useState<Issue | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<IssueResponse | null>(
+    null,
+  );
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const buildUrl = (next: { filter?: string; page?: number }) => {

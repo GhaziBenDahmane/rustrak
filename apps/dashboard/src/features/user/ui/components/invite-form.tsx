@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import type { GlobalRole } from '@rustrak/client';
+import type { UserRole } from '@rustrak/client';
 import { UserPlus } from 'lucide-react';
 import { useTransition } from 'react';
 import { useForm } from 'react-hook-form';
@@ -54,7 +54,7 @@ export function InviteForm() {
     startTransition(async () => {
       const result = await createInvitation({
         email: data.email,
-        role: data.role as GlobalRole,
+        role: data.role as UserRole,
       });
 
       if (!result.success) {

@@ -85,7 +85,9 @@ describe('project tools', () => {
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.id).toBe(42);
-      expect(mockClient.projects.get).toHaveBeenCalledWith(42);
+      expect(mockClient.projects.get).toHaveBeenCalledWith({
+        path: { id: 42 },
+      });
     });
   });
 
@@ -110,8 +112,7 @@ describe('project tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.id).toBe(99);
       expect(mockClient.projects.create).toHaveBeenCalledWith({
-        name: 'New Project',
-        slug: undefined,
+        body: { name: 'New Project', slug: undefined },
       });
     });
   });

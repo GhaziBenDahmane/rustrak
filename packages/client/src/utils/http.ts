@@ -1,4 +1,3 @@
-import ky, { type HTTPError, isHTTPError, type KyInstance } from 'ky';
 import type { ClientConfig } from '../config.js';
 import {
   FIELD_ERROR_CODES,
@@ -11,16 +10,14 @@ import {
 } from '../errors.js';
 
 /**
- * Internal carrier for a `RustrakError` travelling out of ky.
+ * Internal carrier for a transport failure travelling out of `fetch`.
  *
- * ky signals a non-2xx by rejecting, and a rejection must be caught somewhere.
- * `RustrakError` is a plain object by design and throwing a non-`Error` would
- * be indistinguishable from a bug, so the union is smuggled out inside a real
- * `Error` subclass that `BaseResource` unwraps into an `Err`.
+ * `fetch` signals "no response" by rejecting with a `TypeError`, which is also
+ * what a genuine bug throws. {@link createFetch} wraps the rejections it
+ * recognises in this class so the `Result` boundary in `client.ts` can tell
+ * the two apart: this becomes an `Err`, anything else keeps propagating.
  *
- * Never exported from `src/index.ts`: it exists only between `beforeError` and
- * `BaseResource`. Anything that is *not* one of these is a genuine programming
- * error and keeps propagating.
+ * Never exported from `src/index.ts`.
  */
 export class RustrakTransportFailure extends Error {
   public readonly rustrakError: RustrakError;
@@ -46,22 +43,20 @@ export function isTransportFailure(
  * the ingest rate limiter sends a flat `{error: "..."}`. Reading only the flat
  * one turned every structured error into "[object Object]". See #204.
  */
-function readErrorMessage(error: HTTPError, status: number): string {
+function readErrorMessage(body: unknown, status: number): string {
   const fallback = `HTTP ${status} error`;
 
-  // `typeof body === 'object'` on purpose: ky puts a non-JSON body in
-  // `error.data` as a plain string, and property access on a string primitive
-  // yields undefined, so a bare `if (body)` fell through to the generic message
-  // only by accident. Make the fallback deliberate.
-  const body = error.data as {
-    error?: string | { type?: string; message?: string };
-    message?: string;
-  } | null;
-
+  // `typeof body === 'object'` on purpose: a non-JSON body arrives as a plain
+  // string, and property access on a string primitive yields undefined, so a
+  // bare `if (body)` fell through to the generic message only by accident.
+  // Make the fallback deliberate.
   if (body && typeof body === 'object') {
-    const nested =
-      typeof body.error === 'object' ? body.error?.message : body.error;
-    return nested || body.message || fallback;
+    const { error, message } = body as {
+      error?: string | { type?: string; message?: string };
+      message?: string;
+    };
+    const nested = typeof error === 'object' ? error?.message : error;
+    return nested || message || fallback;
   }
 
   return fallback;
@@ -147,41 +142,43 @@ function warnUnknownFieldErrorCode(code: string, field: string): void {
  * body is not JSON at all. The caller omits the key entirely in that case, so
  * `'incidentId' in error` stays an honest test.
  */
-function readIncidentId(error: HTTPError): string | undefined {
-  const body = error.data as { error?: { incident_id?: unknown } } | null;
+function readIncidentId(body: unknown): string | undefined {
   const raw =
-    body && typeof body === 'object' ? body.error?.incident_id : undefined;
+    body && typeof body === 'object'
+      ? (body as { error?: { incident_id?: unknown } }).error?.incident_id
+      : undefined;
 
   return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
 }
 
-function readFieldErrors(error: HTTPError): FieldError[] | undefined {
-  const body = error.data as { error?: { fields?: unknown } } | null;
-  const raw = body && typeof body === 'object' ? body.error?.fields : undefined;
+function readFieldErrors(body: unknown): FieldError[] | undefined {
+  const raw =
+    body && typeof body === 'object'
+      ? (body as { error?: { fields?: unknown } }).error?.fields
+      : undefined;
 
   if (!Array.isArray(raw)) {
     return undefined;
   }
 
-  const fields: FieldError[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) continue;
+  const fields = raw.flatMap((entry) => readFieldError(entry) ?? []);
+  return fields.length > 0 ? fields : undefined;
+}
 
-    const { field, code, message } = entry as Record<string, unknown>;
-    if (typeof field !== 'string') continue;
-    if (!isFieldErrorCode(code)) {
-      if (typeof code === 'string') warnUnknownFieldErrorCode(code, field);
-      continue;
-    }
+/** One entry of `error.fields`, or `undefined` when it is unusable. */
+function readFieldError(entry: unknown): FieldError | undefined {
+  if (typeof entry !== 'object' || entry === null) return undefined;
 
-    fields.push(
-      code === 'custom' && typeof message === 'string'
-        ? { field, code, message }
-        : { field, code },
-    );
+  const { field, code, message } = entry as Record<string, unknown>;
+  if (typeof field !== 'string') return undefined;
+  if (!isFieldErrorCode(code)) {
+    if (typeof code === 'string') warnUnknownFieldErrorCode(code, field);
+    return undefined;
   }
 
-  return fields.length > 0 ? fields : undefined;
+  return code === 'custom' && typeof message === 'string'
+    ? { field, code, message }
+    : { field, code };
 }
 
 /**
@@ -242,8 +239,10 @@ function annotate<E extends RustrakError & { fields?: readonly FieldError[] }>(
  * Total by construction: every 5xx redacts, every other unanticipated status
  * lands on `client_error`, so no status is unrepresentable.
  */
-export function transformHttpError(error: HTTPError): RustrakError {
-  const { response } = error;
+export function transformHttpError(
+  response: Response,
+  body: unknown,
+): RustrakError {
   const status = response.status;
 
   // 5xx never carries a server-supplied message. The server redacts its own
@@ -261,12 +260,12 @@ export function transformHttpError(error: HTTPError): RustrakError {
       status,
       message: SERVER_ERROR_MESSAGE,
     } as const;
-    const incidentId = readIncidentId(error);
+    const incidentId = readIncidentId(body);
 
     return incidentId === undefined ? base : { ...base, incidentId };
   }
 
-  const message = readErrorMessage(error, status);
+  const message = readErrorMessage(body, status);
 
   // Read once, for every non-5xx status. `AppError::with_field` works on all
   // eight Rust variants, so restricting this to 400 and 409 meant an
@@ -274,7 +273,7 @@ export function transformHttpError(error: HTTPError): RustrakError {
   // serialised, documented in `openapi.json`, and invisible to every consumer
   // with no test failing anywhere. It costs nothing when the key is absent:
   // `readFieldErrors` returns `undefined` without allocating.
-  const fields = readFieldErrors(error);
+  const fields = readFieldErrors(body);
 
   switch (status) {
     case 400:
@@ -307,62 +306,84 @@ export function transformHttpError(error: HTTPError): RustrakError {
   }
 }
 
-export function createKyInstance(config: ClientConfig): KyInstance {
-  const headers: Record<string, string> = {
-    // `Accept` is set here rather than relied on from ky. The `.json()`
-    // shortcut sets it before the request is issued, and `BaseResource` no
-    // longer uses that shortcut: it awaits the `Response` and parses the body
-    // itself, so without this every one of the 86 methods would send `*/*` and
-    // any content-negotiating hop could answer with HTML.
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
-    ...config.headers,
+/** Statuses a `Response` may not be constructed with a body for. */
+const NULL_BODY = new Set([101, 103, 204, 205, 304]);
+
+/** Statuses worth repeating: the request may well succeed a moment later. */
+const RETRY_STATUSES = new Set([408, 500, 502, 503, 504]);
+
+/**
+ * Only methods that are safe to send twice. A `POST` that timed out at the
+ * proxy may still have created the row, and a second one creates another.
+ */
+const RETRY_METHODS = new Set(['GET', 'HEAD', 'PUT', 'DELETE']);
+
+/**
+ * The `fetch` every request goes through: timeout, retries, and the line
+ * between a transport failure and a bug.
+ *
+ * The body is read here, inside the same `try` as the request, so a
+ * connection that dies halfway through a body is a transport failure like
+ * one that never connected, not an error the generated client half-parses.
+ *
+ * Retries wait 300ms, then 600ms, and so on. A caller's own `AbortSignal`
+ * aborting is not a transport failure: it rethrows as the `AbortError` the
+ * caller asked for.
+ */
+export function createFetch(config: ClientConfig): typeof fetch {
+  const timeout = config.timeout ?? 30_000;
+  const maxRetries = config.maxRetries ?? 2;
+
+  return async (input, init) => {
+    const request = new Request(input, init);
+    const retries = RETRY_METHODS.has(request.method) ? maxRetries : 0;
+
+    for (let n = 0; ; n++) {
+      const outcome = await attempt(request, timeout);
+      // A timeout is not repeated: the server may still be working on it.
+      const retryable =
+        outcome instanceof Response
+          ? RETRY_STATUSES.has(outcome.status)
+          : outcome.reason === 'unreachable';
+      if (n < retries && retryable) {
+        await sleep(n);
+        continue;
+      }
+      if (outcome instanceof Response) return outcome;
+      throw new RustrakTransportFailure(outcome);
+    }
   };
+}
 
-  if (config.token) {
-    headers.Authorization = `Bearer ${config.token}`;
+/** One try: the response with its body read, or the failure it ended in. */
+async function attempt(
+  request: Request,
+  timeout: number,
+): Promise<Response | Extract<RustrakError, { kind: 'network' }>> {
+  try {
+    const response = await fetch(request.clone(), {
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(timeout)]),
+    });
+    const body = await response.arrayBuffer();
+    return new Response(NULL_BODY.has(response.status) ? null : body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  } catch (error) {
+    if (request.signal.aborted) throw error;
+    // No `cause`, and never `error.message`: both embed the resolved host and
+    // port, which must not ride along into a serialized payload or a UI.
+    return error instanceof DOMException && error.name === 'TimeoutError'
+      ? { kind: 'network', message: TIMEOUT_ERROR_MESSAGE, reason: 'timeout' }
+      : {
+          kind: 'network',
+          message: NETWORK_ERROR_MESSAGE,
+          reason: 'unreachable',
+        };
   }
+}
 
-  return ky.create({
-    prefix: config.baseUrl,
-    timeout: config.timeout ?? 30000,
-    credentials: 'include',
-    retry: {
-      limit: config.maxRetries ?? 2,
-      statusCodes: [408, 500, 502, 503, 504],
-      methods: ['get', 'post', 'put', 'patch', 'delete'],
-    },
-    headers,
-    hooks: {
-      beforeError: [
-        ({ error }) => {
-          if (error.name === 'TimeoutError') {
-            // No `cause`: the underlying error embeds the resolved host and
-            // port, which must not ride along into a serialized payload.
-            throw new RustrakTransportFailure({
-              kind: 'network',
-              message: TIMEOUT_ERROR_MESSAGE,
-              reason: 'timeout',
-            });
-          }
-
-          if (isHTTPError(error)) {
-            throw new RustrakTransportFailure(transformHttpError(error));
-          }
-
-          // Neither is `error.message` usable here, for the same reason the
-          // timeout branch above discards it: ky's `NetworkError` builds it as
-          // `Request failed due to a network error: ${method} ${url}`, so
-          // forwarding it publishes the deployment's internal host and port to
-          // every consumer that renders `error.message`. `reason` comes from
-          // `error.name`, which carries no request data.
-          throw new RustrakTransportFailure({
-            kind: 'network',
-            message: NETWORK_ERROR_MESSAGE,
-            reason: 'unreachable',
-          });
-        },
-      ],
-    },
-  });
+function sleep(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt));
 }

@@ -1,6 +1,6 @@
 import type {
   CreateMonitor,
-  Monitor,
+  MonitorResponse,
   Result,
   RustrakError,
   UpdateMonitor,
@@ -10,18 +10,24 @@ import { createClient } from '@/shared/api/rustrak';
 export async function createMonitor(
   projectId: number,
   input: CreateMonitor,
-): Promise<Result<Monitor, RustrakError>> {
+): Promise<Result<MonitorResponse, RustrakError>> {
   const client = await createClient();
-  return client.monitors.create(projectId, input);
+  return client.monitors.create({
+    path: { project_id: projectId },
+    body: input,
+  });
 }
 
 export async function updateMonitor(
   projectId: number,
   slug: string,
   input: UpdateMonitor,
-): Promise<Result<Monitor, RustrakError>> {
+): Promise<Result<MonitorResponse, RustrakError>> {
   const client = await createClient();
-  return client.monitors.update(projectId, slug, input);
+  return client.monitors.update({
+    path: { project_id: projectId, slug },
+    body: input,
+  });
 }
 
 export async function deleteMonitor(
@@ -29,5 +35,5 @@ export async function deleteMonitor(
   slug: string,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.monitors.delete(projectId, slug);
+  return client.monitors.delete({ path: { project_id: projectId, slug } });
 }

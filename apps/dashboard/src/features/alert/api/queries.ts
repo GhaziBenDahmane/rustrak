@@ -5,7 +5,7 @@
  */
 import type {
   AlertIntegration,
-  AlertRule,
+  AlertRuleResponse,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -19,12 +19,12 @@ export async function listIntegrations(): Promise<
   Result<AlertIntegration[], RustrakError>
 > {
   const client = await createClient();
-  return client.alertIntegrations.list();
+  return client.alertChannels.list();
 }
 
 export async function listAlertRules(
   projectId: number,
-): Promise<Result<AlertRule[], RustrakError>> {
+): Promise<Result<AlertRuleResponse[], RustrakError>> {
   const client = await createClient();
-  return client.alertRules.list(projectId);
+  return client.alertRules.list({ path: { project_id: projectId } });
 }

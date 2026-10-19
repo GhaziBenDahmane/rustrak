@@ -46,9 +46,12 @@ export function registerAgentTools(
       inputSchema: timeseriesInput,
     },
     async ({ project_id, period_hours, interval_hours }) => {
-      const result = await client.agents.getRuns(project_id, {
-        period_hours,
-        interval_hours,
+      const result = await client.agents.runs({
+        path: { project_id },
+        query: {
+          period_hours,
+          interval_hours,
+        },
       });
       return mcpJson(result);
     },
@@ -62,9 +65,12 @@ export function registerAgentTools(
       inputSchema: timeseriesInput,
     },
     async ({ project_id, period_hours, interval_hours }) => {
-      const result = await client.agents.getDuration(project_id, {
-        period_hours,
-        interval_hours,
+      const result = await client.agents.duration({
+        path: { project_id },
+        query: {
+          period_hours,
+          interval_hours,
+        },
       });
       return mcpJson(result);
     },
@@ -78,9 +84,12 @@ export function registerAgentTools(
       inputSchema: breakdownInput,
     },
     async ({ project_id, period_hours, limit }) => {
-      const result = await client.agents.getModelsByCalls(project_id, {
-        period_hours,
-        limit,
+      const result = await client.agents.modelsCalls({
+        path: { project_id },
+        query: {
+          period_hours,
+          limit,
+        },
       });
       return mcpJson(result);
     },
@@ -94,9 +103,12 @@ export function registerAgentTools(
       inputSchema: breakdownInput,
     },
     async ({ project_id, period_hours, limit }) => {
-      const result = await client.agents.getModelsByTokens(project_id, {
-        period_hours,
-        limit,
+      const result = await client.agents.modelsTokens({
+        path: { project_id },
+        query: {
+          period_hours,
+          limit,
+        },
       });
       return mcpJson(result);
     },
@@ -110,9 +122,12 @@ export function registerAgentTools(
       inputSchema: breakdownInput,
     },
     async ({ project_id, period_hours, limit }) => {
-      const result = await client.agents.getTools(project_id, {
-        period_hours,
-        limit,
+      const result = await client.agents.tools({
+        path: { project_id },
+        query: {
+          period_hours,
+          limit,
+        },
       });
       return mcpJson(result);
     },
@@ -141,9 +156,12 @@ export function registerAgentTools(
       },
     },
     async ({ project_id, page, per_page }) => {
-      const result = await client.agents.getTraces(project_id, {
-        page,
-        per_page,
+      const result = await client.agents.traces({
+        path: { project_id },
+        query: {
+          page,
+          per_page,
+        },
       });
       return mcpJson(result);
     },

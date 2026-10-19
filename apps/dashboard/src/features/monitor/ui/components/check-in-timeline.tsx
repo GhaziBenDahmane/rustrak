@@ -1,4 +1,4 @@
-import type { CheckIn } from '@rustrak/client';
+import type { CheckInResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import { checkInFill } from '@/features/monitor/lib/check-in-fill';
 import { formatRunDuration } from '@/features/monitor/lib/duration';
@@ -23,7 +23,7 @@ export function CheckInTimeline({
   size = 'sm',
 }: {
   /** Newest first, as the API returns them. */
-  checkIns: CheckIn[];
+  checkIns: CheckInResponse[];
   slots?: number;
   size?: 'sm' | 'lg';
 }) {
@@ -69,7 +69,7 @@ export function CheckInTimeline({
                     {t(`status.${checkIn.status}`)}
                   </span>
                   <span className="opacity-80">{when}</span>
-                  {checkIn.duration_ms !== null && (
+                  {checkIn.duration_ms != null && (
                     <span className="opacity-80">
                       {t('timeline.took', {
                         duration: formatRunDuration(checkIn.duration_ms),

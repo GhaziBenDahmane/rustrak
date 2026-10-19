@@ -1,4 +1,4 @@
-import type { OffsetPaginatedResponse, Project } from '@rustrak/client';
+import type { ProjectResponse, ProjectsListResponse } from '@rustrak/client';
 import { FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useOptimistic, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -20,7 +20,7 @@ const HEADER =
   'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 interface ProjectsListProps {
-  initialProjects: OffsetPaginatedResponse<Project>;
+  initialProjects: ProjectsListResponse;
   currentPage: number;
 }
 
@@ -53,7 +53,9 @@ export function ProjectsList({
 
   // Null means "no single project targeted", which is how the dialog tells a
   // row delete from a batch delete without a second flag to keep in step.
-  const [pendingDelete, setPendingDelete] = useState<Project | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProjectResponse | null>(
+    null,
+  );
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const confirmDelete = () => {

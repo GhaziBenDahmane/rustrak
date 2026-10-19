@@ -28,7 +28,7 @@ describe('monitor tools', () => {
       monitors: {
         list: vi.fn(),
         get: vi.fn(),
-        listCheckIns: vi.fn(),
+        listCheckins: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
@@ -51,7 +51,9 @@ describe('monitor tools', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(mockClient.monitors.list).toHaveBeenCalledWith(1);
+    expect(mockClient.monitors.list).toHaveBeenCalledWith({
+      path: { project_id: 1 },
+    });
     expect(JSON.parse(result.content[0].text)[0].slug).toBe('nightly-backup');
   });
 
@@ -74,7 +76,7 @@ describe('monitor tools', () => {
   });
 
   it('list_monitor_checkins passes the filters through', async () => {
-    mockClient.monitors.listCheckIns.mockResolvedValue(
+    mockClient.monitors.listCheckins.mockResolvedValue(
       ok({ items: [], total_count: 0, page: 2, per_page: 10, total_pages: 0 }),
     );
 
@@ -89,11 +91,10 @@ describe('monitor tools', () => {
       },
     });
 
-    expect(mockClient.monitors.listCheckIns).toHaveBeenCalledWith(
-      1,
-      'nightly-backup',
-      { page: 2, per_page: 10, environment: 'staging' },
-    );
+    expect(mockClient.monitors.listCheckins).toHaveBeenCalledWith({
+      path: { project_id: 1, slug: 'nightly-backup' },
+      query: { page: 2, per_page: 10, environment: 'staging' },
+    });
   });
 
   it('create_monitor sends the schedule', async () => {
@@ -112,11 +113,14 @@ describe('monitor tools', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    expect(mockClient.monitors.create).toHaveBeenCalledWith(1, {
-      name: 'Nightly backup',
-      config: {
-        schedule: { type: 'crontab', value: '0 3 * * *' },
-        timezone: 'Europe/Madrid',
+    expect(mockClient.monitors.create).toHaveBeenCalledWith({
+      path: { project_id: 1 },
+      body: {
+        name: 'Nightly backup',
+        config: {
+          schedule: { type: 'crontab', value: '0 3 * * *' },
+          timezone: 'Europe/Madrid',
+        },
       },
     });
   });
@@ -141,11 +145,10 @@ describe('monitor tools', () => {
       arguments: { project_id: 1, slug: 'nightly-backup', is_muted: true },
     });
 
-    expect(mockClient.monitors.update).toHaveBeenCalledWith(
-      1,
-      'nightly-backup',
-      { is_muted: true },
-    );
+    expect(mockClient.monitors.update).toHaveBeenCalledWith({
+      path: { project_id: 1, slug: 'nightly-backup' },
+      body: { is_muted: true },
+    });
   });
 
   it('delete_monitor is marked destructive and confirms', async () => {

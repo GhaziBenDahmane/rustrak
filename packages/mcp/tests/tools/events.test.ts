@@ -45,9 +45,9 @@ describe('event tools', () => {
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.items).toHaveLength(1);
-      expect(mockClient.events.list).toHaveBeenCalledWith(1, 'iss-1', {
-        cursor: undefined,
-        order: undefined,
+      expect(mockClient.events.list).toHaveBeenCalledWith({
+        path: { project_id: 1, issue_id: 'iss-1' },
+        query: { cursor: undefined, order: undefined },
       });
     });
   });
@@ -72,7 +72,9 @@ describe('event tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.id).toBe('evt-42');
       expect(parsed.data.exception.values[0].type).toBe('TypeError');
-      expect(mockClient.events.get).toHaveBeenCalledWith(1, 'iss-1', 'evt-42');
+      expect(mockClient.events.get).toHaveBeenCalledWith({
+        path: { project_id: 1, issue_id: 'iss-1', event_id: 'evt-42' },
+      });
     });
   });
 });

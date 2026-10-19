@@ -1,7 +1,7 @@
 import type {
   ProjectStorage,
   Result,
-  Retention,
+  RetentionResponse,
   RustrakError,
   StorageAge,
   StorageSummary,
@@ -34,7 +34,9 @@ export async function getStorageProjects(): Promise<
 }
 
 /** Retention: settings, next cleanup and last cleanup. */
-export async function getRetention(): Promise<Result<Retention, RustrakError>> {
+export async function getRetention(): Promise<
+  Result<RetentionResponse, RustrakError>
+> {
   const client = await createClient();
   return client.storage.getRetention();
 }

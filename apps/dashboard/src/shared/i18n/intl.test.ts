@@ -1,4 +1,4 @@
-import type { User } from '@rustrak/client';
+import type { UserResponse } from '@rustrak/client';
 import type { Messages } from 'use-intl';
 import { describe, expect, it, vi } from 'vitest';
 import type { CurrentUser } from '@/shared/api/session';
@@ -13,10 +13,10 @@ import { createIntlStore } from './intl';
  * re-render them.
  */
 
-function user(overrides: Partial<User> = {}): CurrentUser {
+function user(overrides: Partial<UserResponse> = {}): CurrentUser {
   return {
     state: 'authenticated',
-    user: { id: 1, email: 'alice@example.com', ...overrides } as User,
+    user: { id: 1, email: 'alice@example.com', ...overrides } as UserResponse,
   };
 }
 

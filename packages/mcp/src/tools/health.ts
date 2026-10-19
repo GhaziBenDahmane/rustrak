@@ -13,7 +13,7 @@ export function registerHealthTools(
       inputSchema: {},
     },
     async () => {
-      const result = await client.health.getVersion();
+      const result = await client.health.version();
       return mcpJson(result);
     },
   );

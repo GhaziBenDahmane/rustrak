@@ -1,6 +1,6 @@
 import type {
   CleanupCounts,
-  CleanupOptions,
+  CleanupRequest,
   CleanupStatus,
   ProjectStorage,
   SourceMapGcResult,
@@ -242,7 +242,7 @@ function Choice({
  * toast).
  */
 async function deleteNow(
-  options: CleanupOptions,
+  options: CleanupRequest,
   chosen: { maps: number; rows: number; parts: string[] },
   t: (key: string, values?: Record<string, string | number>) => string,
 ): Promise<CleanupStatus | null | undefined> {
@@ -341,7 +341,7 @@ function Scope({
 }
 
 /** What a deletion would remove, counted as its options change. */
-function useCount(options: CleanupOptions) {
+function useCount(options: CleanupRequest) {
   const [counts, setCounts] = useState<CleanupCounts | null | 'failed'>(null);
   const [attempt, setAttempt] = useState(0);
   const key = JSON.stringify(options);
@@ -410,7 +410,7 @@ function joined(
  * skip what it had not counted.
  */
 function useDeletion(
-  options: CleanupOptions,
+  options: CleanupRequest,
   chosen: { rows: boolean; sourceMaps: boolean },
   projects: readonly ProjectStorage[],
 ) {

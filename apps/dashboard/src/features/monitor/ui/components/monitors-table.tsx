@@ -1,4 +1,4 @@
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 import { BellOff } from 'lucide-react';
 import { useFormatter, useTranslations } from 'use-intl';
 import { monitorHref } from '@/features/monitor/lib/href';
@@ -18,7 +18,7 @@ export function MonitorsTable({
   monitors,
 }: {
   projectId: number;
-  monitors: Monitor[];
+  monitors: MonitorResponse[];
 }) {
   const t = useTranslations('crons');
   const format = useFormatter();

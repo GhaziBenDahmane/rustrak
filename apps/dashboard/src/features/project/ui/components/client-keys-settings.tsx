@@ -1,4 +1,4 @@
-import type { Project } from '@rustrak/client';
+import type { ProjectResponse } from '@rustrak/client';
 import { Check, Copy } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useTranslations } from 'use-intl';
@@ -14,7 +14,7 @@ import {
 } from '@/shared/ui/hooks/use-syntax-highlighter';
 
 interface ClientKeysSettingsProps {
-  project: Project;
+  project: ProjectResponse;
 }
 
 export function ClientKeysSettings({ project }: ClientKeysSettingsProps) {

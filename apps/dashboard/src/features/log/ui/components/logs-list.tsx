@@ -1,4 +1,4 @@
-import type { Log, OffsetPaginatedResponse } from '@rustrak/client';
+import type { LogResponse, LogsListResponse } from '@rustrak/client';
 import { ScrollText } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormatter, useTranslations } from 'use-intl';
@@ -18,7 +18,7 @@ import { useTableUrlState } from '@/shared/ui/hooks/use-table-url-state';
 
 interface LogsListProps {
   projectId: number;
-  initialLogs: OffsetPaginatedResponse<Log>;
+  initialLogs: LogsListResponse;
   currentPage: number;
   /** Active level filter, if any. */
   activeLevel?: string;
@@ -57,7 +57,7 @@ function attributeDisplay(raw: unknown): { value: string; type?: string } {
   return { value: typeof raw === 'string' ? raw : JSON.stringify(raw) };
 }
 
-const helper = createAppColumnHelper<Log>();
+const helper = createAppColumnHelper<LogResponse>();
 
 /**
  * Columns live at module scope because none of them closes over a prop.
@@ -79,7 +79,7 @@ function buildColumns(
   format: Formatter,
 ) {
   return helper.columns([
-    expandColumn<Log>(tableT),
+    expandColumn<LogResponse>(tableT),
     helper.accessor('level', {
       header: t('columns.level'),
       size: 92,
@@ -139,7 +139,7 @@ function buildColumns(
 }
 
 /** The panel under an expanded row: everything the columns had to leave out. */
-function LogDetail({ log }: { log: Log }) {
+function LogDetail({ log }: { log: LogResponse }) {
   const format = useFormatter();
   const t = useTranslations('logs');
   const attributes = Object.entries(log.attributes ?? {});

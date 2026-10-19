@@ -1,4 +1,16 @@
-import type { AlertRuleConditions, AlertType } from '@rustrak/client';
+import type { AlertRuleResponse, AlertType } from '@rustrak/client';
+
+type Conditions = AlertRuleResponse['conditions'];
+
+/**
+ * What the server stores in `conditions`. The spec types the column as an open
+ * map (a `serde_json::Value` on the server), so the known keys are named here.
+ */
+interface KnownConditions {
+  min_level?: (typeof levels)[number];
+  environments?: string[];
+  min_events?: number;
+}
 
 export const levels = ['debug', 'info', 'warning', 'error', 'fatal'] as const;
 
@@ -16,7 +28,7 @@ export interface FilterFields {
  */
 export function conditionsFromForm(
   form: FilterFields & { alert_type: AlertType },
-): AlertRuleConditions {
+): Conditions {
   const environments = form.environments
     .split(',')
     .map((e) => e.trim())
@@ -29,12 +41,11 @@ export function conditionsFromForm(
   };
 }
 
-export function formFromConditions(
-  conditions: AlertRuleConditions,
-): FilterFields {
+export function formFromConditions(conditions: Conditions): FilterFields {
+  const known = conditions as KnownConditions;
   return {
-    min_level: conditions.min_level ?? 'any',
-    environments: (conditions.environments ?? []).join(', '),
-    min_events: conditions.min_events ?? 1,
+    min_level: known.min_level ?? 'any',
+    environments: (known.environments ?? []).join(', '),
+    min_events: known.min_events ?? 1,
   };
 }

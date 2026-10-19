@@ -1,8 +1,13 @@
-import type { Monitor, MonitorEnvironment } from '@rustrak/client';
+import type {
+  MonitorEnvironmentResponse,
+  MonitorResponse,
+} from '@rustrak/client';
 import { describe, expect, it } from 'vitest';
 import { lastCheckIn, monitorHealth, nextCheckIn } from './status';
 
-function env(overrides: Partial<MonitorEnvironment>): MonitorEnvironment {
+function env(
+  overrides: Partial<MonitorEnvironmentResponse>,
+): MonitorEnvironmentResponse {
   return {
     id: crypto.randomUUID(),
     environment: 'production',
@@ -15,7 +20,7 @@ function env(overrides: Partial<MonitorEnvironment>): MonitorEnvironment {
   };
 }
 
-function monitor(environments: MonitorEnvironment[]): Monitor {
+function monitor(environments: MonitorEnvironmentResponse[]): MonitorResponse {
   return {
     id: crypto.randomUUID(),
     slug: 'job',

@@ -55,7 +55,9 @@ describe('log tools', () => {
       expect(parsed.items).toHaveLength(1);
       expect(parsed.items[0].body).toBe('ok');
       expect(parsed.total_count).toBe(1);
-      expect(mockClient.logs.list).toHaveBeenCalledWith(1, expect.any(Object));
+      expect(mockClient.logs.list).toHaveBeenCalledWith(
+        expect.objectContaining({ path: { project_id: 1 } }),
+      );
     });
 
     it('forwards offset pagination and filters', async () => {
@@ -72,15 +74,15 @@ describe('log tools', () => {
         },
       });
 
-      expect(mockClient.logs.list).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
+      expect(mockClient.logs.list).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: expect.objectContaining({
           page: 2,
           per_page: 50,
           level: 'error',
           trace_id: 'aaaa',
         }),
-      );
+      });
     });
 
     it('returns error content on API failure', async () => {

@@ -1,4 +1,4 @@
-import type { Issue } from '@rustrak/client';
+import type { IssueResponse } from '@rustrak/client';
 import { AlertCircle, Users } from 'lucide-react';
 import { useFormatter, useTranslations } from 'use-intl';
 import { LevelBadge } from '@/features/issue/ui/components/issue-indicators';
@@ -14,7 +14,7 @@ import { TrendSparkline } from '@/shared/ui/components/trend-sparkline';
 
 interface IssueListCardProps {
   projectId: number;
-  issues: Issue[];
+  issues: IssueResponse[];
   title: string;
   /** Qualifies what the list covers, e.g. the window it is scoped to. */
   subtitle?: string;
@@ -73,7 +73,7 @@ export function IssueListCard({
                   <TrendSparkline trend={issue.trend} />
                 ) : null}
 
-                {issue.user_count !== undefined ? (
+                {issue.user_count != null ? (
                   <span
                     className="hidden shrink-0 items-center gap-1 font-mono text-xs text-muted-foreground sm:flex"
                     title={t('card.usersAffected', { count: issue.user_count })}

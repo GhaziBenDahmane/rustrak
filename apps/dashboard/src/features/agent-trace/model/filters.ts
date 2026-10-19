@@ -107,7 +107,7 @@ export function agentDashboardQuery(
  * comparator that returns `NaN` leaves the order implementation-defined, which
  * would make the default selection depend on the order rows arrived in.
  */
-function sortableStart(value: string | null): number {
+function sortableStart(value: string | null | undefined): number {
   if (value == null) return Number.POSITIVE_INFINITY;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
@@ -116,8 +116,8 @@ function sortableStart(value: string | null): number {
 export function defaultSelectedSpanId(
   spans: {
     id: string;
-    gen_ai_operation_type: string | null;
-    start_timestamp: string | null;
+    gen_ai_operation_type?: string | null;
+    start_timestamp?: string | null;
   }[],
 ): string | undefined {
   if (spans.length === 0) return undefined;

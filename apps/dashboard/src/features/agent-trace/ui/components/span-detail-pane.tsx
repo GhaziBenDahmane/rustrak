@@ -1,11 +1,11 @@
-import type { Result, RustrakError, SpanDetail } from '@rustrak/client';
+import type { Result, RustrakError, SpanDetailResponse } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
 import { AiSpanDetail } from '@/features/agent-trace/ui/components/ai-span-detail';
 import { LoadFailure } from '@/shared/ui/components/load-failure';
 
 interface SpanDetailPaneProps {
   /** The loaded span, or `null` when no span is selected. */
-  selected: Result<SpanDetail, RustrakError> | null;
+  selected: Result<SpanDetailResponse, RustrakError> | null;
   /** The URL named a span this trace does not contain. */
   requestedMissing: boolean;
 }

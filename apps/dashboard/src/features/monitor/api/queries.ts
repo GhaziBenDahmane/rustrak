@@ -1,8 +1,7 @@
 import type {
-  CheckIn,
-  ListCheckInsOptions,
-  Monitor,
-  OffsetPaginatedResponse,
+  MonitorResponse,
+  MonitorsListCheckinsData,
+  MonitorsListCheckinsResponse,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -10,24 +9,27 @@ import { createClient } from '@/shared/api/rustrak';
 
 export async function listMonitors(
   projectId: number,
-): Promise<Result<Monitor[], RustrakError>> {
+): Promise<Result<MonitorResponse[], RustrakError>> {
   const client = await createClient();
-  return client.monitors.list(projectId);
+  return client.monitors.list({ path: { project_id: projectId } });
 }
 
 export async function getMonitor(
   projectId: number,
   slug: string,
-): Promise<Result<Monitor, RustrakError>> {
+): Promise<Result<MonitorResponse, RustrakError>> {
   const client = await createClient();
-  return client.monitors.get(projectId, slug);
+  return client.monitors.get({ path: { project_id: projectId, slug } });
 }
 
 export async function listCheckIns(
   projectId: number,
   slug: string,
-  options?: ListCheckInsOptions,
-): Promise<Result<OffsetPaginatedResponse<CheckIn>, RustrakError>> {
+  options?: MonitorsListCheckinsData['query'],
+): Promise<Result<MonitorsListCheckinsResponse, RustrakError>> {
   const client = await createClient();
-  return client.monitors.listCheckIns(projectId, slug, options);
+  return client.monitors.listCheckins({
+    path: { project_id: projectId, slug },
+    query: options,
+  });
 }

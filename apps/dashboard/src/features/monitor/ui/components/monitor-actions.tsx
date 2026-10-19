@@ -1,4 +1,4 @@
-import type { Monitor } from '@rustrak/client';
+import type { MonitorResponse } from '@rustrak/client';
 import { Bell, BellOff, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -32,7 +32,7 @@ export function MonitorActions({
   monitor,
 }: {
   projectId: number;
-  monitor: Monitor;
+  monitor: MonitorResponse;
 }) {
   const t = useTranslations('crons');
   const router = useRouter();

@@ -30,7 +30,7 @@ describe('session tools', () => {
   beforeEach(async () => {
     mockClient = {
       sessions: {
-        stats: vi.fn(),
+        getStats: vi.fn(),
       },
     };
     testEnv = await createTestEnv(mockClient);
@@ -43,7 +43,7 @@ describe('session tools', () => {
 
   describe('get_release_health', () => {
     it('returns release health for a project', async () => {
-      mockClient.sessions.stats.mockResolvedValue(ok(mockReleaseHealth));
+      mockClient.sessions.getStats.mockResolvedValue(ok(mockReleaseHealth));
 
       const result = await callTool({
         name: 'get_release_health',
@@ -56,45 +56,54 @@ describe('session tools', () => {
       expect(parsed.total_count).toBe(1);
       expect(parsed.items[0].release).toBe('1.0.0');
       expect(parsed.items[0].crash_free_sessions_rate).toBeCloseTo(0.98);
-      expect(mockClient.sessions.stats).toHaveBeenCalledWith(1, {
-        period: undefined,
-        page: undefined,
-        per_page: undefined,
+      expect(mockClient.sessions.getStats).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: {
+          period: undefined,
+          page: undefined,
+          per_page: undefined,
+        },
       });
     });
 
     it('passes period when provided', async () => {
-      mockClient.sessions.stats.mockResolvedValue(ok(mockReleaseHealth));
+      mockClient.sessions.getStats.mockResolvedValue(ok(mockReleaseHealth));
 
       await callTool({
         name: 'get_release_health',
         arguments: { project_id: 1, period: '7d' },
       });
 
-      expect(mockClient.sessions.stats).toHaveBeenCalledWith(1, {
-        period: '7d',
-        page: undefined,
-        per_page: undefined,
+      expect(mockClient.sessions.getStats).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: {
+          period: '7d',
+          page: undefined,
+          per_page: undefined,
+        },
       });
     });
 
     it('passes pagination params when provided', async () => {
-      mockClient.sessions.stats.mockResolvedValue(ok(mockReleaseHealth));
+      mockClient.sessions.getStats.mockResolvedValue(ok(mockReleaseHealth));
 
       await callTool({
         name: 'get_release_health',
         arguments: { project_id: 1, page: 2, per_page: 50 },
       });
 
-      expect(mockClient.sessions.stats).toHaveBeenCalledWith(1, {
-        period: undefined,
-        page: 2,
-        per_page: 50,
+      expect(mockClient.sessions.getStats).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: {
+          period: undefined,
+          page: 2,
+          per_page: 50,
+        },
       });
     });
 
     it('returns error content on API failure', async () => {
-      mockClient.sessions.stats.mockResolvedValue(
+      mockClient.sessions.getStats.mockResolvedValue(
         fail({
           kind: 'server_error',
           status: 500,

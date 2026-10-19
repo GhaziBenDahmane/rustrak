@@ -1,7 +1,7 @@
 import type {
   CleanupCounts,
   CleanupStatus,
-  Retention,
+  RetentionResponse,
   RetentionSettings,
 } from '@rustrak/client';
 import { useEffect, useState, useTransition } from 'react';
@@ -19,7 +19,7 @@ import {
  */
 export function useRetentionDraft(
   initial: RetentionSettings,
-  onDone: (saved: Retention, job: CleanupStatus | null) => void,
+  onDone: (saved: RetentionResponse, job: CleanupStatus | null) => void,
 ) {
   const t = useTranslations('storage');
   const [draft, setDraft] = useState(initial);

@@ -1,8 +1,8 @@
-import type { Span } from '@rustrak/client';
+import type { SpanResponse } from '@rustrak/client';
 import { describe, expect, it } from 'vitest';
 import { resolveSelectedSpan, summarizeTrace } from './trace-summary';
 
-function span(over: Partial<Span> & { id: string }): Span {
+function span(over: Partial<SpanResponse> & { id: string }): SpanResponse {
   return {
     gen_ai_operation_type: null,
     gen_ai_agent_name: null,
@@ -13,7 +13,7 @@ function span(over: Partial<Span> & { id: string }): Span {
     timestamp: null,
     status: null,
     ...over,
-  } as unknown as Span;
+  } as unknown as SpanResponse;
 }
 
 describe('summarizeTrace', () => {

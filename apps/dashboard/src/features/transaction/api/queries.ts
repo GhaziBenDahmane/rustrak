@@ -6,39 +6,48 @@
  * a browser bundle that holds the session cookie.
  */
 import type {
-  ListTransactionsOptions,
-  OffsetPaginatedResponse,
   Result,
   RustrakError,
-  Transaction,
-  TransactionDetail,
-  TransactionStats,
+  TransactionDetailResponse,
+  TransactionStatsResponse,
+  TransactionsGetStatsData,
+  TransactionsGetStatsResponse,
+  TransactionsListData,
+  TransactionsListResponse,
 } from '@rustrak/client';
 import { Ok } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
 export async function listTransactions(
   projectId: number,
-  options?: ListTransactionsOptions,
-): Promise<Result<OffsetPaginatedResponse<Transaction>, RustrakError>> {
+  options?: NonNullable<TransactionsListData['query']>,
+): Promise<Result<TransactionsListResponse, RustrakError>> {
   const client = await createClient();
-  return client.transactions.list(projectId, options);
+  return client.transactions.list({
+    path: { project_id: projectId },
+    query: options,
+  });
 }
 
 export async function getTransaction(
   projectId: number,
   transactionId: string,
-): Promise<Result<TransactionDetail, RustrakError>> {
+): Promise<Result<TransactionDetailResponse, RustrakError>> {
   const client = await createClient();
-  return client.transactions.get(projectId, transactionId);
+  return client.transactions.get({
+    path: { project_id: projectId, transaction_id: transactionId },
+  });
 }
 
 export async function getTransactionStats(
   projectId: number,
-  options?: { page?: number; per_page?: number },
-): Promise<Result<OffsetPaginatedResponse<TransactionStats>, RustrakError>> {
+  options?: NonNullable<TransactionsGetStatsData['query']>,
+): Promise<Result<TransactionsGetStatsResponse, RustrakError>> {
   const client = await createClient();
-  return client.transactions.getStats(projectId, options);
+  return client.transactions.getStats({
+    path: { project_id: projectId },
+    query: options,
+  });
 }
 
 /**
@@ -54,9 +63,12 @@ export async function getTransactionStatForGroup(
   projectId: number,
   name: string,
   op?: string,
-): Promise<Result<TransactionStats | null, RustrakError>> {
+): Promise<Result<TransactionStatsResponse | null, RustrakError>> {
   const client = await createClient();
-  const result = await client.transactions.getStatForGroup(projectId, name, op);
+  const result = await client.transactions.getStatGroup({
+    path: { project_id: projectId },
+    query: { name, op },
+  });
 
   if (!result.success && result.error.kind === 'not_found') {
     return Ok(null);

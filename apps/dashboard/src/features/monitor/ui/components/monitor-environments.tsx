@@ -1,4 +1,7 @@
-import type { Monitor, MonitorEnvironmentStatus } from '@rustrak/client';
+import type {
+  MonitorEnvironmentStatus,
+  MonitorResponse,
+} from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import { cn } from '@/shared/lib/utils';
 import { CheckInTimeline } from './check-in-timeline';
@@ -10,7 +13,7 @@ const STATUS_DOT: Record<MonitorEnvironmentStatus, string> = {
 };
 
 /** One card per environment: its health, its clock and its last runs. */
-export function MonitorEnvironments({ monitor }: { monitor: Monitor }) {
+export function MonitorEnvironments({ monitor }: { monitor: MonitorResponse }) {
   const t = useTranslations('crons');
   const format = useFormatter();
   const when = (iso: string | null) =>

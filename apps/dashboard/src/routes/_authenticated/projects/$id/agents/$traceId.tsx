@@ -1,8 +1,8 @@
 import type {
-  OffsetPaginatedResponse,
   Result,
   RustrakError,
-  Span,
+  SpanResponse,
+  SpansListResponse,
 } from '@rustrak/client';
 import { Ok } from '@rustrak/client';
 import { createFileRoute, notFound } from '@tanstack/react-router';
@@ -32,8 +32,8 @@ const PER_PAGE = 100;
 async function collectAllSpans(
   projectId: number,
   traceId: string,
-  firstPage: OffsetPaginatedResponse<Span>,
-): Promise<Result<Span[], RustrakError>> {
+  firstPage: SpansListResponse,
+): Promise<Result<SpanResponse[], RustrakError>> {
   if (firstPage.total_pages <= 1) {
     return Ok(firstPage.items);
   }

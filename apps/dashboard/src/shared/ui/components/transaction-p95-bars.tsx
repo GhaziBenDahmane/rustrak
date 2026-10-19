@@ -1,10 +1,10 @@
-import type { TransactionStats } from '@rustrak/client';
+import type { TransactionStatsResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import { Link } from '@/shared/ui/components/link';
 
 interface TransactionP95BarsProps {
   projectId: number;
-  rows: TransactionStats[];
+  rows: TransactionStatsResponse[];
   limit?: number;
 }
 
@@ -34,7 +34,7 @@ function routeLabel(name: string): string {
  * (`summaryHref` in performance/transaction-stats-table.tsx): a row should land
  * on the transaction it names, not on the unfiltered list.
  */
-function summaryHref(projectId: number, row: TransactionStats): string {
+function summaryHref(projectId: number, row: TransactionStatsResponse): string {
   const params = new URLSearchParams({ name: row.transaction_name });
   if (row.op) {
     params.set('op', row.op);

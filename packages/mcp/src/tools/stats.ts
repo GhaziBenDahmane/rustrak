@@ -30,11 +30,10 @@ export function registerStatsTools(
       },
     },
     async ({ project_id, period, interval }) => {
-      const result = await client.stats.timeseries(
-        project_id,
-        period,
-        interval,
-      );
+      const result = await client.stats.getEventTimeseries({
+        path: { project_id },
+        query: { period, interval },
+      });
       return mcpJson(result);
     },
   );
@@ -55,7 +54,10 @@ export function registerStatsTools(
       },
     },
     async ({ project_id, period }) => {
-      const result = await client.stats.summary(project_id, period);
+      const result = await client.stats.getSummary({
+        path: { project_id },
+        query: { period },
+      });
       return mcpJson(result);
     },
   );

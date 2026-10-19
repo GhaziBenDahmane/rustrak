@@ -5,14 +5,14 @@
  * *of a project*, not a concept a user manipulates.
  */
 import type {
-  EventTimeseries,
-  ListProjectsOptions,
-  OffsetPaginatedResponse,
-  Project,
+  ProjectResponse,
   ProjectStatsSummary,
-  RateLimits,
+  ProjectsListData,
+  ProjectsListResponse,
+  RateLimitsResponse,
   Result,
   RustrakError,
+  StatsGetEventTimeseriesResponse,
 } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
@@ -23,10 +23,10 @@ import { createClient } from '@/shared/api/rustrak';
  * @returns Paginated list of projects, or the failure that stopped it
  */
 export async function getProjects(
-  options?: ListProjectsOptions,
-): Promise<Result<OffsetPaginatedResponse<Project>, RustrakError>> {
+  options?: ProjectsListData['query'],
+): Promise<Result<ProjectsListResponse, RustrakError>> {
   const client = await createClient();
-  return client.projects.list(options);
+  return client.projects.list({ query: options });
 }
 
 /**
@@ -37,17 +37,17 @@ export async function getProjects(
  */
 export async function getProject(
   id: number,
-): Promise<Result<Project, RustrakError>> {
+): Promise<Result<ProjectResponse, RustrakError>> {
   const client = await createClient();
-  return client.projects.get(id);
+  return client.projects.get({ path: { id } });
 }
 
 /** The server's per-project limits, which a project without its own follows. */
 export async function getRateLimits(): Promise<
-  Result<RateLimits, RustrakError>
+  Result<RateLimitsResponse, RustrakError>
 > {
   const client = await createClient();
-  return client.projects.rateLimits();
+  return client.projects.getRateLimits();
 }
 
 /**
@@ -65,9 +65,12 @@ export async function getProjectEventTimeseries(
   projectId: number,
   period?: string,
   interval?: number,
-): Promise<Result<EventTimeseries, RustrakError>> {
+): Promise<Result<StatsGetEventTimeseriesResponse, RustrakError>> {
   const client = await createClient();
-  return client.stats.timeseries(projectId, period, interval);
+  return client.stats.getEventTimeseries({
+    path: { project_id: projectId },
+    query: { period, interval },
+  });
 }
 
 /**
@@ -85,5 +88,8 @@ export async function getProjectStatsSummary(
   period?: string,
 ): Promise<Result<ProjectStatsSummary, RustrakError>> {
   const client = await createClient();
-  return client.stats.summary(projectId, period);
+  return client.stats.getSummary({
+    path: { project_id: projectId },
+    query: { period },
+  });
 }

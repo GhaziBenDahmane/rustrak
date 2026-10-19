@@ -85,7 +85,7 @@ describe('RustrakClient', () => {
       expect(client.issues).toBeDefined();
       expect(typeof client.issues.list).toBe('function');
       expect(typeof client.issues.get).toBe('function');
-      expect(typeof client.issues.updateState).toBe('function');
+      expect(typeof client.issues.update).toBe('function');
       expect(typeof client.issues.delete).toBe('function');
     });
 

@@ -31,10 +31,9 @@ export function registerSessionTools(
       },
     },
     async ({ project_id, period, page, per_page }) => {
-      const result = await client.sessions.stats(project_id, {
-        period,
-        page,
-        per_page,
+      const result = await client.sessions.getStats({
+        path: { project_id },
+        query: { period, page, per_page },
       });
       return mcpJson(result);
     },

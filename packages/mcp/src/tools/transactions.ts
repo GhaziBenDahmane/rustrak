@@ -55,14 +55,17 @@ export function registerTransactionTools(
       environment,
       release,
     }) => {
-      const result = await client.transactions.list(project_id, {
-        page,
-        per_page,
-        name,
-        op,
-        status,
-        environment,
-        release,
+      const result = await client.transactions.list({
+        path: { project_id },
+        query: {
+          page,
+          per_page,
+          name,
+          op,
+          status,
+          environment,
+          release,
+        },
       });
       return mcpJson(result);
     },
@@ -79,7 +82,9 @@ export function registerTransactionTools(
       },
     },
     async ({ project_id, transaction_id }) => {
-      const result = await client.transactions.get(project_id, transaction_id);
+      const result = await client.transactions.get({
+        path: { project_id, transaction_id },
+      });
       return mcpJson(result);
     },
   );
@@ -107,9 +112,9 @@ export function registerTransactionTools(
       },
     },
     async ({ project_id, page, per_page }) => {
-      const result = await client.transactions.getStats(project_id, {
-        page,
-        per_page,
+      const result = await client.transactions.getStats({
+        path: { project_id },
+        query: { page, per_page },
       });
       return mcpJson(result);
     },
@@ -126,10 +131,9 @@ export function registerTransactionTools(
       },
     },
     async ({ project_id, transaction_id }) => {
-      const result = await client.transactions.getSpans(
-        project_id,
-        transaction_id,
-      );
+      const result = await client.transactions.getSpans({
+        path: { project_id, transaction_id },
+      });
       return mcpJson(result);
     },
   );

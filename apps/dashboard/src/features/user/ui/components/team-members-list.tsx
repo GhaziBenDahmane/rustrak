@@ -1,4 +1,4 @@
-import type { GlobalRole, TeamMember } from '@rustrak/client';
+import type { TeamMemberResponse, UserRole } from '@rustrak/client';
 import { Loader2, Trash2, Users } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -37,11 +37,11 @@ import {
 import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface TeamMembersListProps {
-  members: TeamMember[];
+  members: TeamMemberResponse[];
   currentUserId: number;
 }
 
-function RoleBadge({ role }: { role: GlobalRole }) {
+function RoleBadge({ role }: { role: UserRole }) {
   const t = useTranslations('user');
   return (
     <Badge variant={role === 'admin' ? 'default' : 'secondary'}>
@@ -55,9 +55,9 @@ function RoleSelect({
   disabled,
   onChange,
 }: {
-  member: TeamMember;
+  member: TeamMemberResponse;
   disabled: boolean;
-  onChange: (role: GlobalRole) => void;
+  onChange: (role: UserRole) => void;
 }) {
   const t = useTranslations('user');
   return (
@@ -65,7 +65,7 @@ function RoleSelect({
       value={member.role}
       onValueChange={(value) => {
         if (value && value !== member.role) {
-          onChange(value as GlobalRole);
+          onChange(value as UserRole);
         }
       }}
       disabled={disabled}
@@ -95,9 +95,10 @@ export function TeamMembersList({
   const t = useTranslations('user');
   const format = useFormatter();
   const [isPending, startTransition] = useTransition();
-  const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
+  const [memberToDelete, setMemberToDelete] =
+    useState<TeamMemberResponse | null>(null);
 
-  const handleRoleChange = (member: TeamMember, role: GlobalRole) => {
+  const handleRoleChange = (member: TeamMemberResponse, role: UserRole) => {
     startTransition(async () => {
       const result = await updateUserRole(member.id, role);
       if (result.success) {

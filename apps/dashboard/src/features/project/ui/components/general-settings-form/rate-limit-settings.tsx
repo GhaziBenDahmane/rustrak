@@ -1,4 +1,4 @@
-import type { Project, RateLimits } from '@rustrak/client';
+import type { ProjectResponse, RateLimitsResponse } from '@rustrak/client';
 import { Loader2 } from 'lucide-react';
 import { useId, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -23,8 +23,8 @@ export function RateLimitSettings({
   project,
   serverLimits,
 }: {
-  project: Project;
-  serverLimits: RateLimits | null;
+  project: ProjectResponse;
+  serverLimits: RateLimitsResponse | null;
 }) {
   const t = useTranslations('projects.rateLimits');
   const format = useFormatter();
@@ -61,7 +61,7 @@ function LimitRow({
   title,
   placeholder,
 }: {
-  project: Project;
+  project: ProjectResponse;
   field: LimitField;
   title: string;
   placeholder: string;

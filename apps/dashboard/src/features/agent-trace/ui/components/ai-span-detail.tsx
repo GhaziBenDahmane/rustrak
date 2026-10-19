@@ -1,16 +1,17 @@
-import type { SpanDetail } from '@rustrak/client';
+import type { SpanDetailResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import {
   aiInput,
   aiOutput,
   availableTools,
   hasTokenMismatch,
+  type SpanAttributes,
   tokenBreakdown,
 } from '@/features/agent-trace/model/gen-ai';
 import { Badge } from '@/shared/ui/components/shadcn/badge';
 
 interface AiSpanDetailProps {
-  span: SpanDetail;
+  span: SpanDetailResponse;
 }
 
 /**
@@ -53,6 +54,12 @@ function Section({
   );
 }
 
+// The spec types `attributes` as `unknown` (a `serde_json::Value` on the
+// server); it is always the flattened `{key: value}` object.
+function attributesOf(span: SpanDetailResponse): SpanAttributes {
+  return span.attributes as SpanAttributes;
+}
+
 /**
  * The details panel for one selected span.
  *
@@ -63,7 +70,7 @@ function Section({
  */
 export function AiSpanDetail({ span }: AiSpanDetailProps) {
   const t = useTranslations('agents.spanDetail');
-  const attributes = span.attributes;
+  const attributes = attributesOf(span);
   const tokens = tokenBreakdown(attributes);
   const input = aiInput(attributes);
   const output = aiOutput(attributes);
@@ -90,7 +97,7 @@ export function AiSpanDetail({ span }: AiSpanDetailProps) {
 }
 
 /** What the span is, how it ended and how long it took. */
-function SpanHeader({ span }: { span: SpanDetail }) {
+function SpanHeader({ span }: { span: SpanDetailResponse }) {
   const format = useFormatter();
   const failed = span.status != null && span.status !== 'ok';
 
@@ -119,7 +126,7 @@ function SpanHeader({ span }: { span: SpanDetail }) {
 }
 
 /** The identity rows a reader compares across spans, whichever are present. */
-function Highlights({ span }: { span: SpanDetail }) {
+function Highlights({ span }: { span: SpanDetailResponse }) {
   const t = useTranslations('agents.spanDetail');
 
   // Declarative rather than five conditional pushes: the order of these rows
@@ -135,7 +142,7 @@ function Highlights({ span }: { span: SpanDetail }) {
     {
       key: 'reasoningEffort',
       label: t('reasoningEffort'),
-      value: span.attributes['gen_ai.request.reasoning_effort'],
+      value: attributesOf(span)['gen_ai.request.reasoning_effort'],
     },
     {
       key: 'conversation',

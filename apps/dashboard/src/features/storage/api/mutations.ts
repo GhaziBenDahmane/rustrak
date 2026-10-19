@@ -1,9 +1,9 @@
 import type {
   CleanupCounts,
-  CleanupOptions,
+  CleanupRequest,
   CleanupStatus,
   Result,
-  Retention,
+  RetentionResponse,
   RetentionSettings,
   RustrakError,
   SourceMapGcResult,
@@ -18,16 +18,16 @@ import { createClient } from '@/shared/api/rustrak';
  * calls it**, not by what it does to the database: the storage page calls
  * them from event handlers, as the user edits.
  *
- * Both are POST on the server too, because a preview takes a `CleanupOptions`
+ * Both are POST on the server too, because a preview takes a `CleanupRequest`
  * body it has to compute against.
  */
 
 /** Dry-run: count what a cleanup would remove. Mutates nothing. */
 export async function previewStorageCleanup(
-  options: CleanupOptions,
+  options: CleanupRequest,
 ): Promise<Result<CleanupCounts, RustrakError>> {
   const client = await createClient();
-  return client.storage.previewCleanup(options);
+  return client.storage.previewCleanup({ body: options });
 }
 
 /**
@@ -35,10 +35,10 @@ export async function previewStorageCleanup(
  * the server has started it; follow it with {@link getStorageCleanupStatus}.
  */
 export async function executeStorageCleanup(
-  options: CleanupOptions,
+  options: CleanupRequest,
 ): Promise<Result<CleanupStatus, RustrakError>> {
   const client = await createClient();
-  return client.storage.executeCleanup(options);
+  return client.storage.executeCleanup({ body: options });
 }
 
 /** The running cleanup's progress, or the outcome of the last one. */
@@ -54,7 +54,7 @@ export async function previewStorageSourceMapGc(): Promise<
   Result<SourceMapGcResult, RustrakError>
 > {
   const client = await createClient();
-  return client.storage.previewGcSourceMaps();
+  return client.storage.previewSourceMapGc();
 }
 
 /** Garbage-collect orphaned source maps (DB rows + disk files). */
@@ -68,9 +68,9 @@ export async function gcStorageSourceMaps(): Promise<
 /** Saves the retention settings. */
 export async function updateRetention(
   settings: RetentionSettings,
-): Promise<Result<Retention, RustrakError>> {
+): Promise<Result<RetentionResponse, RustrakError>> {
   const client = await createClient();
-  return client.storage.updateRetention(settings);
+  return client.storage.updateRetention({ body: settings });
 }
 
 /** Dry-run: what enforcing these settings now would delete. */
@@ -78,7 +78,7 @@ export async function previewRetention(
   settings: RetentionSettings,
 ): Promise<Result<CleanupCounts, RustrakError>> {
   const client = await createClient();
-  return client.storage.previewRetention(settings);
+  return client.storage.previewRetention({ body: settings });
 }
 
 /** Enforces the saved retention now; follow it with the cleanup status. */

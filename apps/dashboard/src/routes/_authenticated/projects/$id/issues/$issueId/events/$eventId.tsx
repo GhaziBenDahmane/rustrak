@@ -1,10 +1,10 @@
 import type {
   ActivityEntry,
-  EventDetail,
-  Issue,
+  EventDetailResponse,
   IssueAggregates,
   IssueGitHub,
-  IssueStats,
+  IssueResponse,
+  IssueStatsResponse,
   ProjectRepository,
 } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
@@ -193,11 +193,11 @@ function EventView({
 }: {
   projectId: number;
   issueId: string;
-  issue: Issue;
-  event: EventDetail;
+  issue: IssueResponse;
+  event: EventDetailResponse;
   navigation: EventNavigation;
   aggregates: IssueAggregates | null;
-  stats30d: IssueStats | null;
+  stats30d: IssueStatsResponse | null;
   activity: ActivityEntry[];
   /** The project's GitHub repository: `null` without one, `undefined` when
    * it could not be loaded. */

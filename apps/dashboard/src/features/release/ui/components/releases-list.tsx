@@ -1,7 +1,4 @@
-import type {
-  OffsetPaginatedResponse,
-  ReleaseHealthRow,
-} from '@rustrak/client';
+import type { SessionsGetStatsResponse } from '@rustrak/client';
 import { Rocket } from 'lucide-react';
 import { useTransition } from 'react';
 import { useFormatter, useTranslations } from 'use-intl';
@@ -19,7 +16,7 @@ import { useRouter } from '@/shared/ui/hooks/use-router';
 
 interface ReleasesListProps {
   projectId: number;
-  initialHealth: OffsetPaginatedResponse<ReleaseHealthRow>;
+  initialHealth: SessionsGetStatsResponse;
   currentPage: number;
   /** Active period filter, if any (omitted = all time). */
   activePeriod?: string;

@@ -1,7 +1,7 @@
 import type {
   CleanupStatus,
   ProjectStorage,
-  Retention,
+  RetentionResponse,
   RustrakError,
   StorageAge,
   StorageSummary,
@@ -61,7 +61,7 @@ export function StorageView({
   subtitle,
   onChanged,
 }: {
-  retention: Retention;
+  retention: RetentionResponse;
   /** `null` while loading. */
   figures: { data: StorageFigures } | { error: RustrakError } | null;
   /** The figures shown are the last ones; newer are on their way. */
@@ -125,7 +125,7 @@ export function StorageView({
       }),
     [data, retention.settings],
   );
-  const saved = (next: Retention, job: CleanupStatus | null) => {
+  const saved = (next: RetentionResponse, job: CleanupStatus | null) => {
     setRetention(next);
     if (job) cleanup.follow(job);
   };

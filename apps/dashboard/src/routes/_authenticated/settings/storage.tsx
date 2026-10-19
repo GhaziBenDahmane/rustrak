@@ -1,4 +1,4 @@
-import type { Result, Retention, RustrakError } from '@rustrak/client';
+import type { Result, RetentionResponse, RustrakError } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
 import { ShieldX } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -89,7 +89,7 @@ function StorageContent() {
   // old one the moment a reload is asked for.
   const [retention, setRetention] = useState<{
     version: number;
-    result: Result<Retention, RustrakError>;
+    result: Result<RetentionResponse, RustrakError>;
   } | null>(null);
   const [figures, setFigures] = useState<{
     version: number;

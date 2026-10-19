@@ -5,7 +5,12 @@
  * if this module reaches the client bundle the build fails, instead of shipping
  * a browser bundle that holds the session cookie.
  */
-import type { Event, EventDetail, Result, RustrakError } from '@rustrak/client';
+import type {
+  EventDetailResponse,
+  EventResponse,
+  Result,
+  RustrakError,
+} from '@rustrak/client';
 import { Ok } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
@@ -30,9 +35,11 @@ export async function getEventDetail(
   projectId: number,
   issueId: string,
   eventId: string,
-): Promise<Result<EventDetail, RustrakError>> {
+): Promise<Result<EventDetailResponse, RustrakError>> {
   const client = await createClient();
-  return client.events.get(projectId, issueId, eventId);
+  return client.events.get({
+    path: { project_id: projectId, issue_id: issueId, event_id: eventId },
+  });
 }
 
 /**
@@ -57,11 +64,12 @@ export interface EventNavigation {
 export async function getLastEvent(
   projectId: number,
   issueId: string,
-): Promise<Result<Event | null, RustrakError>> {
+): Promise<Result<EventResponse | null, RustrakError>> {
   const client = await createClient();
   // Get events ordered by desc (most recent first), limit to 1
-  const response = await client.events.list(projectId, issueId, {
-    order: 'desc',
+  const response = await client.events.list({
+    path: { project_id: projectId, issue_id: issueId },
+    query: { order: 'desc' },
   });
 
   if (!response.success) {
@@ -109,19 +117,21 @@ export async function getEventNavigation(
 
   // Fetch events in ascending order (oldest first), following the cursor
   // chain, so navigation is correct for issues with more than one page.
-  const events: Event[] = [];
+  const events: EventResponse[] = [];
   let cursor: string | undefined;
   let pageCount = 0;
   do {
-    const response = await client.events.list(projectId, issueId, {
-      order: 'asc',
-      cursor,
+    const response = await client.events.list({
+      path: { project_id: projectId, issue_id: issueId },
+      query: { order: 'asc', cursor },
     });
     if (!response.success) {
       return response;
     }
     events.push(...response.data.items);
-    cursor = response.data.has_more ? response.data.next_cursor : undefined;
+    cursor = response.data.has_more
+      ? (response.data.next_cursor ?? undefined)
+      : undefined;
     pageCount++;
   } while (cursor && pageCount < MAX_NAV_PAGES);
 

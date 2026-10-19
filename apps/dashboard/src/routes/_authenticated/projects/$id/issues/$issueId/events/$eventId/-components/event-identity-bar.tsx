@@ -1,4 +1,4 @@
-import type { EventDetail } from '@rustrak/client';
+import type { EventDetailResponse } from '@rustrak/client';
 import { useFormatter, useTranslations } from 'use-intl';
 import type { EventNavigation } from '@/features/event/api/queries';
 import type { EventJumpTarget } from '@/features/event/lib/event-jumps';
@@ -7,7 +7,7 @@ import { EventNavigationBar } from '@/features/event/ui/components/event-navigat
 interface EventIdentityBarProps {
   projectId: number;
   issueId: string;
-  event: EventDetail;
+  event: EventDetailResponse;
   navigation: EventNavigation;
   jumps: { id: EventJumpTarget; label: string }[];
 }

@@ -1,6 +1,6 @@
 import type {
   CreateProject,
-  Project,
+  ProjectResponse,
   Result,
   RustrakError,
   UpdateProject,
@@ -15,9 +15,9 @@ import { createClient } from '@/shared/api/rustrak';
  */
 export async function createProject(
   input: CreateProject,
-): Promise<Result<Project, RustrakError>> {
+): Promise<Result<ProjectResponse, RustrakError>> {
   const client = await createClient();
-  return client.projects.create(input);
+  return client.projects.create({ body: input });
 }
 
 /**
@@ -30,9 +30,9 @@ export async function createProject(
 export async function updateProject(
   id: number,
   input: UpdateProject,
-): Promise<Result<Project, RustrakError>> {
+): Promise<Result<ProjectResponse, RustrakError>> {
   const client = await createClient();
-  return client.projects.update(id, input);
+  return client.projects.update({ path: { id }, body: input });
 }
 
 /**
@@ -44,5 +44,5 @@ export async function deleteProject(
   id: number,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.projects.delete(id);
+  return client.projects.delete({ path: { id } });
 }

@@ -1,4 +1,4 @@
-import type { AlertIntegration, AlertRule } from '@rustrak/client';
+import type { AlertIntegration, AlertRuleResponse } from '@rustrak/client';
 import { useState } from 'react';
 import { useTranslations } from 'use-intl';
 import {
@@ -15,7 +15,7 @@ import {
  * rather than decided here: see `readRoutingOverride`.
  */
 function initialRoutingMap(
-  existingRule: AlertRule | null,
+  existingRule: AlertRuleResponse | null,
   integrations: readonly AlertIntegration[],
 ): RoutingMap {
   if (!existingRule) return {};
@@ -55,7 +55,7 @@ export interface ChannelRouting {
  * so mounting is the reset, and there is no adjustment effect to write.
  */
 export function useChannelRouting(
-  existingRule: AlertRule | null,
+  existingRule: AlertRuleResponse | null,
   integrations: readonly AlertIntegration[],
 ): ChannelRouting {
   const t = useTranslations('alerts');

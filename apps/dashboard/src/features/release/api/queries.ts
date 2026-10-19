@@ -10,14 +10,14 @@
  * a browser bundle that holds the session cookie.
  */
 import type {
-  Issue,
-  OffsetPaginatedResponse,
+  IssueResponse,
   ReleaseHealthRow,
-  ReleaseHealthStatsOptions,
   Result,
   RustrakError,
   SessionSummary,
-  SessionTimeseries,
+  SessionsGetStatsData,
+  SessionsGetStatsResponse,
+  SessionsGetTimeseriesResponse,
 } from '@rustrak/client';
 import { Ok } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
@@ -38,9 +38,12 @@ export async function getNewIssuesForRelease(
   projectId: number,
   release: string,
   limit?: number,
-): Promise<Result<Issue[], RustrakError>> {
+): Promise<Result<IssueResponse[], RustrakError>> {
   const client = await createClient();
-  return client.releases.newIssues(projectId, release, limit);
+  return client.releases.newIssues({
+    path: { project_id: projectId, release },
+    query: { limit },
+  });
 }
 
 /**
@@ -54,10 +57,13 @@ export async function getNewIssuesForRelease(
  */
 export async function getReleaseHealth(
   projectId: number,
-  options?: ReleaseHealthStatsOptions,
-): Promise<Result<OffsetPaginatedResponse<ReleaseHealthRow>, RustrakError>> {
+  options?: NonNullable<SessionsGetStatsData['query']>,
+): Promise<Result<SessionsGetStatsResponse, RustrakError>> {
   const client = await createClient();
-  return client.sessions.stats(projectId, options);
+  return client.sessions.getStats({
+    path: { project_id: projectId },
+    query: options,
+  });
 }
 
 /** Page size used when walking every row of a single release. */
@@ -99,11 +105,9 @@ export async function getAllReleaseHealthRows(
   let totalPages = 1;
 
   do {
-    const response = await client.sessions.stats(projectId, {
-      release,
-      period,
-      page,
-      per_page: RELEASE_ROWS_PER_PAGE,
+    const response = await client.sessions.getStats({
+      path: { project_id: projectId },
+      query: { release, period, page, per_page: RELEASE_ROWS_PER_PAGE },
     });
     if (!response.success) {
       return response;
@@ -134,7 +138,10 @@ export async function getSessionSummary(
   period?: string,
 ): Promise<Result<SessionSummary, RustrakError>> {
   const client = await createClient();
-  return client.sessions.summary(projectId, period);
+  return client.sessions.getSummary({
+    path: { project_id: projectId },
+    query: { period },
+  });
 }
 
 /**
@@ -153,7 +160,10 @@ export async function getSessionTimeseries(
   projectId: number,
   period?: string,
   interval?: number,
-): Promise<Result<SessionTimeseries, RustrakError>> {
+): Promise<Result<SessionsGetTimeseriesResponse, RustrakError>> {
   const client = await createClient();
-  return client.sessions.timeseries(projectId, period, interval);
+  return client.sessions.getTimeseries({
+    path: { project_id: projectId },
+    query: { period, interval },
+  });
 }

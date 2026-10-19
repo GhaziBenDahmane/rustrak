@@ -62,7 +62,9 @@ describe('span tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.items).toHaveLength(1);
       expect(parsed.items[0].op).toBe('gen_ai.invoke_agent');
-      expect(mockClient.spans.list).toHaveBeenCalledWith(1, expect.any(Object));
+      expect(mockClient.spans.list).toHaveBeenCalledWith(
+        expect.objectContaining({ path: { project_id: 1 } }),
+      );
     });
 
     it('forwards pagination and filters', async () => {
@@ -81,9 +83,9 @@ describe('span tools', () => {
         },
       });
 
-      expect(mockClient.spans.list).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
+      expect(mockClient.spans.list).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: expect.objectContaining({
           page: 2,
           per_page: 50,
           op: 'gen_ai.invoke_agent',
@@ -91,7 +93,7 @@ describe('span tools', () => {
           trace_id: 'abc',
           operation_type: 'agent',
         }),
-      );
+      });
     });
 
     it('returns error content on API failure', async () => {

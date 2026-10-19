@@ -1,4 +1,4 @@
-import type { TransactionDetail } from '@rustrak/client';
+import type { TransactionDetailResponse } from '@rustrak/client';
 import type { Span, TraceContext } from '@/features/transaction/model/span';
 import { parseEpochSeconds } from '@/shared/lib/protocol-timestamp';
 
@@ -68,7 +68,7 @@ export interface TransactionPayload {
  * the page and provable on their own.
  */
 export function readTransactionPayload(
-  txn: TransactionDetail,
+  txn: TransactionDetailResponse,
 ): TransactionPayload {
   const data = (txn.data ?? {}) as Record<string, unknown>;
   const trace = asObject(asObject(data.contexts)?.trace) ?? undefined;

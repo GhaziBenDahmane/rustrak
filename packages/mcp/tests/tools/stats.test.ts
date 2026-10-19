@@ -36,8 +36,8 @@ describe('stats tools', () => {
   beforeEach(async () => {
     mockClient = {
       stats: {
-        timeseries: vi.fn(),
-        summary: vi.fn(),
+        getEventTimeseries: vi.fn(),
+        getSummary: vi.fn(),
       },
     };
     testEnv = await createTestEnv(mockClient);
@@ -50,7 +50,7 @@ describe('stats tools', () => {
 
   describe('get_error_volume', () => {
     it('returns event volume split by severity', async () => {
-      mockClient.stats.timeseries.mockResolvedValue(ok(mockTimeseries));
+      mockClient.stats.getEventTimeseries.mockResolvedValue(ok(mockTimeseries));
 
       const result = await callTool({
         name: 'get_error_volume',
@@ -64,15 +64,14 @@ describe('stats tools', () => {
       expect(parsed[0].error).toBe(6);
       expect(parsed[0].warning).toBe(2);
       expect(parsed[0].info).toBe(1);
-      expect(mockClient.stats.timeseries).toHaveBeenCalledWith(
-        1,
-        undefined,
-        undefined,
-      );
+      expect(mockClient.stats.getEventTimeseries).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: { period: undefined, interval: undefined },
+      });
     });
 
     it('keeps zero-filled buckets rather than dropping them', async () => {
-      mockClient.stats.timeseries.mockResolvedValue(ok(mockTimeseries));
+      mockClient.stats.getEventTimeseries.mockResolvedValue(ok(mockTimeseries));
 
       const result = await callTool({
         name: 'get_error_volume',
@@ -84,18 +83,21 @@ describe('stats tools', () => {
     });
 
     it('passes period and interval when provided', async () => {
-      mockClient.stats.timeseries.mockResolvedValue(ok(mockTimeseries));
+      mockClient.stats.getEventTimeseries.mockResolvedValue(ok(mockTimeseries));
 
       await callTool({
         name: 'get_error_volume',
         arguments: { project_id: 1, period: '7d', interval: 6 },
       });
 
-      expect(mockClient.stats.timeseries).toHaveBeenCalledWith(1, '7d', 6);
+      expect(mockClient.stats.getEventTimeseries).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: { period: '7d', interval: 6 },
+      });
     });
 
     it('returns error content on API failure', async () => {
-      mockClient.stats.timeseries.mockResolvedValue(
+      mockClient.stats.getEventTimeseries.mockResolvedValue(
         fail({
           kind: 'server_error',
           status: 500,
@@ -115,7 +117,7 @@ describe('stats tools', () => {
 
   describe('get_project_stats', () => {
     it('returns counters with their previous-period comparison', async () => {
-      mockClient.stats.summary.mockResolvedValue(ok(mockSummary));
+      mockClient.stats.getSummary.mockResolvedValue(ok(mockSummary));
 
       const result = await callTool({
         name: 'get_project_stats',
@@ -128,11 +130,14 @@ describe('stats tools', () => {
       expect(parsed.events.previous).toBe(1000);
       expect(parsed.new_issues.current).toBe(14);
       expect(parsed.open_issues).toBe(40);
-      expect(mockClient.stats.summary).toHaveBeenCalledWith(1, '24h');
+      expect(mockClient.stats.getSummary).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: { period: '24h' },
+      });
     });
 
     it('omits the period for an all-time request', async () => {
-      mockClient.stats.summary.mockResolvedValue(
+      mockClient.stats.getSummary.mockResolvedValue(
         ok({
           period_hours: null,
           events: { current: 5000, previous: null },
@@ -149,11 +154,14 @@ describe('stats tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.period_hours).toBeNull();
       expect(parsed.events.previous).toBeNull();
-      expect(mockClient.stats.summary).toHaveBeenCalledWith(1, undefined);
+      expect(mockClient.stats.getSummary).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        query: { period: undefined },
+      });
     });
 
     it('returns error content on API failure', async () => {
-      mockClient.stats.summary.mockResolvedValue(
+      mockClient.stats.getSummary.mockResolvedValue(
         fail({
           kind: 'server_error',
           status: 500,

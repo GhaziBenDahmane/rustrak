@@ -1,4 +1,4 @@
-import type { RustrakError, User } from '@rustrak/client';
+import type { RustrakError, UserResponse } from '@rustrak/client';
 import { describe, expect, it, vi } from 'vitest';
 import { type CurrentUser, createSessionStore } from './session';
 
@@ -11,7 +11,7 @@ import { type CurrentUser, createSessionStore } from './session';
  * each: asking once per guard, and remembering an answer a retry could change.
  */
 
-const alice = { id: 1, email: 'alice@example.com' } as unknown as User;
+const alice = { id: 1, email: 'alice@example.com' } as unknown as UserResponse;
 
 function unreachable(): RustrakError {
   return {

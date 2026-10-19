@@ -2,7 +2,7 @@ import type {
   ActivityEntry,
   BulkDeleteIssues,
   BulkUpdateIssues,
-  Issue,
+  IssueResponse,
   Result,
   RustrakError,
   UpdateIssueState,
@@ -29,9 +29,12 @@ export async function updateIssueState(
   projectId: number,
   issueId: string,
   state: UpdateIssueState,
-): Promise<Result<Issue, RustrakError>> {
+): Promise<Result<IssueResponse, RustrakError>> {
   const client = await createClient();
-  return client.issues.updateState(projectId, issueId, state);
+  return client.issues.update({
+    path: { project_id: projectId, issue_id: issueId },
+    body: state,
+  });
 }
 
 /**
@@ -47,9 +50,12 @@ export async function updateIssueState(
 export async function resolveIssueInNextRelease(
   projectId: number,
   issueId: string,
-): Promise<Result<Issue, RustrakError>> {
+): Promise<Result<IssueResponse, RustrakError>> {
   const client = await createClient();
-  return client.issues.resolveInNextRelease(projectId, issueId);
+  return client.issues.update({
+    path: { project_id: projectId, issue_id: issueId },
+    body: { status: 'resolvedInNextRelease' },
+  });
 }
 
 /**
@@ -63,7 +69,7 @@ export async function bulkUpdateIssues(
   body: BulkUpdateIssues,
 ): Promise<Result<{ updated: number }, RustrakError>> {
   const client = await createClient();
-  return client.issues.bulkUpdate(projectId, body);
+  return client.issues.bulkUpdate({ path: { project_id: projectId }, body });
 }
 
 /**
@@ -77,7 +83,7 @@ export async function bulkDeleteIssues(
   body: BulkDeleteIssues,
 ): Promise<Result<{ deleted: number }, RustrakError>> {
   const client = await createClient();
-  return client.issues.bulkDelete(projectId, body);
+  return client.issues.bulkDelete({ path: { project_id: projectId }, body });
 }
 
 /**
@@ -93,7 +99,10 @@ export async function addIssueComment(
   text: string,
 ): Promise<Result<ActivityEntry, RustrakError>> {
   const client = await createClient();
-  return client.issues.addComment(projectId, issueId, { text });
+  return client.issues.createComment({
+    path: { project_id: projectId, issue_id: issueId },
+    body: { text },
+  });
 }
 
 /**
@@ -109,7 +118,10 @@ export async function setIssueBookmark(
   enabled: boolean,
 ): Promise<Result<{ is_bookmarked: boolean }, RustrakError>> {
   const client = await createClient();
-  return client.issues.setBookmark(projectId, issueId, enabled);
+  return client.issues.setBookmark({
+    path: { project_id: projectId, issue_id: issueId },
+    body: { enabled },
+  });
 }
 
 /**
@@ -125,7 +137,10 @@ export async function setIssueSubscription(
   enabled: boolean,
 ): Promise<Result<{ is_subscribed: boolean }, RustrakError>> {
   const client = await createClient();
-  return client.issues.setSubscription(projectId, issueId, enabled);
+  return client.issues.setSubscription({
+    path: { project_id: projectId, issue_id: issueId },
+    body: { enabled },
+  });
 }
 
 /**
@@ -139,5 +154,7 @@ export async function deleteIssue(
   issueId: string,
 ): Promise<Result<void, RustrakError>> {
   const client = await createClient();
-  return client.issues.delete(projectId, issueId);
+  return client.issues.delete({
+    path: { project_id: projectId, issue_id: issueId },
+  });
 }

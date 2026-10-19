@@ -12,7 +12,7 @@ describe('team tools', () => {
       team: {
         list: vi.fn(),
         updateRole: vi.fn(),
-        remove: vi.fn(),
+        deleteUser: vi.fn(),
       },
       invitations: {
         create: vi.fn(),
@@ -60,13 +60,16 @@ describe('team tools', () => {
       });
 
       expect(result.isError).toBeFalsy();
-      expect(mockClient.team.updateRole).toHaveBeenCalledWith(5, 'admin');
+      expect(mockClient.team.updateRole).toHaveBeenCalledWith({
+        path: { user_id: 5 },
+        body: { role: 'admin' },
+      });
     });
   });
 
   describe('remove_team_member', () => {
     it('removes a user', async () => {
-      mockClient.team.remove.mockResolvedValue(ok(undefined));
+      mockClient.team.deleteUser.mockResolvedValue(ok(undefined));
 
       const result = await callTool({
         name: 'remove_team_member',
@@ -75,13 +78,15 @@ describe('team tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0]?.text).toMatch(/removed/i);
-      expect(mockClient.team.remove).toHaveBeenCalledWith(5);
+      expect(mockClient.team.deleteUser).toHaveBeenCalledWith({
+        path: { user_id: 5 },
+      });
     });
 
     it('does not report success when the void call failed', async () => {
       // A `Result<void>` failure is a value, so it is trivially ignorable.
       // Reporting `User 5 removed.` after a 403 is the regression.
-      mockClient.team.remove.mockResolvedValue(
+      mockClient.team.deleteUser.mockResolvedValue(
         fail({ kind: 'forbidden', status: 403, message: 'Not allowed' }),
       );
 
@@ -116,8 +121,7 @@ describe('team tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.token).toBe('tok_abc');
       expect(mockClient.invitations.create).toHaveBeenCalledWith({
-        email: 'b@x.com',
-        role: 'member',
+        body: { email: 'b@x.com', role: 'member' },
       });
     });
   });
@@ -149,7 +153,9 @@ describe('team tools', () => {
       });
 
       expect(result.isError).toBeFalsy();
-      expect(mockClient.invitations.revoke).toHaveBeenCalledWith('tok_abc');
+      expect(mockClient.invitations.revoke).toHaveBeenCalledWith({
+        path: { token: 'tok_abc' },
+      });
     });
   });
 
@@ -167,7 +173,9 @@ describe('team tools', () => {
       expect(result.isError).toBeFalsy();
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed[0].role).toBe('editor');
-      expect(mockClient.members.list).toHaveBeenCalledWith(1);
+      expect(mockClient.members.list).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+      });
     });
   });
 
@@ -181,9 +189,9 @@ describe('team tools', () => {
       });
 
       expect(result.isError).toBeFalsy();
-      expect(mockClient.members.upsert).toHaveBeenCalledWith(1, {
-        user_id: 2,
-        role: 'viewer',
+      expect(mockClient.members.upsert).toHaveBeenCalledWith({
+        path: { project_id: 1 },
+        body: { user_id: 2, role: 'viewer' },
       });
     });
   });
@@ -198,7 +206,9 @@ describe('team tools', () => {
       });
 
       expect(result.isError).toBeFalsy();
-      expect(mockClient.members.remove).toHaveBeenCalledWith(1, 2);
+      expect(mockClient.members.remove).toHaveBeenCalledWith({
+        path: { project_id: 1, user_id: 2 },
+      });
     });
   });
 

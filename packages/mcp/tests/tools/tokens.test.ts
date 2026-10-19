@@ -69,7 +69,7 @@ describe('token tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.token).toBe('abc123456789def0123456789abcdef01234567');
       expect(parsed.id).toBe(1);
-      expect(mockClient.tokens.get).toHaveBeenCalledWith(1);
+      expect(mockClient.tokens.get).toHaveBeenCalledWith({ path: { id: 1 } });
     });
   });
 
@@ -93,7 +93,7 @@ describe('token tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.token).toBe('full-secret-token-abc123');
       expect(mockClient.tokens.create).toHaveBeenCalledWith({
-        description: 'New Token',
+        body: { description: 'New Token' },
       });
     });
   });
@@ -109,7 +109,9 @@ describe('token tools', () => {
 
       expect(result.isError).toBeFalsy();
       expect(result.content[0]?.text).toMatch(/revoked/i);
-      expect(mockClient.tokens.delete).toHaveBeenCalledWith(5);
+      expect(mockClient.tokens.delete).toHaveBeenCalledWith({
+        path: { id: 5 },
+      });
     });
   });
 });
