@@ -250,6 +250,23 @@ pub struct ApiActor {
 }
 
 impl ApiActor {
+    /// The actor a token acts as: its owner, or full access for a legacy
+    /// token with none (`user_id = None`).
+    pub async fn for_token(pool: &DbPool, user_id: Option<i32>) -> AppResult<Self> {
+        let Some(uid) = user_id else {
+            return Ok(ApiActor { user: None });
+        };
+        let user = UsersService::get_by_id(pool, uid)
+            .await?
+            .ok_or_else(|| AppError::Unauthorized("Token owner not found".to_string()))?;
+        // Mirror the session/login path: a disabled account must not
+        // authenticate even with a valid token.
+        if !user.is_active {
+            return Err(AppError::Unauthorized("Account is disabled".to_string()));
+        }
+        Ok(ApiActor { user: Some(user) })
+    }
+
     /// Whether this actor has full instance access (global admin or legacy token).
     pub fn is_admin(&self) -> bool {
         self.user.as_ref().is_none_or(|u| u.is_admin())
@@ -290,24 +307,7 @@ impl FromRequest for ApiActor {
         Box::pin(async move {
             match bearer_future.await {
                 Ok(bearer) => {
-                    return match bearer.token.user_id {
-                        Some(uid) => {
-                            let user = UsersService::get_by_id(pool.get_ref(), uid)
-                                .await?
-                                .ok_or_else(|| {
-                                    AppError::Unauthorized("Token owner not found".to_string())
-                                })?;
-                            // Mirror the session/login path: a disabled account
-                            // must not authenticate even with a valid token.
-                            if !user.is_active {
-                                return Err(AppError::Unauthorized(
-                                    "Account is disabled".to_string(),
-                                ));
-                            }
-                            Ok(ApiActor { user: Some(user) })
-                        }
-                        None => Ok(ApiActor { user: None }),
-                    };
+                    return ApiActor::for_token(pool.get_ref(), bearer.token.user_id).await;
                 }
                 // fall through to session, annotated or not
                 Err(ref e) if falls_through_to_session(e) => {}

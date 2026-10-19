@@ -1632,6 +1632,7 @@
       "clientKeys": "Client Keys",
       "apiTokens": "API Tokens",
       "integrations": "Integrations",
+      "mcp": "AI assistants (MCP)",
       "team": "Team",
       "storage": "Storage",
       "account": "Account",
@@ -1704,6 +1705,73 @@
       "backToProjects": "Back to projects",
       "loadFailed": "Could not load integrations",
       "githubLoadFailed": "Could not load the GitHub connection"
+    },
+    "mcp": {
+      "meta": {
+        "title": "AI assistants | Rustrak",
+        "description": "Connect AI assistants to Rustrak over MCP"
+      },
+      "title": "AI assistants (MCP)",
+      "subtitle": "Let Claude, ChatGPT, Cursor and other AI assistants read and triage your errors, with the permissions of whoever connects them.",
+      "loadFailed": "Could not load the MCP settings",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyLabel": "Copy {label}",
+      "copyUnavailable": "Copying is not available here",
+      "copyUnavailableHint": "Select the {label} and copy it by hand.",
+      "server": {
+        "title": "MCP server",
+        "description": "Answers AI assistants at the endpoint below. Off by default; turning it off cuts off every assistant at once.",
+        "adminOnly": "Only an instance admin can turn the MCP server on or off.",
+        "on": "On",
+        "off": "Off",
+        "toggleLabel": "Turn the MCP server on or off",
+        "endpoint": "Endpoint URL",
+        "offNotice": "The MCP server is off: no assistant can connect until an admin turns it on.",
+        "updateFailed": "Could not update the MCP server"
+      },
+      "oauth": {
+        "title": "Sign in with your account",
+        "recommended": "Recommended",
+        "description": "The assistant opens Rustrak, you sign in and approve it. No token to copy or rotate.",
+        "clients": "Works with claude.ai, ChatGPT, Claude Code, Cursor and VS Code.",
+        "step1": "Copy the endpoint URL above.",
+        "step2": "Add it to your assistant as an MCP server or custom connector.",
+        "step3": "Sign in to Rustrak when it asks, and approve the access.",
+        "note": "It acts with your permissions. You can disconnect it at any time under Connected assistants.",
+        "needsPublicUrl": "Signing in is off: set PUBLIC_URL on the server to the address assistants reach it on (e.g. https://rustrak.example.com) and restart. Until then, use an API token."
+      },
+      "token": {
+        "title": "API token",
+        "description": "Put a token in the client's configuration. For clients that cannot sign in, scripts and CI.",
+        "clients": "Works with any MCP client that can send an HTTP header.",
+        "step1": "Create a token in",
+        "createToken": "API tokens",
+        "step2": "Add the configuration below to your client.",
+        "step3": "Replace YOUR_TOKEN with the token you created.",
+        "note": "It acts with the permissions of the token's owner. Revoking the token cuts it off."
+      },
+      "clients": {
+        "web": "claude.ai / ChatGPT",
+        "claudeCode": "Claude Code",
+        "json": "Cursor / VS Code",
+        "webSteps": "In claude.ai, open Settings → Connectors → Add custom connector; in ChatGPT, add a custom connector. Paste the endpoint URL and save: you are sent here to sign in and approve."
+      },
+      "connected": {
+        "title": "Connected assistants",
+        "description": "Assistants you approved by signing in. Disconnecting one cuts off its access at once.",
+        "empty": "No assistant is connected to your account yet.",
+        "columns": {
+          "name": "Assistant",
+          "client": "Published by",
+          "since": "Connected"
+        },
+        "revoke": "Disconnect",
+        "revokeLabel": "Disconnect {name}",
+        "revokeFailed": "Could not disconnect the assistant",
+        "revoked": "{name} disconnected",
+        "loadFailed": "Could not load your connected assistants"
+      }
     },
     "storage": {
       "meta": {
@@ -2062,5 +2130,23 @@
       "invalid": "This schedule can't run. Check the crontab.",
       "timesIn": "Times in {timezone}."
     }
+  },
+  "oauth": {
+    "meta": {
+      "title": "Authorize access | Rustrak"
+    },
+    "title": "{client} wants to access your Rustrak account",
+    "signedInAs": "Signed in as {email}",
+    "canDo": "If you approve, it will be able to:",
+    "canRead": "Read your projects' issues, events, performance data and logs",
+    "canAct": "Act on them with your permissions: resolve, comment, change settings you can change",
+    "clientId": "Client",
+    "returnsTo": "Sends you back to",
+    "warning": "Only approve if you started this from that assistant. You can disconnect it at any time in Settings → AI assistants (MCP).",
+    "approve": "Approve",
+    "deny": "Deny",
+    "decideFailed": "Could not complete the authorization",
+    "failedTitle": "This request cannot be completed",
+    "failedDescription": "The assistant sent an authorization request Rustrak could not verify, so nothing was shared. Start the connection again from the assistant."
   }
 }

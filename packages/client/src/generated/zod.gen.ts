@@ -202,6 +202,42 @@ export const zAuthTokenResponse = z.object({
     token_prefix: z.string()
 });
 
+/**
+ * What the consent page shows about the client asking.
+ */
+export const zAuthorizationInfo = z.object({
+    client_id: z.string(),
+    client_name: z.string(),
+    redirect_host: z.string()
+});
+
+/**
+ * Where the consent page sends the browser next.
+ */
+export const zAuthorizationRedirect = z.object({
+    redirect_to: z.string()
+});
+
+/**
+ * An authorization request, as the client put it in the authorize URL.
+ */
+export const zAuthorizationRequest = z.object({
+    client_id: z.string(),
+    code_challenge: z.string(),
+    code_challenge_method: z.string(),
+    redirect_uri: z.string(),
+    resource: z.string().nullish(),
+    response_type: z.string(),
+    state: z.string().nullish()
+});
+
+/**
+ * The user's answer to a consent screen.
+ */
+export const zAuthorizationDecision = zAuthorizationRequest.and(z.object({
+    approve: z.boolean()
+}));
+
 export const zBookmarkResponse = z.object({
     is_bookmarked: z.boolean()
 });
@@ -763,10 +799,18 @@ export const zManifestResponse = z.object({
 });
 
 /**
- * Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
+ * Turns `/mcp` on or off: the body of `PUT /api/settings/mcp`.
  */
 export const zMcpSettings = z.object({
     enabled: z.boolean()
+});
+
+/**
+ * Whether `/mcp` answers, and the URL to give an assistant.
+ */
+export const zMcpStatus = z.object({
+    enabled: z.boolean(),
+    url: z.string().nullable()
 });
 
 /**
@@ -803,6 +847,16 @@ export const zMonitorEnvironmentResponse = z.object({
     next_checkin_latest: z.iso.datetime({ offset: true }).nullable(),
     recent_checkins: z.array(zCheckInResponse),
     status: zMonitorEnvironmentStatus
+});
+
+/**
+ * A connected client, as its user sees it.
+ */
+export const zOAuthGrant = z.object({
+    client_id: z.string(),
+    client_name: z.string(),
+    created_at: z.iso.datetime({ offset: true }),
+    id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
 });
 
 /**
@@ -1849,6 +1903,42 @@ export const zInvitationsRevokePath = z.object({
  * Invitation revoked
  */
 export const zInvitationsRevokeResponse = z.void();
+
+export const zOauthGetAuthorizationQuery = z.object({
+    response_type: z.string(),
+    client_id: z.string(),
+    redirect_uri: z.string(),
+    code_challenge: z.string(),
+    code_challenge_method: z.string(),
+    state: z.string().nullish(),
+    resource: z.string().nullish()
+});
+
+/**
+ * The verified client asking for access
+ */
+export const zOauthGetAuthorizationResponse = zAuthorizationInfo;
+
+export const zOauthDecideAuthorizationBody = zAuthorizationDecision;
+
+/**
+ * Where to send the browser
+ */
+export const zOauthDecideAuthorizationResponse = zAuthorizationRedirect;
+
+/**
+ * Assistants connected to your account
+ */
+export const zOauthListGrantsResponse = z.array(zOAuthGrant);
+
+export const zOauthRevokeGrantPath = z.object({
+    id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
+});
+
+/**
+ * Disconnected
+ */
+export const zOauthRevokeGrantResponse = z.void();
 
 export const zProjectsListQuery = z.object({
     page: z.int().gte(1).optional(),
@@ -2950,16 +3040,16 @@ export const zSchedulesPreviewBody = zPreviewSchedule;
 export const zSchedulesPreviewResponse = zSchedulePreview;
 
 /**
- * Whether the MCP endpoint is on
+ * Whether the MCP endpoint is on, and its URL
  */
-export const zSettingsGetMcpResponse = zMcpSettings;
+export const zSettingsGetMcpResponse = zMcpStatus;
 
 export const zSettingsUpdateMcpBody = zMcpSettings;
 
 /**
- * The MCP endpoint's new state
+ * The MCP endpoint's new state, and its URL
  */
-export const zSettingsUpdateMcpResponse = zMcpSettings;
+export const zSettingsUpdateMcpResponse = zMcpStatus;
 
 /**
  * How long ago each project's data arrived, per kind

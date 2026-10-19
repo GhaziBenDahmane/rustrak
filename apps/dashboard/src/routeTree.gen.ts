@@ -15,6 +15,7 @@ import { Route as LinkAccountRouteImport } from './routes/link-account';
 import { Route as LoginRouteImport } from './routes/login';
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings';
 import { Route as InviteTokenRouteImport } from './routes/invite/$token';
+import { Route as OauthAuthorizeRouteImport } from './routes/oauth/authorize';
 import { Route as AuthenticatedProjectsIndexRouteImport } from './routes/_authenticated/projects/index';
 import { Route as AuthenticatedProjectsIdRouteImport } from './routes/_authenticated/projects/$id';
 import { Route as AuthenticatedProjectsNewRouteImport } from './routes/_authenticated/projects/new';
@@ -23,6 +24,7 @@ import { Route as AuthenticatedSettingsAboutRouteImport } from './routes/_authen
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account';
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance';
 import { Route as AuthenticatedSettingsIntegrationsRouteImport } from './routes/_authenticated/settings/integrations';
+import { Route as AuthenticatedSettingsMcpRouteImport } from './routes/_authenticated/settings/mcp';
 import { Route as AuthenticatedSettingsStorageRouteImport } from './routes/_authenticated/settings/storage';
 import { Route as AuthenticatedSettingsTeamRouteImport } from './routes/_authenticated/settings/team';
 import { Route as AuthenticatedSettingsTokensRouteImport } from './routes/_authenticated/settings/tokens';
@@ -80,6 +82,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
 } as any);
+const OauthAuthorizeRoute = OauthAuthorizeRouteImport.update({
+  id: '/oauth/authorize',
+  path: '/oauth/authorize',
+  getParentRoute: () => rootRouteImport,
+} as any);
 const AuthenticatedProjectsIndexRoute =
   AuthenticatedProjectsIndexRouteImport.update({
     id: '/projects/',
@@ -125,6 +132,12 @@ const AuthenticatedSettingsIntegrationsRoute =
   AuthenticatedSettingsIntegrationsRouteImport.update({
     id: '/integrations',
     path: '/integrations',
+    getParentRoute: () => AuthenticatedSettingsRoute,
+  } as any);
+const AuthenticatedSettingsMcpRoute =
+  AuthenticatedSettingsMcpRouteImport.update({
+    id: '/mcp',
+    path: '/mcp',
     getParentRoute: () => AuthenticatedSettingsRoute,
   } as any);
 const AuthenticatedSettingsStorageRoute =
@@ -296,12 +309,14 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute;
   '/settings': typeof AuthenticatedSettingsRouteWithChildren;
   '/invite/$token': typeof InviteTokenRoute;
+  '/oauth/authorize': typeof OauthAuthorizeRoute;
   '/projects/$id': typeof AuthenticatedProjectsIdRouteWithChildren;
   '/projects/new': typeof AuthenticatedProjectsNewRoute;
   '/settings/about': typeof AuthenticatedSettingsAboutRoute;
   '/settings/account': typeof AuthenticatedSettingsAccountRoute;
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute;
   '/settings/integrations': typeof AuthenticatedSettingsIntegrationsRoute;
+  '/settings/mcp': typeof AuthenticatedSettingsMcpRoute;
   '/settings/storage': typeof AuthenticatedSettingsStorageRoute;
   '/settings/team': typeof AuthenticatedSettingsTeamRoute;
   '/settings/tokens': typeof AuthenticatedSettingsTokensRoute;
@@ -337,11 +352,13 @@ export interface FileRoutesByTo {
   '/link-account': typeof LinkAccountRoute;
   '/login': typeof LoginRoute;
   '/invite/$token': typeof InviteTokenRoute;
+  '/oauth/authorize': typeof OauthAuthorizeRoute;
   '/projects/new': typeof AuthenticatedProjectsNewRoute;
   '/settings/about': typeof AuthenticatedSettingsAboutRoute;
   '/settings/account': typeof AuthenticatedSettingsAccountRoute;
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute;
   '/settings/integrations': typeof AuthenticatedSettingsIntegrationsRoute;
+  '/settings/mcp': typeof AuthenticatedSettingsMcpRoute;
   '/settings/storage': typeof AuthenticatedSettingsStorageRoute;
   '/settings/team': typeof AuthenticatedSettingsTeamRoute;
   '/settings/tokens': typeof AuthenticatedSettingsTokensRoute;
@@ -379,12 +396,14 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute;
   '/_authenticated/settings': typeof AuthenticatedSettingsRouteWithChildren;
   '/invite/$token': typeof InviteTokenRoute;
+  '/oauth/authorize': typeof OauthAuthorizeRoute;
   '/_authenticated/projects/$id': typeof AuthenticatedProjectsIdRouteWithChildren;
   '/_authenticated/projects/new': typeof AuthenticatedProjectsNewRoute;
   '/_authenticated/settings/about': typeof AuthenticatedSettingsAboutRoute;
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute;
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute;
   '/_authenticated/settings/integrations': typeof AuthenticatedSettingsIntegrationsRoute;
+  '/_authenticated/settings/mcp': typeof AuthenticatedSettingsMcpRoute;
   '/_authenticated/settings/storage': typeof AuthenticatedSettingsStorageRoute;
   '/_authenticated/settings/team': typeof AuthenticatedSettingsTeamRoute;
   '/_authenticated/settings/tokens': typeof AuthenticatedSettingsTokensRoute;
@@ -423,12 +442,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/settings'
     | '/invite/$token'
+    | '/oauth/authorize'
     | '/projects/$id'
     | '/projects/new'
     | '/settings/about'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/integrations'
+    | '/settings/mcp'
     | '/settings/storage'
     | '/settings/team'
     | '/settings/tokens'
@@ -464,11 +485,13 @@ export interface FileRouteTypes {
     | '/link-account'
     | '/login'
     | '/invite/$token'
+    | '/oauth/authorize'
     | '/projects/new'
     | '/settings/about'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/integrations'
+    | '/settings/mcp'
     | '/settings/storage'
     | '/settings/team'
     | '/settings/tokens'
@@ -505,12 +528,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/settings'
     | '/invite/$token'
+    | '/oauth/authorize'
     | '/_authenticated/projects/$id'
     | '/_authenticated/projects/new'
     | '/_authenticated/settings/about'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/integrations'
+    | '/_authenticated/settings/mcp'
     | '/_authenticated/settings/storage'
     | '/_authenticated/settings/team'
     | '/_authenticated/settings/tokens'
@@ -548,6 +573,7 @@ export interface RootRouteChildren {
   LinkAccountRoute: typeof LinkAccountRoute;
   LoginRoute: typeof LoginRoute;
   InviteTokenRoute: typeof InviteTokenRoute;
+  OauthAuthorizeRoute: typeof OauthAuthorizeRoute;
 }
 
 declare module '@tanstack/react-router' {
@@ -592,6 +618,13 @@ declare module '@tanstack/react-router' {
       path: '/invite/$token';
       fullPath: '/invite/$token';
       preLoaderRoute: typeof InviteTokenRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/oauth/authorize': {
+      id: '/oauth/authorize';
+      path: '/oauth/authorize';
+      fullPath: '/oauth/authorize';
+      preLoaderRoute: typeof OauthAuthorizeRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/_authenticated/projects/': {
@@ -648,6 +681,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations';
       fullPath: '/settings/integrations';
       preLoaderRoute: typeof AuthenticatedSettingsIntegrationsRouteImport;
+      parentRoute: typeof AuthenticatedSettingsRoute;
+    };
+    '/_authenticated/settings/mcp': {
+      id: '/_authenticated/settings/mcp';
+      path: '/mcp';
+      fullPath: '/settings/mcp';
+      preLoaderRoute: typeof AuthenticatedSettingsMcpRouteImport;
       parentRoute: typeof AuthenticatedSettingsRoute;
     };
     '/_authenticated/settings/storage': {
@@ -847,6 +887,7 @@ interface AuthenticatedSettingsRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute;
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute;
   AuthenticatedSettingsIntegrationsRoute: typeof AuthenticatedSettingsIntegrationsRoute;
+  AuthenticatedSettingsMcpRoute: typeof AuthenticatedSettingsMcpRoute;
   AuthenticatedSettingsStorageRoute: typeof AuthenticatedSettingsStorageRoute;
   AuthenticatedSettingsTeamRoute: typeof AuthenticatedSettingsTeamRoute;
   AuthenticatedSettingsTokensRoute: typeof AuthenticatedSettingsTokensRoute;
@@ -859,6 +900,7 @@ const AuthenticatedSettingsRouteChildren: AuthenticatedSettingsRouteChildren = {
   AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
   AuthenticatedSettingsIntegrationsRoute:
     AuthenticatedSettingsIntegrationsRoute,
+  AuthenticatedSettingsMcpRoute: AuthenticatedSettingsMcpRoute,
   AuthenticatedSettingsStorageRoute: AuthenticatedSettingsStorageRoute,
   AuthenticatedSettingsTeamRoute: AuthenticatedSettingsTeamRoute,
   AuthenticatedSettingsTokensRoute: AuthenticatedSettingsTokensRoute,
@@ -987,6 +1029,7 @@ const rootRouteChildren: RootRouteChildren = {
   LinkAccountRoute: LinkAccountRoute,
   LoginRoute: LoginRoute,
   InviteTokenRoute: InviteTokenRoute,
+  OauthAuthorizeRoute: OauthAuthorizeRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

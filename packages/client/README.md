@@ -375,6 +375,15 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 | `monitors.listCheckins({ path, query? })` | `GET /api/projects/{project_id}/monitors/{slug}/checkins` |  |
 | `monitors.update({ path, body })` | `PUT /api/projects/{project_id}/monitors/{slug}` |  |
 
+### OAuth
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `oauth.decideAuthorization({ body })` | `POST /api/oauth/authorize` | Approves or denies an authorization request as the signed-in user. |
+| `oauth.getAuthorization({ query })` | `GET /api/oauth/authorize` | Verifies an authorization request and says who is asking. |
+| `oauth.listGrants()` | `GET /api/oauth/grants` | Lists the assistants connected to the signed-in user's account. |
+| `oauth.revokeGrant({ path })` | `DELETE /api/oauth/grants/{id}` | Disconnects an assistant: its tokens stop working at once. |
+
 ### Projects
 
 | Method | Endpoint | Description |

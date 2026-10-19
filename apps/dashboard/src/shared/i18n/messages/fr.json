@@ -1632,6 +1632,7 @@
       "clientKeys": "Clés client",
       "apiTokens": "Jetons API",
       "integrations": "Intégrations",
+      "mcp": "Assistants IA (MCP)",
       "team": "Équipe",
       "storage": "Stockage",
       "account": "Compte",
@@ -1704,6 +1705,73 @@
       "backToProjects": "Retour aux projets",
       "loadFailed": "Impossible de charger les intégrations",
       "githubLoadFailed": "Impossible de charger la connexion GitHub"
+    },
+    "mcp": {
+      "meta": {
+        "title": "Assistants IA | Rustrak",
+        "description": "Connecter des assistants IA à Rustrak via MCP"
+      },
+      "title": "Assistants IA (MCP)",
+      "subtitle": "Laissez Claude, ChatGPT, Cursor et d'autres assistants IA lire et trier vos erreurs, avec les droits de la personne qui les connecte.",
+      "loadFailed": "Impossible de charger les réglages MCP",
+      "copy": "Copier",
+      "copied": "Copié",
+      "copyLabel": "Copier {label}",
+      "copyUnavailable": "La copie n'est pas disponible ici",
+      "copyUnavailableHint": "Sélectionnez {label} et copiez-le à la main.",
+      "server": {
+        "title": "Serveur MCP",
+        "description": "Répond aux assistants IA sur le point de terminaison ci-dessous. Désactivé par défaut ; le désactiver coupe tous les assistants d'un coup.",
+        "adminOnly": "Seul un administrateur de l'instance peut activer ou désactiver le serveur MCP.",
+        "on": "Actif",
+        "off": "Inactif",
+        "toggleLabel": "Activer ou désactiver le serveur MCP",
+        "endpoint": "URL du point de terminaison",
+        "offNotice": "Le serveur MCP est désactivé : aucun assistant ne peut se connecter tant qu'un administrateur ne l'active pas.",
+        "updateFailed": "Impossible de mettre à jour le serveur MCP"
+      },
+      "oauth": {
+        "title": "Se connecter avec votre compte",
+        "recommended": "Recommandé",
+        "description": "L'assistant ouvre Rustrak, vous vous connectez et l'approuvez. Aucun jeton à copier ni à renouveler.",
+        "clients": "Fonctionne avec claude.ai, ChatGPT, Claude Code, Cursor et VS Code.",
+        "step1": "Copiez l'URL du point de terminaison ci-dessus.",
+        "step2": "Ajoutez-la à votre assistant comme serveur MCP ou connecteur personnalisé.",
+        "step3": "Connectez-vous à Rustrak quand il le demande et approuvez l'accès.",
+        "note": "Il agit avec vos droits. Vous pouvez le déconnecter à tout moment dans Assistants connectés.",
+        "needsPublicUrl": "La connexion est désactivée : définissez PUBLIC_URL sur le serveur avec l'adresse par laquelle les assistants le joignent (p. ex. https://rustrak.example.com) et redémarrez-le. En attendant, utilisez un jeton d'API."
+      },
+      "token": {
+        "title": "Jeton d'API",
+        "description": "Placez un jeton dans la configuration du client. Pour les clients qui ne peuvent pas se connecter, les scripts et la CI.",
+        "clients": "Fonctionne avec tout client MCP capable d'envoyer un en-tête HTTP.",
+        "step1": "Créez un jeton dans",
+        "createToken": "Jetons d'API",
+        "step2": "Ajoutez la configuration ci-dessous à votre client.",
+        "step3": "Remplacez YOUR_TOKEN par le jeton créé.",
+        "note": "Il agit avec les droits du propriétaire du jeton. Révoquer le jeton le coupe."
+      },
+      "clients": {
+        "web": "claude.ai / ChatGPT",
+        "claudeCode": "Claude Code",
+        "json": "Cursor / VS Code",
+        "webSteps": "Dans claude.ai, ouvrez Settings → Connectors → Add custom connector ; dans ChatGPT, ajoutez un connecteur personnalisé. Collez l'URL du point de terminaison et enregistrez : vous êtes renvoyé ici pour vous connecter et approuver."
+      },
+      "connected": {
+        "title": "Assistants connectés",
+        "description": "Les assistants que vous avez approuvés en vous connectant. En déconnecter un coupe son accès immédiatement.",
+        "empty": "Aucun assistant n'est encore connecté à votre compte.",
+        "columns": {
+          "name": "Assistant",
+          "client": "Publié par",
+          "since": "Connecté"
+        },
+        "revoke": "Déconnecter",
+        "revokeLabel": "Déconnecter {name}",
+        "revokeFailed": "Impossible de déconnecter l'assistant",
+        "revoked": "{name} déconnecté",
+        "loadFailed": "Impossible de charger vos assistants connectés"
+      }
     },
     "storage": {
       "meta": {
@@ -2062,5 +2130,23 @@
       "invalid": "Cette planification ne peut pas s’exécuter. Vérifiez le crontab.",
       "timesIn": "Heures en {timezone}."
     }
+  },
+  "oauth": {
+    "meta": {
+      "title": "Autoriser l'accès | Rustrak"
+    },
+    "title": "{client} souhaite accéder à votre compte Rustrak",
+    "signedInAs": "Connecté en tant que {email}",
+    "canDo": "Si vous approuvez, il pourra :",
+    "canRead": "Lire les problèmes, événements, données de performance et logs de vos projets",
+    "canAct": "Agir dessus avec vos droits : résoudre, commenter et modifier ce que vous pouvez modifier",
+    "clientId": "Client",
+    "returnsTo": "Vous renvoie vers",
+    "warning": "N'approuvez que si vous avez lancé cette demande depuis cet assistant. Vous pouvez le déconnecter à tout moment dans Paramètres → Assistants IA (MCP).",
+    "approve": "Approuver",
+    "deny": "Refuser",
+    "decideFailed": "Impossible de terminer l'autorisation",
+    "failedTitle": "Cette demande ne peut pas aboutir",
+    "failedDescription": "L'assistant a envoyé une demande d'autorisation que Rustrak n'a pas pu vérifier, donc rien n'a été partagé. Relancez la connexion depuis l'assistant."
   }
 }

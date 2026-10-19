@@ -55,7 +55,7 @@ use crate::error::AppError;
 /// not a handler claimed it. The dashboard's Vite proxy keeps the same list in
 /// `apps/dashboard/vite.config.ts`, so that development routes requests the
 /// same way production does; the two must not drift.
-pub const API_PREFIXES: [&str; 7] = [
+pub const API_PREFIXES: [&str; 8] = [
     "/api",
     "/auth",
     "/health",
@@ -63,6 +63,7 @@ pub const API_PREFIXES: [&str; 7] = [
     "/api-docs",
     "/metrics",
     "/mcp",
+    "/.well-known",
 ];
 
 /// How long a hashed asset may be cached: one year, the maximum HTTP defines
@@ -156,7 +157,12 @@ impl Dashboard {
         builder
             .insert_header((CONTENT_TYPE, "text/html; charset=utf-8"))
             .insert_header(ETag(self.etag.clone()))
-            .insert_header(CacheControl(vec![CacheDirective::NoCache]));
+            .insert_header(CacheControl(vec![CacheDirective::NoCache]))
+            // No page of the dashboard may be framed: `/oauth/authorize` is a
+            // consent screen, and inside another site's frame one disguised
+            // click would connect an attacker's client to the account.
+            .insert_header(("X-Frame-Options", "DENY"))
+            .insert_header(("Content-Security-Policy", "frame-ancestors 'none'"));
 
         if unchanged {
             builder.finish()

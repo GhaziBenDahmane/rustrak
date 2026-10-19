@@ -15,6 +15,7 @@ pub mod log;
 pub mod message_normalization;
 pub mod monitor;
 pub mod notification;
+pub mod oauth;
 pub mod project;
 pub mod project_member;
 pub mod rate_limit;
