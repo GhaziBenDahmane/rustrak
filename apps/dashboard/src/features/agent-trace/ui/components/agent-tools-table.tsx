@@ -27,7 +27,7 @@ export function AgentToolsTable({ rows }: AgentToolsTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-sm whitespace-nowrap">
         <thead>
           <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
             <th className="pb-2 pr-3 font-medium">{t('tool')}</th>
@@ -43,7 +43,11 @@ export function AgentToolsTable({ rows }: AgentToolsTableProps) {
 
             return (
               <tr key={row.tool}>
-                <td className="py-2 pr-3 font-mono">{row.tool}</td>
+                <td className="py-2 pr-3 font-mono">
+                  <span className="block max-w-80 truncate" title={row.tool}>
+                    {row.tool}
+                  </span>
+                </td>
                 <td className="py-2 px-3 text-right tabular-nums">
                   {format.number(row.calls)}
                 </td>
