@@ -267,12 +267,40 @@ fn param_value(name: &str, path: &str, schema: &Value, seed: &Seed) -> String {
         "project_slug" => seed.project_slug.clone(),
         "org_slug" => "rustrak".into(),
         "key" => "level".into(),
+        "response_type" => "code".into(),
+        "client_id" => CONTRACT_CLIENT.into(),
+        "redirect_uri" => CONTRACT_REDIRECT.into(),
+        "code_challenge" => "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM".into(),
+        "code_challenge_method" => "S256".into(),
         _ => match (schema["type"].as_str(), schema["format"].as_str()) {
             (_, Some("uuid")) => Uuid::nil().to_string(),
             (Some("integer"), _) => "1".into(),
             _ => "missing".into(),
         },
     }
+}
+
+const CONTRACT_CLIENT: &str = "https://client.example/metadata.json";
+const CONTRACT_REDIRECT: &str = "https://client.example/callback";
+
+/// The one OAuth client the consent endpoints know, without the network.
+fn contract_client() -> std::sync::Arc<dyn rustrak::services::oauth::ClientMetadataSource> {
+    struct Client;
+    #[async_trait::async_trait]
+    impl rustrak::services::oauth::ClientMetadataSource for Client {
+        async fn fetch(
+            &self,
+            _: &str,
+        ) -> rustrak::error::AppResult<rustrak::services::oauth::ClientMetadata> {
+            Ok(serde_json::from_value(json!({
+                "client_id": CONTRACT_CLIENT,
+                "client_name": "Contract",
+                "redirect_uris": [CONTRACT_REDIRECT],
+            }))
+            .unwrap())
+        }
+    }
+    std::sync::Arc::new(Client)
 }
 
 /// Validates `body` against `schema`, resolving `$ref`s inside the spec.
@@ -356,6 +384,7 @@ async fn every_get_matches_the_published_spec() {
                 rustrak::telemetry::Disabled::SwitchedOff,
             )))
             .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
+            .app_data(web::Data::new(contract_client()))
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::generate())
                     .cookie_secure(false)
@@ -391,7 +420,8 @@ async fn every_get_matches_the_published_spec() {
             .configure(routes::sourcemaps::configure)
             .configure(routes::storage::configure)
             .configure(routes::telemetry::configure)
-            .configure(routes::mcp::configure),
+            .configure(routes::mcp::configure)
+            .configure(routes::oauth::configure),
     )
     .await;
 

@@ -265,6 +265,8 @@ async fn main() -> std::io::Result<()> {
     // Built outside the worker factory so every worker shares the one job and
     // a second cleanup is refused no matter which worker takes the request.
     let cleanup_job_data = web::Data::new(rustrak::services::CleanupJob::default());
+    let client_metadata_data: web::Data<Arc<dyn rustrak::services::oauth::ClientMetadataSource>> =
+        web::Data::new(Arc::new(rustrak::services::oauth::HttpClientMetadata));
 
     // Processor registry — single dispatch surface for the ingest pipeline.
     // Built once; each processor owns the deps it needs.
@@ -343,6 +345,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(telemetry_status_data.clone())
             .app_data(metrics_data.clone())
             .app_data(cleanup_job_data.clone())
+            .app_data(client_metadata_data.clone())
             // Middleware
             // `Logger::default()`'s format, plus the incident id a 5xx echoes
             // in `INCIDENT_ID_HEADER`. `error_response` never sees the request
@@ -387,6 +390,7 @@ async fn main() -> std::io::Result<()> {
             // Off by default; returns 404 unless RUSTRAK_METRICS=on.
             .configure(routes::metrics::configure)
             .configure(routes::mcp::configure)
+            .configure(routes::oauth::configure)
             // Auth routes (public - no Bearer auth required)
             .configure(routes::auth::configure)
             // API routes (auth required)

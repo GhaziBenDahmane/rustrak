@@ -249,6 +249,45 @@ export type AuthTokenResponse = {
     token_prefix: string;
 };
 
+/**
+ * The user's answer to a consent screen.
+ */
+export type AuthorizationDecision = AuthorizationRequest & {
+    approve: boolean;
+};
+
+/**
+ * What the consent page shows about the client asking.
+ */
+export type AuthorizationInfo = {
+    client_id: string;
+    client_name: string;
+    /**
+     * Host the user is sent back to, the one fact a lookalike name cannot fake.
+     */
+    redirect_host: string;
+};
+
+/**
+ * Where the consent page sends the browser next.
+ */
+export type AuthorizationRedirect = {
+    redirect_to: string;
+};
+
+/**
+ * An authorization request, as the client put it in the authorize URL.
+ */
+export type AuthorizationRequest = {
+    client_id: string;
+    code_challenge: string;
+    code_challenge_method: string;
+    redirect_uri: string;
+    resource?: string | null;
+    response_type: string;
+    state?: string | null;
+};
+
 export type BookmarkResponse = {
     is_bookmarked: boolean;
 };
@@ -1064,6 +1103,16 @@ export type MonitorResponse = {
     is_muted: boolean;
     name: string;
     slug: string;
+};
+
+/**
+ * A connected client, as its user sees it.
+ */
+export type OAuthGrant = {
+    client_id: string;
+    client_name: string;
+    created_at: string;
+    id: number;
 };
 
 /**
@@ -2855,6 +2904,131 @@ export type InvitationsRevokeResponses = {
 };
 
 export type InvitationsRevokeResponse = InvitationsRevokeResponses[keyof InvitationsRevokeResponses];
+
+export type OauthGetAuthorizationData = {
+    body?: never;
+    path?: never;
+    query: {
+        response_type: string;
+        client_id: string;
+        redirect_uri: string;
+        code_challenge: string;
+        code_challenge_method: string;
+        state?: string | null;
+        resource?: string | null;
+    };
+    url: '/api/oauth/authorize';
+};
+
+export type OauthGetAuthorizationErrors = {
+    /**
+     * The request cannot be trusted
+     */
+    400: ErrorResponse;
+    /**
+     * Not signed in
+     */
+    401: ErrorResponse;
+};
+
+export type OauthGetAuthorizationError = OauthGetAuthorizationErrors[keyof OauthGetAuthorizationErrors];
+
+export type OauthGetAuthorizationResponses = {
+    /**
+     * The verified client asking for access
+     */
+    200: AuthorizationInfo;
+};
+
+export type OauthGetAuthorizationResponse = OauthGetAuthorizationResponses[keyof OauthGetAuthorizationResponses];
+
+export type OauthDecideAuthorizationData = {
+    body: AuthorizationDecision;
+    path?: never;
+    query?: never;
+    url: '/api/oauth/authorize';
+};
+
+export type OauthDecideAuthorizationErrors = {
+    /**
+     * The request cannot be trusted
+     */
+    400: ErrorResponse;
+    /**
+     * Not signed in
+     */
+    401: ErrorResponse;
+};
+
+export type OauthDecideAuthorizationError = OauthDecideAuthorizationErrors[keyof OauthDecideAuthorizationErrors];
+
+export type OauthDecideAuthorizationResponses = {
+    /**
+     * Where to send the browser
+     */
+    200: AuthorizationRedirect;
+};
+
+export type OauthDecideAuthorizationResponse = OauthDecideAuthorizationResponses[keyof OauthDecideAuthorizationResponses];
+
+export type OauthListGrantsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/oauth/grants';
+};
+
+export type OauthListGrantsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorResponse;
+};
+
+export type OauthListGrantsError = OauthListGrantsErrors[keyof OauthListGrantsErrors];
+
+export type OauthListGrantsResponses = {
+    /**
+     * Assistants connected to your account
+     */
+    200: Array<OAuthGrant>;
+};
+
+export type OauthListGrantsResponse = OauthListGrantsResponses[keyof OauthListGrantsResponses];
+
+export type OauthRevokeGrantData = {
+    body?: never;
+    path: {
+        /**
+         * Connection ID
+         */
+        id: number;
+    };
+    query?: never;
+    url: '/api/oauth/grants/{id}';
+};
+
+export type OauthRevokeGrantErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorResponse;
+    /**
+     * Not one of your connections
+     */
+    404: ErrorResponse;
+};
+
+export type OauthRevokeGrantError = OauthRevokeGrantErrors[keyof OauthRevokeGrantErrors];
+
+export type OauthRevokeGrantResponses = {
+    /**
+     * Disconnected
+     */
+    204: void;
+};
+
+export type OauthRevokeGrantResponse = OauthRevokeGrantResponses[keyof OauthRevokeGrantResponses];
 
 export type ProjectsListData = {
     body?: never;

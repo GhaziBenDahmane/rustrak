@@ -1,4 +1,13 @@
-import { Database, Info, Key, Palette, Plug, User, Users } from 'lucide-react';
+import {
+  Bot,
+  Database,
+  Info,
+  Key,
+  Palette,
+  Plug,
+  User,
+  Users,
+} from 'lucide-react';
 import { useTranslations } from 'use-intl';
 import { cn } from '@/shared/lib/utils';
 import { Link } from '@/shared/ui/components/link';
@@ -7,6 +16,7 @@ import { usePathname } from '@/shared/ui/hooks/use-pathname';
 const navItems = [
   { href: '/settings/tokens', labelKey: 'nav.apiTokens', icon: Key },
   { href: '/settings/integrations', labelKey: 'nav.integrations', icon: Plug },
+  { href: '/settings/mcp', labelKey: 'nav.mcp', icon: Bot },
   {
     href: '/settings/team',
     labelKey: 'nav.team',

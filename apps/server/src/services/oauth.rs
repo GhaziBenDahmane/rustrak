@@ -1,0 +1,564 @@
+//! OAuth 2.1 for `/mcp`, with Rustrak as the authorization server of its own
+//! MCP endpoint (see `routes::oauth`).
+//!
+//! - Clients identify themselves with a Client ID Metadata Document: the
+//!   `client_id` is an HTTPS URL serving their name and redirect URIs. Nothing
+//!   is registered ahead of time.
+//! - Codes and tokens are random, opaque, and stored only as SHA-256 hashes.
+//!   An access token lasts an hour; refreshing replaces both tokens, so a
+//!   refresh token works once.
+//! - A token is bound to the resource it was issued for and is accepted only
+//!   at `/mcp`, never at `/api`.
+
+use std::net::{IpAddr, SocketAddr};
+use std::time::Duration;
+
+use base64::Engine;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sha2::Digest;
+use sqlx::FromRow;
+
+use crate::db::DbPool;
+use crate::error::{AppError, AppResult};
+
+pub const ACCESS_TTL_SECS: i64 = 3600;
+const REFRESH_TTL_DAYS: i64 = 30;
+const CODE_TTL_SECS: i64 = 300;
+/// Prefix of an access token, which also keeps it apart from a 40-hex API token.
+pub const ACCESS_PREFIX: &str = "rto_";
+const REFRESH_PREFIX: &str = "rtr_";
+
+/// The fields of a client's metadata document that the flow reads.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientMetadata {
+    pub client_id: String,
+    pub client_name: String,
+    pub redirect_uris: Vec<String>,
+    #[serde(default)]
+    pub token_endpoint_auth_method: Option<String>,
+}
+
+/// Where a client's metadata document comes from. Production fetches it over
+/// HTTPS; tests serve one directly.
+#[async_trait::async_trait]
+pub trait ClientMetadataSource: Send + Sync {
+    async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata>;
+}
+
+/// Checks a client and the redirect it asked for against its document.
+pub async fn verify_client(
+    source: &dyn ClientMetadataSource,
+    client_id: &str,
+    redirect_uri: &str,
+) -> AppResult<ClientMetadata> {
+    let client = source.fetch(client_id).await?;
+    if client.client_id != client_id {
+        return Err(AppError::Validation(
+            "The client's metadata document names a different client_id".into(),
+        ));
+    }
+    // Public clients only: there is no secret a metadata document could hold.
+    if client
+        .token_endpoint_auth_method
+        .as_deref()
+        .is_some_and(|m| m != "none")
+    {
+        return Err(AppError::Validation(
+            "Only public clients (token_endpoint_auth_method \"none\") are supported".into(),
+        ));
+    }
+    if !client
+        .redirect_uris
+        .iter()
+        .any(|uri| redirect_matches(uri, redirect_uri))
+    {
+        return Err(AppError::Validation(
+            "redirect_uri is not one of the client's registered redirect URIs".into(),
+        ));
+    }
+    Ok(client)
+}
+
+/// Whether `requested` is the redirect `registered` stands for: the same
+/// string, except that a loopback redirect takes any port. A native client
+/// (Claude Code) listens on whatever port is free, so it registers
+/// `http://localhost/callback` and asks for `http://localhost:49581/callback`
+/// (RFC 8252 7.3). Scheme, host, path and query must still match exactly.
+pub fn redirect_matches(registered: &str, requested: &str) -> bool {
+    if registered == requested {
+        return true;
+    }
+    let (Ok(registered), Ok(mut requested)) =
+        (url::Url::parse(registered), url::Url::parse(requested))
+    else {
+        return false;
+    };
+    let loopback = registered.scheme() == "http"
+        && registered.port().is_none()
+        && matches!(
+            registered.host_str(),
+            Some("localhost" | "127.0.0.1" | "[::1]")
+        );
+    loopback && requested.set_port(None).is_ok() && requested == registered
+}
+
+/// Fetches metadata documents from the public internet, and nowhere else.
+pub struct HttpClientMetadata;
+
+const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
+
+#[async_trait::async_trait]
+impl ClientMetadataSource for HttpClientMetadata {
+    async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata> {
+        let invalid = |why: &str| AppError::Validation(format!("client_id: {why}"));
+        let url = url::Url::parse(client_id).map_err(|_| invalid("not a URL"))?;
+        if url.scheme() != "https" || url.path() == "/" || url.fragment().is_some() {
+            return Err(invalid("must be an https URL with a path"));
+        }
+        let host = url.host_str().ok_or_else(|| invalid("has no host"))?;
+        let port = url.port_or_known_default().unwrap_or(443);
+
+        // The URL comes from whoever starts an authorization, so it must not
+        // reach anything a public request could not. The address checked is
+        // the one connected to: resolving again at connect time would let a
+        // rebinding DNS answer differently the second time.
+        let addr: SocketAddr = tokio::net::lookup_host((host, port))
+            .await
+            .map_err(|_| invalid("its host does not resolve"))?
+            .next()
+            .ok_or_else(|| invalid("its host does not resolve"))?;
+        if !is_public(addr.ip()) {
+            return Err(invalid("its host is not on the public internet"));
+        }
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(5))
+            .resolve(host, addr)
+            .build()
+            .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
+        let mut response = client
+            .get(url.clone())
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|_| invalid("its metadata document could not be fetched"))?;
+        if !response.status().is_success() {
+            return Err(invalid("its metadata document could not be fetched"));
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| invalid("its metadata document could not be read"))?
+        {
+            body.extend_from_slice(&chunk);
+            if body.len() > MAX_DOCUMENT_BYTES {
+                return Err(invalid("its metadata document is too large"));
+            }
+        }
+        serde_json::from_slice(&body)
+            .map_err(|_| invalid("its metadata document is not valid client metadata"))
+    }
+}
+
+/// Whether an address is reachable from the public internet: not loopback,
+/// private, link-local (cloud metadata lives there), shared, or reserved.
+pub fn is_public(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            !(v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_multicast()
+                || a == 0
+                || (a == 100 && (64..128).contains(&b))
+                || (a == 192 && b == 0)
+                || a >= 240)
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_public(IpAddr::V4(v4));
+            }
+            let first = v6.segments()[0];
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (first & 0xfe00) == 0xfc00
+                || (first & 0xffc0) == 0xfe80
+                || first == 0x2001 && v6.segments()[1] == 0x0db8)
+        }
+    }
+}
+
+/// Whether `verifier` is the one `challenge` was made from (PKCE, S256).
+pub fn pkce_matches(verifier: &str, challenge: &str) -> bool {
+    let valid = (43..=128).contains(&verifier.len())
+        && verifier
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-._~".contains(&b));
+    valid
+        && base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(sha2::Sha256::digest(verifier.as_bytes()))
+            == challenge
+}
+
+fn hash(secret: &str) -> String {
+    hex::encode(sha2::Sha256::digest(secret.as_bytes()))
+}
+
+fn secret(prefix: &str) -> String {
+    use rand::RngExt;
+    let bytes: [u8; 32] = rand::rng().random();
+    format!("{prefix}{}", hex::encode(bytes))
+}
+
+/// What a code stands for, read back when it is redeemed.
+#[derive(Debug, FromRow)]
+pub struct AuthorizationCode {
+    pub user_id: i32,
+    pub client_id: String,
+    pub client_name: String,
+    pub redirect_uri: String,
+    pub resource: String,
+    pub code_challenge: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// A fresh access and refresh token, as the token endpoint returns them.
+#[derive(Debug, Serialize)]
+pub struct TokenPair {
+    pub access_token: String,
+    pub token_type: &'static str,
+    pub expires_in: i64,
+    pub refresh_token: String,
+}
+
+/// A connected client, as its user sees it.
+#[derive(Debug, Serialize, FromRow)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct OAuthGrant {
+    pub id: i32,
+    pub client_id: String,
+    pub client_name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(FromRow)]
+struct GrantRow {
+    id: i32,
+    user_id: i32,
+    client_id: String,
+    resource: String,
+    access_expires_at: DateTime<Utc>,
+    refresh_expires_at: DateTime<Utc>,
+}
+
+pub struct OAuthService;
+
+impl OAuthService {
+    /// Issues a code for an approved authorization, valid for five minutes.
+    pub async fn create_code(
+        pool: &DbPool,
+        user_id: i32,
+        client: &ClientMetadata,
+        redirect_uri: &str,
+        resource: &str,
+        code_challenge: &str,
+    ) -> AppResult<String> {
+        let code = secret("");
+        // Abandoned authorizations leave codes nobody redeems; the next one
+        // sweeps them, so the table never outgrows a few minutes of traffic.
+        sqlx::query("DELETE FROM oauth_codes WHERE expires_at < $1")
+            .bind(Utc::now())
+            .execute(pool)
+            .await?;
+        sqlx::query(
+            "INSERT INTO oauth_codes (code_hash, user_id, client_id, client_name, redirect_uri, \
+             resource, code_challenge, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(hash(&code))
+        .bind(user_id)
+        .bind(&client.client_id)
+        .bind(&client.client_name)
+        .bind(redirect_uri)
+        .bind(resource)
+        .bind(code_challenge)
+        .bind(Utc::now() + chrono::Duration::seconds(CODE_TTL_SECS))
+        .execute(pool)
+        .await?;
+        Ok(code)
+    }
+
+    /// Takes a code out of circulation and returns what it was issued for,
+    /// whether or not it is still valid: a code is spent by being presented.
+    pub async fn redeem_code(pool: &DbPool, code: &str) -> AppResult<Option<AuthorizationCode>> {
+        Ok(sqlx::query_as::<_, AuthorizationCode>(
+            "DELETE FROM oauth_codes WHERE code_hash = $1 RETURNING user_id, client_id, \
+             client_name, redirect_uri, resource, code_challenge, expires_at",
+        )
+        .bind(hash(code))
+        .fetch_optional(pool)
+        .await?)
+    }
+
+    /// Connects a client: a new grant with its first pair of tokens.
+    pub async fn create_grant(pool: &DbPool, code: &AuthorizationCode) -> AppResult<TokenPair> {
+        // Connections whose refresh token ran out can never act again.
+        sqlx::query("DELETE FROM oauth_grants WHERE refresh_expires_at < $1")
+            .bind(Utc::now())
+            .execute(pool)
+            .await?;
+        let (pair, access_expires, refresh_expires) = Self::new_pair();
+        sqlx::query(
+            "INSERT INTO oauth_grants (user_id, client_id, client_name, resource, access_hash, \
+             access_expires_at, refresh_hash, refresh_expires_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(code.user_id)
+        .bind(&code.client_id)
+        .bind(&code.client_name)
+        .bind(&code.resource)
+        .bind(hash(&pair.access_token))
+        .bind(access_expires)
+        .bind(hash(&pair.refresh_token))
+        .bind(refresh_expires)
+        .execute(pool)
+        .await?;
+        Ok(pair)
+    }
+
+    /// Replaces a grant's tokens. `None` when the refresh token is unknown,
+    /// already used, expired, or held by another client.
+    pub async fn refresh(
+        pool: &DbPool,
+        refresh_token: &str,
+        client_id: &str,
+    ) -> AppResult<Option<TokenPair>> {
+        let old = hash(refresh_token);
+        let Some(grant) = sqlx::query_as::<_, GrantRow>(
+            "SELECT id, user_id, client_id, resource, access_expires_at, refresh_expires_at \
+             FROM oauth_grants WHERE refresh_hash = $1",
+        )
+        .bind(&old)
+        .fetch_optional(pool)
+        .await?
+        else {
+            return Ok(None);
+        };
+        if grant.client_id != client_id || grant.refresh_expires_at <= Utc::now() {
+            return Ok(None);
+        }
+        let (pair, access_expires, refresh_expires) = Self::new_pair();
+        // Conditional on the old hash, so two concurrent refreshes with the
+        // same token cannot both win.
+        let rotated = sqlx::query(
+            "UPDATE oauth_grants SET access_hash = $1, access_expires_at = $2, \
+             refresh_hash = $3, refresh_expires_at = $4 WHERE id = $5 AND refresh_hash = $6",
+        )
+        .bind(hash(&pair.access_token))
+        .bind(access_expires)
+        .bind(hash(&pair.refresh_token))
+        .bind(refresh_expires)
+        .bind(grant.id)
+        .bind(&old)
+        .execute(pool)
+        .await?
+        .rows_affected();
+        Ok((rotated == 1).then_some(pair))
+    }
+
+    /// The user an access token acts for, if it is current and was issued for
+    /// `resource`.
+    pub async fn authenticate(
+        pool: &DbPool,
+        access_token: &str,
+        resource: &str,
+    ) -> AppResult<Option<i32>> {
+        let grant = sqlx::query_as::<_, GrantRow>(
+            "SELECT id, user_id, client_id, resource, access_expires_at, refresh_expires_at \
+             FROM oauth_grants WHERE access_hash = $1",
+        )
+        .bind(hash(access_token))
+        .fetch_optional(pool)
+        .await?;
+        Ok(grant
+            .filter(|g| g.access_expires_at > Utc::now() && same_resource(&g.resource, resource))
+            .map(|g| g.user_id))
+    }
+
+    pub async fn list_grants(pool: &DbPool, user_id: i32) -> AppResult<Vec<OAuthGrant>> {
+        Ok(sqlx::query_as::<_, OAuthGrant>(
+            "SELECT id, client_id, client_name, created_at FROM oauth_grants \
+             WHERE user_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(user_id)
+        .fetch_all(pool)
+        .await?)
+    }
+
+    /// Disconnects a client. Only its own user can.
+    pub async fn revoke(pool: &DbPool, user_id: i32, grant_id: i32) -> AppResult<()> {
+        let deleted = sqlx::query("DELETE FROM oauth_grants WHERE id = $1 AND user_id = $2")
+            .bind(grant_id)
+            .bind(user_id)
+            .execute(pool)
+            .await?
+            .rows_affected();
+        if deleted == 0 {
+            return Err(AppError::NotFound("Connection not found".into()));
+        }
+        Ok(())
+    }
+
+    fn new_pair() -> (TokenPair, DateTime<Utc>, DateTime<Utc>) {
+        let now = Utc::now();
+        (
+            TokenPair {
+                access_token: secret(ACCESS_PREFIX),
+                token_type: "Bearer",
+                expires_in: ACCESS_TTL_SECS,
+                refresh_token: secret(REFRESH_PREFIX),
+            },
+            now + chrono::Duration::seconds(ACCESS_TTL_SECS),
+            now + chrono::Duration::days(REFRESH_TTL_DAYS),
+        )
+    }
+}
+
+/// Resource URIs compared as RFC 8707 asks: scheme and host ignore case, and
+/// a trailing slash is not a different resource.
+pub fn same_resource(a: &str, b: &str) -> bool {
+    let canonical = |s: &str| {
+        url::Url::parse(s)
+            .map(|u| u.as_str().trim_end_matches('/').to_string())
+            .unwrap_or_default()
+    };
+    let (a, b) = (canonical(a), canonical(b));
+    !a.is_empty() && a == b
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_public_addresses_are_fetched() {
+        for private in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.1",
+            "192.168.1.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:127.0.0.1",
+        ] {
+            assert!(!is_public(private.parse().unwrap()), "{private}");
+        }
+        for public in ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"] {
+            assert!(is_public(public.parse().unwrap()), "{public}");
+        }
+    }
+
+    /// Talks to the network, so it is run by hand: `cargo test -- --ignored`.
+    #[tokio::test]
+    #[ignore]
+    async fn fetching_reaches_the_internet_and_nothing_private() {
+        let source = HttpClientMetadata;
+        // Fetched and parsed, but a package.json is not client metadata.
+        let err = source
+            .fetch("https://raw.githubusercontent.com/rustrak/rustrak/main/package.json")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("not valid client metadata"),
+            "{err}"
+        );
+        let err = source
+            .fetch("https://localhost/client.json")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("not on the public internet"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_loopback_redirect_matches_on_any_port() {
+        // RFC 8252 7.3: a native client cannot know its port in advance.
+        // Claude Code registers exactly these two.
+        for (registered, requested) in [
+            (
+                "http://localhost/callback",
+                "http://localhost:49581/callback",
+            ),
+            (
+                "http://127.0.0.1/callback",
+                "http://127.0.0.1:3000/callback",
+            ),
+            ("http://[::1]/callback", "http://[::1]:8080/callback"),
+            ("https://client.example/cb", "https://client.example/cb"),
+        ] {
+            assert!(redirect_matches(registered, requested), "{requested}");
+        }
+        for (registered, requested) in [
+            ("http://localhost/callback", "http://localhost:49581/other"),
+            (
+                "http://localhost/callback",
+                "https://localhost:49581/callback",
+            ),
+            (
+                "http://localhost/callback",
+                "http://evil.example:49581/callback",
+            ),
+            (
+                "http://localhost/callback",
+                "http://localhost.evil.example/callback",
+            ),
+            (
+                "http://localhost/callback",
+                "http://localhost:49581/callback?x=1",
+            ),
+            (
+                "https://client.example/cb",
+                "https://client.example:8443/cb",
+            ),
+            ("https://client.example/cb", "https://client.example/cb/"),
+        ] {
+            assert!(!redirect_matches(registered, requested), "{requested}");
+        }
+    }
+
+    #[test]
+    fn pkce_checks_the_s256_challenge() {
+        // RFC 7636, Appendix B.
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        let challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+        assert!(pkce_matches(verifier, challenge));
+        assert!(!pkce_matches("short", challenge));
+        assert!(!pkce_matches(&verifier.replace('d', "e"), challenge));
+    }
+
+    #[test]
+    fn resources_compare_as_rfc_8707_asks() {
+        assert!(same_resource(
+            "https://Rustrak.example/mcp",
+            "https://rustrak.example/mcp/"
+        ));
+        assert!(!same_resource(
+            "https://rustrak.example/mcp",
+            "https://other.example/mcp"
+        ));
+        assert!(!same_resource("not a url", "not a url"));
+    }
+}

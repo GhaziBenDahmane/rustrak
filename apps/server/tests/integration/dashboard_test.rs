@@ -68,6 +68,33 @@ async fn serves_the_shell_at_the_root() {
 }
 
 #[actix_web::test]
+async fn the_shell_cannot_be_framed() {
+    let dir = build_output();
+    let app = test::init_service(App::new().configure(dashboard(dir.path()).configure())).await;
+
+    // `/oauth/authorize` is a consent screen: framed by another site, one
+    // disguised click would connect an attacker's client to the account.
+    let resp = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/oauth/authorize")
+            .to_request(),
+    )
+    .await;
+
+    let header = |name: &str| {
+        resp.headers()
+            .get(name)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+    };
+    assert_eq!(header("x-frame-options"), "DENY");
+    assert_eq!(header("content-security-policy"), "frame-ancestors 'none'");
+}
+
+#[actix_web::test]
 async fn the_shell_is_never_cached() {
     let dir = build_output();
     let app = test::init_service(App::new().configure(dashboard(dir.path()).configure())).await;

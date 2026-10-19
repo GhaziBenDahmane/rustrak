@@ -85,11 +85,13 @@ where
         // - /health - health check routes
         // - /metrics - opt-in Prometheus scrape, restricted at the network edge
         // - /mcp - MCP endpoint, Bearer token checked by its handler
+        // - /.well-known/* - OAuth discovery documents for /mcp, public by design
         let is_api = path.starts_with("/auth")
             || path.starts_with("/api/")
             || path.starts_with("/health")
             || path == "/metrics"
             || path == "/mcp"
+            || path.starts_with("/.well-known/")
             || {
                 #[cfg(feature = "openapi")]
                 {

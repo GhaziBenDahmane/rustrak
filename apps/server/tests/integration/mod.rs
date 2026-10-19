@@ -23,6 +23,7 @@ pub(crate) mod mcp_test;
 mod metrics_test;
 mod monitors_api_test;
 mod monitors_service_test;
+mod oauth_test;
 mod openapi_contract_test;
 mod projects_api_test;
 mod quota_enforcement_test;

@@ -1632,6 +1632,7 @@
       "clientKeys": "客户端密钥",
       "apiTokens": "API 令牌",
       "integrations": "集成",
+      "mcp": "AI 助手 (MCP)",
       "team": "团队",
       "storage": "存储",
       "account": "账户",
@@ -1704,6 +1705,72 @@
       "backToProjects": "返回项目列表",
       "loadFailed": "无法加载集成",
       "githubLoadFailed": "无法加载 GitHub 连接"
+    },
+    "mcp": {
+      "meta": {
+        "title": "AI 助手 | Rustrak",
+        "description": "通过 MCP 将 AI 助手连接到 Rustrak"
+      },
+      "title": "AI 助手 (MCP)",
+      "subtitle": "让 Claude、ChatGPT、Cursor 等 AI 助手以连接者的权限读取并处理你的错误。",
+      "loadFailed": "无法加载 MCP 设置",
+      "copy": "复制",
+      "copied": "已复制",
+      "copyLabel": "复制{label}",
+      "copyUnavailable": "此处无法复制",
+      "copyUnavailableHint": "请选中{label}并手动复制。",
+      "server": {
+        "title": "MCP 服务器",
+        "description": "在下方端点响应 AI 助手。默认关闭；关闭后所有助手会立即断开。",
+        "adminOnly": "只有实例管理员可以开启或关闭 MCP 服务器。",
+        "on": "已开启",
+        "off": "已关闭",
+        "toggleLabel": "开启或关闭 MCP 服务器",
+        "endpoint": "端点 URL",
+        "offNotice": "MCP 服务器已关闭：在管理员开启之前，任何助手都无法连接。",
+        "updateFailed": "无法更新 MCP 服务器"
+      },
+      "oauth": {
+        "title": "使用你的账户登录",
+        "recommended": "推荐",
+        "description": "助手会打开 Rustrak，你登录并批准即可。无需复制或轮换令牌。",
+        "clients": "适用于 claude.ai、ChatGPT、Claude Code、Cursor 和 VS Code。",
+        "step1": "复制上方的端点 URL。",
+        "step2": "将其作为 MCP 服务器或自定义连接器添加到你的助手中。",
+        "step3": "在提示时登录 Rustrak 并批准访问。",
+        "note": "它以你的权限执行操作。你可以随时在“已连接的助手”中断开它。"
+      },
+      "token": {
+        "title": "API 令牌",
+        "description": "将令牌放入客户端配置中。适用于无法登录的客户端、脚本和 CI。",
+        "clients": "适用于任何能发送 HTTP 请求头的 MCP 客户端。",
+        "step1": "在此创建令牌：",
+        "createToken": "API 令牌",
+        "step2": "将下方配置添加到你的客户端。",
+        "step3": "将 YOUR_TOKEN 替换为你创建的令牌。",
+        "note": "它以令牌所有者的权限执行操作。撤销令牌即可断开。"
+      },
+      "clients": {
+        "web": "claude.ai / ChatGPT",
+        "claudeCode": "Claude Code",
+        "json": "Cursor / VS Code",
+        "webSteps": "在 claude.ai 中打开 Settings → Connectors → Add custom connector；在 ChatGPT 中添加自定义连接器。粘贴端点 URL 并保存：你会被带到这里登录并批准。"
+      },
+      "connected": {
+        "title": "已连接的助手",
+        "description": "你通过登录批准的助手。断开后其访问权限会立即失效。",
+        "empty": "你的账户尚未连接任何助手。",
+        "columns": {
+          "name": "助手",
+          "client": "发布者",
+          "since": "连接时间"
+        },
+        "revoke": "断开",
+        "revokeLabel": "断开 {name}",
+        "revokeFailed": "无法断开该助手",
+        "revoked": "已断开 {name}",
+        "loadFailed": "无法加载已连接的助手"
+      }
     },
     "storage": {
       "meta": {
@@ -2062,5 +2129,23 @@
       "invalid": "此计划无法运行，请检查 crontab。",
       "timesIn": "时间为 {timezone}。"
     }
+  },
+  "oauth": {
+    "meta": {
+      "title": "授权访问 | Rustrak"
+    },
+    "title": "{client} 想要访问你的 Rustrak 账户",
+    "signedInAs": "已登录为 {email}",
+    "canDo": "如果你批准，它将能够：",
+    "canRead": "读取你的项目中的问题、事件、性能数据和日志",
+    "canAct": "以你的权限对其执行操作：解决、评论以及更改你可以更改的设置",
+    "clientId": "客户端",
+    "returnsTo": "完成后返回到",
+    "warning": "仅当此请求由该助手发起时才批准。你可以随时在 设置 → AI 助手 (MCP) 中断开它。",
+    "approve": "批准",
+    "deny": "拒绝",
+    "decideFailed": "无法完成授权",
+    "failedTitle": "无法完成此请求",
+    "failedDescription": "助手发送的授权请求无法被 Rustrak 验证，因此没有共享任何内容。请从助手重新发起连接。"
   }
 }

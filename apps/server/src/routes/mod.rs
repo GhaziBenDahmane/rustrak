@@ -13,6 +13,7 @@ pub mod mcp;
 pub mod members;
 pub mod metrics;
 pub mod monitors;
+pub mod oauth;
 pub mod period;
 pub mod projects;
 pub mod releases;

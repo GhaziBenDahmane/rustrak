@@ -1632,6 +1632,7 @@
       "clientKeys": "Chei client",
       "apiTokens": "Token-uri API",
       "integrations": "Integrări",
+      "mcp": "Asistenți AI (MCP)",
       "team": "Echipă",
       "storage": "Stocare",
       "account": "Cont",
@@ -1704,6 +1705,72 @@
       "backToProjects": "Înapoi la proiecte",
       "loadFailed": "Integrările nu au putut fi încărcate",
       "githubLoadFailed": "Conexiunea GitHub nu a putut fi încărcată"
+    },
+    "mcp": {
+      "meta": {
+        "title": "Asistenți AI | Rustrak",
+        "description": "Conectează asistenți AI la Rustrak prin MCP"
+      },
+      "title": "Asistenți AI (MCP)",
+      "subtitle": "Permite lui Claude, ChatGPT, Cursor și altor asistenți AI să citească și să trieze erorile tale, cu permisiunile celui care îi conectează.",
+      "loadFailed": "Setările MCP nu au putut fi încărcate",
+      "copy": "Copiază",
+      "copied": "Copiat",
+      "copyLabel": "Copiază {label}",
+      "copyUnavailable": "Copierea nu este disponibilă aici",
+      "copyUnavailableHint": "Selectează {label} și copiază-l manual.",
+      "server": {
+        "title": "Server MCP",
+        "description": "Răspunde asistenților AI la endpointul de mai jos. Dezactivat implicit; oprirea lui deconectează toți asistenții deodată.",
+        "adminOnly": "Doar un administrator al instanței poate porni sau opri serverul MCP.",
+        "on": "Activ",
+        "off": "Inactiv",
+        "toggleLabel": "Pornește sau oprește serverul MCP",
+        "endpoint": "URL-ul endpointului",
+        "offNotice": "Serverul MCP este oprit: niciun asistent nu se poate conecta până când un administrator nu îl pornește.",
+        "updateFailed": "Serverul MCP nu a putut fi actualizat"
+      },
+      "oauth": {
+        "title": "Autentificare cu contul tău",
+        "recommended": "Recomandat",
+        "description": "Asistentul deschide Rustrak, te autentifici și îl aprobi. Fără tokenuri de copiat sau reînnoit.",
+        "clients": "Funcționează cu claude.ai, ChatGPT, Claude Code, Cursor și VS Code.",
+        "step1": "Copiază URL-ul endpointului de mai sus.",
+        "step2": "Adaugă-l în asistent ca server MCP sau conector personalizat.",
+        "step3": "Autentifică-te în Rustrak când ți se cere și aprobă accesul.",
+        "note": "Acționează cu permisiunile tale. Îl poți deconecta oricând din Asistenți conectați."
+      },
+      "token": {
+        "title": "Token API",
+        "description": "Pune un token în configurația clientului. Pentru clienții care nu se pot autentifica, scripturi și CI.",
+        "clients": "Funcționează cu orice client MCP care poate trimite un header HTTP.",
+        "step1": "Creează un token în",
+        "createToken": "Tokenuri API",
+        "step2": "Adaugă configurația de mai jos în client.",
+        "step3": "Înlocuiește YOUR_TOKEN cu tokenul creat.",
+        "note": "Acționează cu permisiunile proprietarului tokenului. Revocarea tokenului îl deconectează."
+      },
+      "clients": {
+        "web": "claude.ai / ChatGPT",
+        "claudeCode": "Claude Code",
+        "json": "Cursor / VS Code",
+        "webSteps": "În claude.ai, deschide Settings → Connectors → Add custom connector; în ChatGPT, adaugă un conector personalizat. Lipește URL-ul endpointului și salvează: vei fi trimis aici să te autentifici și să aprobi."
+      },
+      "connected": {
+        "title": "Asistenți conectați",
+        "description": "Asistenții pe care i-ai aprobat prin autentificare. Deconectarea unuia îi oprește imediat accesul.",
+        "empty": "Niciun asistent nu este încă conectat la contul tău.",
+        "columns": {
+          "name": "Asistent",
+          "client": "Publicat de",
+          "since": "Conectat"
+        },
+        "revoke": "Deconectează",
+        "revokeLabel": "Deconectează {name}",
+        "revokeFailed": "Asistentul nu a putut fi deconectat",
+        "revoked": "{name} a fost deconectat",
+        "loadFailed": "Asistenții conectați nu au putut fi încărcați"
+      }
     },
     "storage": {
       "meta": {
@@ -2062,5 +2129,23 @@
       "invalid": "Această programare nu poate rula. Verifică crontab-ul.",
       "timesIn": "Ore în {timezone}."
     }
+  },
+  "oauth": {
+    "meta": {
+      "title": "Autorizează accesul | Rustrak"
+    },
+    "title": "{client} vrea să acceseze contul tău Rustrak",
+    "signedInAs": "Conectat ca {email}",
+    "canDo": "Dacă aprobi, va putea:",
+    "canRead": "Să citească problemele, evenimentele, datele de performanță și logurile proiectelor tale",
+    "canAct": "Să acționeze asupra lor cu permisiunile tale: să rezolve, să comenteze și să schimbe ce poți schimba tu",
+    "clientId": "Client",
+    "returnsTo": "Te trimite înapoi la",
+    "warning": "Aprobă doar dacă ai pornit acest lucru din acel asistent. Îl poți deconecta oricând din Setări → Asistenți AI (MCP).",
+    "approve": "Aprobă",
+    "deny": "Refuză",
+    "decideFailed": "Autorizarea nu a putut fi finalizată",
+    "failedTitle": "Această cerere nu poate fi finalizată",
+    "failedDescription": "Asistentul a trimis o cerere de autorizare pe care Rustrak nu a putut-o verifica, deci nu s-a partajat nimic. Pornește din nou conexiunea din asistent."
   }
 }
