@@ -602,3 +602,68 @@ async fn a_legacy_get_stream_is_405_not_404() {
         .to_request();
     assert_eq!(test::call_service(&app, req).await.status(), 405);
 }
+
+/// A `2025-06-18` client, which most assistants still are: it shakes hands
+/// with `initialize`, then calls in separate requests. The server stays
+/// stateless for it too, so no session id comes back and none is needed.
+#[actix_web::test]
+async fn a_legacy_client_initializes_then_lists_and_calls_tools() {
+    let db = TestDb::new().await;
+    let admin = seed_legacy_token(&db.pool).await;
+    seed_project(&db.pool, "Shop").await;
+    let app = build_app!(db.pool.clone());
+    test::call_service(&app, set_mcp(&admin, true).to_request()).await;
+
+    let legacy = |body: Value| {
+        test::TestRequest::post()
+            .uri("/mcp")
+            .insert_header(("Content-Type", "application/json"))
+            .insert_header(("Accept", "application/json, text/event-stream"))
+            .insert_header(("MCP-Protocol-Version", "2025-06-18"))
+            .insert_header(("Authorization", format!("Bearer {admin}")))
+            .set_payload(body.to_string())
+            .to_request()
+    };
+
+    let resp = test::call_service(
+        &app,
+        legacy(json!({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": { "name": "legacy", "version": "1.0" }
+            }
+        })),
+    )
+    .await;
+    assert_eq!(resp.status(), 200);
+    assert!(
+        resp.headers().get("mcp-session-id").is_none(),
+        "stateless: no session to carry"
+    );
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["result"]["protocolVersion"], "2025-06-18", "{body}");
+    assert_eq!(body["result"]["serverInfo"]["name"], "rustrak", "{body}");
+
+    let body: Value = test::call_and_read_body_json(
+        &app,
+        legacy(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} })),
+    )
+    .await;
+    assert_eq!(
+        body["result"]["tools"].as_array().map(Vec::len),
+        Some(TOOLS.len()),
+        "{body}"
+    );
+
+    let body: Value = test::call_and_read_body_json(
+        &app,
+        legacy(json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": { "name": "list_projects", "arguments": {} }
+        })),
+    )
+    .await;
+    assert_eq!(tool_output(&body)["items"][0]["name"], "Shop", "{body}");
+}

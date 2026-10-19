@@ -45,10 +45,12 @@ export function Title({
           // Pieces of a fixed string: position is the identity.
           key={`${i}-${part}`}
           aria-hidden
-          className="inline-block overflow-hidden pb-[0.1em]"
+          // Clip only vertically: the tight leading and negative tracking
+          // push glyphs past the box, and a full clip cuts their edges.
+          className="-my-[0.2em] inline-block overflow-x-visible overflow-y-clip"
         >
           <m.span
-            className="inline-block"
+            className="inline-block py-[0.2em]"
             initial={{ y: '105%' }}
             animate={{ y: '0%' }}
             transition={{ duration: 1.2, ease: EASE, delay: 0.15 + i * step }}
@@ -145,7 +147,7 @@ export function MaskIn({
   delay?: number;
 }) {
   return (
-    <div className="overflow-hidden pb-[0.06em]">
+    <div className="overflow-x-visible overflow-y-clip pb-[0.06em]">
       <m.div
         className={className}
         initial={{ y: '100%' }}

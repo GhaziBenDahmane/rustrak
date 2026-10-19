@@ -10,6 +10,11 @@
 // react-doctor-disable-next-line react-doctor/prefer-dynamic-import
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { useFormatter, useTranslations } from 'use-intl';
+import {
+  bucketWidth,
+  type TimeAxis,
+  timeBarAxis,
+} from '@/shared/lib/time-axis';
 
 interface EventChartProps {
   /** `[bucketStartUnixSeconds, count]` tuples from the issue stats endpoint. */
@@ -20,9 +25,10 @@ interface EventChartProps {
 function ChartTooltip(props: {
   active?: boolean;
   payload?: Array<{ payload: { t: number; count: number } }>;
+  axis: TimeAxis;
 }) {
   const format = useFormatter();
-  const { active, payload } = props;
+  const { active, payload, axis } = props;
   const t = useTranslations('charts');
   if (!active || !payload?.length) {
     return null;
@@ -34,7 +40,7 @@ function ChartTooltip(props: {
         {t('eventCount', { count: point.count })}
       </p>
       <p className="text-muted-foreground">
-        {format.dateTime(new Date(point.t), 'date')}
+        {format.dateTime(new Date(point.t), axis.captionFormat, axis.zone)}
       </p>
     </div>
   );
@@ -47,6 +53,9 @@ function ChartTooltip(props: {
 export function EventChart({ data, height = 130 }: EventChartProps) {
   const format = useFormatter();
   const chartData = data.map(([t, count]) => ({ t: t * 1000, count }));
+  // The issue stats are zero-filled, so the gap between points is the bucket.
+  const times = chartData.map((p) => p.t);
+  const axis = timeBarAxis(times, bucketWidth(times));
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -58,8 +67,12 @@ export function EventChart({ data, height = 130 }: EventChartProps) {
           dataKey="t"
           type="number"
           scale="time"
-          domain={['dataMin', 'dataMax']}
-          tickFormatter={(v) => format.dateTime(new Date(v), 'axisDay')}
+          domain={axis.domain}
+          ticks={axis.ticks}
+          interval="preserveStartEnd"
+          tickFormatter={(v) =>
+            format.dateTime(new Date(v), axis.format, axis.zone)
+          }
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
@@ -67,7 +80,7 @@ export function EventChart({ data, height = 130 }: EventChartProps) {
         />
         <Tooltip
           cursor={{ fill: 'var(--muted)', opacity: 0.5 }}
-          content={<ChartTooltip />}
+          content={<ChartTooltip axis={axis} />}
         />
         <Bar
           dataKey="count"

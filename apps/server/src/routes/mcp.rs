@@ -153,10 +153,13 @@ pub async fn serve(
     for (name, value) in req.headers() {
         request = request.header(name.as_str(), value.as_bytes());
     }
-    // rmcp rejects a request without `Host`, which HTTP/2 carries as
-    // `:authority` instead.
+    // rmcp rejects a request without `Host` (an HTTP/1.0 client may send
+    // none). It reads the value only for the DNS-rebinding check, which is
+    // disabled below, so any name satisfies it. A fixed one, because the
+    // request's own idea of its host (`X-Forwarded-Host`) is the caller's to
+    // choose and would reach rmcp's logs.
     if !req.headers().contains_key(HOST) {
-        request = request.header("host", req.connection_info().host());
+        request = request.header("host", "localhost");
     }
     let request = request
         .body(Full::new(body))

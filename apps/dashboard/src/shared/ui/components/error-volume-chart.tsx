@@ -21,6 +21,11 @@ import {
 } from 'recharts';
 import { useFormatter, useTranslations } from 'use-intl';
 import {
+  bucketWidth,
+  type TimeAxis,
+  timeBarAxis,
+} from '@/shared/lib/time-axis';
+import {
   ChartLegend,
   ChartTooltipCaption,
   ChartTooltipRow,
@@ -203,6 +208,7 @@ type Formatter = ReturnType<typeof useFormatter>;
 
 function makeTooltip(
   bucketMs: number | null,
+  axis: TimeAxis,
   series: Array<{ key: SeriesKey; label: string; color: string }>,
   t: (key: string, values?: Record<string, string | number>) => string,
   format: Formatter,
@@ -240,7 +246,7 @@ function makeTooltip(
           />
         ) : null}
         <ChartTooltipCaption>
-          {format.dateTime(new Date(point.t), 'dateTime')}
+          {format.dateTime(new Date(point.t), axis.captionFormat, axis.zone)}
           {bucketMs ? ` · ${bucketLabel(bucketMs, t)}` : ''}
         </ChartTooltipCaption>
       </ChartTooltipSurface>
@@ -250,6 +256,8 @@ function makeTooltip(
 
 interface ErrorVolumeChartProps {
   data: StatsGetEventTimeseriesResponse;
+  /** Bucket width the series was requested with. Inferred when omitted. */
+  intervalHours?: number;
   height?: number;
 }
 
@@ -263,6 +271,7 @@ interface ErrorVolumeChartProps {
  */
 export function ErrorVolumeChart({
   data,
+  intervalHours,
   height = 260,
 }: ErrorVolumeChartProps) {
   const format = useFormatter();
@@ -277,7 +286,7 @@ export function ErrorVolumeChart({
     [t],
   );
 
-  const { chartData, mean, bucketMs, detailedShape } = useMemo(() => {
+  const { chartData, mean, bucketMs, detailedShape, axis } = useMemo(() => {
     const raw: ChartPoint[] = data.map((point) => ({
       t: new Date(point.bucket).getTime(),
       total: point.total,
@@ -301,12 +310,19 @@ export function ErrorVolumeChart({
         : 0,
       bucketMs: groupSize > 1 ? spacing : null,
       detailedShape: points.length <= DETAILED_SHAPE_LIMIT,
+      axis: timeBarAxis(
+        points.map((p) => p.t),
+        bucketWidth(
+          raw.map((p) => p.t),
+          intervalHours,
+        ) * groupSize,
+      ),
     };
-  }, [data]);
+  }, [data, intervalHours]);
 
   const Tip = useMemo(
-    () => makeTooltip(bucketMs, series, t, format),
-    [bucketMs, series, t, format],
+    () => makeTooltip(bucketMs, axis, series, t, format),
+    [bucketMs, axis, series, t, format],
   );
 
   if (!chartData.some((p) => p.total > 0)) {
@@ -335,8 +351,12 @@ export function ErrorVolumeChart({
             dataKey="t"
             type="number"
             scale="time"
-            domain={['dataMin', 'dataMax']}
-            tickFormatter={(v) => format.dateTime(new Date(v), 'axisTime')}
+            domain={axis.domain}
+            ticks={axis.ticks}
+            interval="preserveStartEnd"
+            tickFormatter={(v) =>
+              format.dateTime(new Date(v), axis.format, axis.zone)
+            }
             tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
             axisLine={false}
             tickLine={false}

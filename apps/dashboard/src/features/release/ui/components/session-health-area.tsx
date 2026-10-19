@@ -19,6 +19,11 @@ import {
 } from 'recharts';
 import { useFormatter, useTranslations } from 'use-intl';
 import {
+  bucketWidth,
+  type TimeAxis,
+  timeLineAxis,
+} from '@/shared/lib/time-axis';
+import {
   ChartLegend,
   ChartTooltipCaption,
   ChartTooltipRow,
@@ -40,10 +45,11 @@ interface ChartPoint {
 function ChartTooltip(props: {
   active?: boolean;
   payload?: Array<{ payload: ChartPoint }>;
+  axis: TimeAxis;
 }) {
   const format = useFormatter();
   const t = useTranslations('releases');
-  const { active, payload } = props;
+  const { active, payload, axis } = props;
   if (!active || !payload?.length) {
     return null;
   }
@@ -64,7 +70,7 @@ function ChartTooltip(props: {
         />
       ))}
       <ChartTooltipCaption>
-        {format.dateTime(new Date(point.t), 'dateTime')}
+        {format.dateTime(new Date(point.t), axis.captionFormat, axis.zone)}
       </ChartTooltipCaption>
     </ChartTooltipSurface>
   );
@@ -72,6 +78,8 @@ function ChartTooltip(props: {
 
 interface SessionHealthAreaProps {
   data: SessionsGetTimeseriesResponse;
+  /** Bucket width the series was requested with. Inferred when omitted. */
+  intervalHours?: number;
   height?: number;
 }
 
@@ -85,6 +93,7 @@ interface SessionHealthAreaProps {
  */
 export function SessionHealthArea({
   data,
+  intervalHours,
   height = 180,
 }: SessionHealthAreaProps) {
   const format = useFormatter();
@@ -95,6 +104,8 @@ export function SessionHealthArea({
     crashed: point.crashed,
     healthy: Math.max(0, point.total - point.crashed),
   }));
+  const times = chartData.map((p) => p.t);
+  const axis = timeLineAxis(times, bucketWidth(times, intervalHours));
 
   if (chartData.length === 0 || chartData.every((p) => p.total === 0)) {
     return (
@@ -120,8 +131,12 @@ export function SessionHealthArea({
             dataKey="t"
             type="number"
             scale="time"
-            domain={['dataMin', 'dataMax']}
-            tickFormatter={(v) => format.dateTime(new Date(v), 'axisDay')}
+            domain={axis.domain}
+            ticks={axis.ticks}
+            interval="preserveStartEnd"
+            tickFormatter={(v) =>
+              format.dateTime(new Date(v), axis.format, axis.zone)
+            }
             tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
             axisLine={false}
             tickLine={false}
@@ -137,7 +152,7 @@ export function SessionHealthArea({
           />
           <Tooltip
             cursor={{ stroke: 'var(--muted-foreground)', strokeWidth: 1 }}
-            content={<ChartTooltip />}
+            content={<ChartTooltip axis={axis} />}
           />
           {SERIES.map((series) => (
             <Area
