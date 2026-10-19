@@ -32,9 +32,9 @@ Add a custom connector with your endpoint URL, `https://your-rustrak.example.com
 
 Under the hood this is the OAuth 2.1 flow the MCP specification asks for, with Rustrak as its own authorization server: the assistant identifies itself with a [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration), proves its request with PKCE, and gets an access token that lasts an hour and works only at `/mcp`. Its refresh token works once: every refresh replaces both.
 
-Every connection is listed under **Settings → AI assistants (MCP) → Connected assistants**, where disconnecting one cuts it off at once. The consent screen needs the dashboard, so an API-only deployment connects with tokens.
+Every connection is listed under **Settings → AI assistants (MCP) → Connected assistants**, where disconnecting one cuts it off at once. A refresh token presented twice means it was stolen, and ends the connection for whoever holds it.
 
-> Set `PUBLIC_URL` when Rustrak sits behind a proxy: the authorization server and the resource the tokens are bound to are both named after it.
+> **Signing in needs `PUBLIC_URL`**, set to the address assistants reach Rustrak on (for example `https://rustrak.example.com`). The authorization server and the resource the tokens are bound to are both named after it, never after the request or the bind address. Without it there is no sign-in to discover, and the settings page says so; API tokens still work. The consent screen is a dashboard page, served at `DASHBOARD_URL` when the dashboard runs on its own host, so an API-only deployment connects with tokens.
 
 #### Desktop and CLI clients: an API token (Claude Code, Cursor, VS Code)
 
@@ -47,12 +47,13 @@ claude mcp add --transport http rustrak https://your-rustrak.example.com/mcp \
   --header "Authorization: Bearer your-40-char-token"
 ```
 
-**Cursor** (`~/.cursor/mcp.json`), **VS Code** and other clients that read `mcpServers`:
+**Cursor** (`~/.cursor/mcp.json`) and other clients that read `mcpServers`:
 
 ```json
 {
   "mcpServers": {
     "rustrak": {
+      "type": "http",
       "url": "https://your-rustrak.example.com/mcp",
       "headers": {
         "Authorization": "Bearer your-40-char-token"
@@ -61,6 +62,24 @@ claude mcp add --transport http rustrak https://your-rustrak.example.com/mcp \
   }
 }
 ```
+
+**VS Code** (`.vscode/mcp.json`, or **MCP: Open User Configuration**):
+
+```json
+{
+  "servers": {
+    "rustrak": {
+      "type": "http",
+      "url": "https://your-rustrak.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer your-40-char-token"
+      }
+    }
+  }
+}
+```
+
+`"type": "http"` matters: a client that reads a URL without it, such as Claude Code's `.mcp.json`, takes the entry for a local stdio server. The settings page shows these snippets with your own URL filled in.
 
 
 ## How it works

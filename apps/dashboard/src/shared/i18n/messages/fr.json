@@ -1754,8 +1754,9 @@
       "clients": {
         "web": "claude.ai / ChatGPT",
         "claudeCode": "Claude Code",
-        "json": "Cursor / VS Code",
-        "webSteps": "Dans claude.ai, ouvrez Settings → Connectors → Add custom connector ; dans ChatGPT, ajoutez un connecteur personnalisé. Collez l'URL du point de terminaison et enregistrez : vous êtes renvoyé ici pour vous connecter et approuver."
+        "json": "Cursor / autres",
+        "webSteps": "Dans claude.ai, ouvrez Settings → Connectors → Add custom connector ; dans ChatGPT, ajoutez un connecteur personnalisé. Collez l'URL du point de terminaison et enregistrez : vous êtes renvoyé ici pour vous connecter et approuver.",
+        "vscode": "VS Code"
       },
       "connected": {
         "title": "Assistants connectés",

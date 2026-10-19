@@ -9,5 +9,6 @@ The MCP server is now built into Rustrak itself, so there is nothing to install:
      "Authorization: Bearer <API token>".
 
 Guide: https://rustrak.dev/sdks/mcp
-Running a server older than this release? Pin the previous package: npx -y @rustrak/mcp@0.18`);
+Running a server older than this release? Pin the last working package exactly,
+with RUSTRAK_API_URL and RUSTRAK_API_TOKEN set as before: npx -y @rustrak/mcp@0.18.1`);
 process.exit(1);

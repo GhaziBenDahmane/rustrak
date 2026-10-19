@@ -18,18 +18,36 @@ claude mcp add --transport http rustrak https://<your-rustrak>/mcp \
   --header "Authorization: Bearer <API token>"
 ```
 
-Cursor, VS Code and other clients:
+Cursor and other clients that read `mcpServers`:
 
 ```json
 {
   "mcpServers": {
     "rustrak": {
+      "type": "http",
       "url": "https://<your-rustrak>/mcp",
       "headers": { "Authorization": "Bearer <API token>" }
     }
   }
 }
 ```
+
+VS Code (`.vscode/mcp.json`):
+
+```json
+{
+  "servers": {
+    "rustrak": {
+      "type": "http",
+      "url": "https://<your-rustrak>/mcp",
+      "headers": { "Authorization": "Bearer <API token>" }
+    }
+  }
+}
+```
+
+Web assistants (claude.ai, ChatGPT) need no token: add a custom connector with
+the URL and approve it in Rustrak. That needs `PUBLIC_URL` set on the server.
 
 The tools are the same ones this package served, with the same names, and they
 act with the permissions of the token's owner.
@@ -39,8 +57,20 @@ Full guide: [rustrak.dev/sdks/mcp](https://rustrak.dev/sdks/mcp)
 ## Still on an older server?
 
 A Rustrak server older than the release that removed this package has no `/mcp`
-endpoint. Keep using the last working version until you upgrade:
+endpoint. Keep using the last working version, pinned exactly so that it never
+resolves to this one, configured as before:
 
-```bash
-npx -y @rustrak/mcp@0.18
+```json
+{
+  "mcpServers": {
+    "rustrak": {
+      "command": "npx",
+      "args": ["-y", "@rustrak/mcp@0.18.1"],
+      "env": {
+        "RUSTRAK_API_URL": "https://<your-rustrak>",
+        "RUSTRAK_API_TOKEN": "<API token>"
+      }
+    }
+  }
+}
 ```

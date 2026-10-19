@@ -1754,8 +1754,9 @@
       "clients": {
         "web": "claude.ai / ChatGPT",
         "claudeCode": "Claude Code",
-        "json": "Cursor / VS Code",
-        "webSteps": "在 claude.ai 中打开 Settings → Connectors → Add custom connector；在 ChatGPT 中添加自定义连接器。粘贴端点 URL 并保存：你会被带到这里登录并批准。"
+        "json": "Cursor / 其他",
+        "webSteps": "在 claude.ai 中打开 Settings → Connectors → Add custom connector；在 ChatGPT 中添加自定义连接器。粘贴端点 URL 并保存：你会被带到这里登录并批准。",
+        "vscode": "VS Code"
       },
       "connected": {
         "title": "已连接的助手",

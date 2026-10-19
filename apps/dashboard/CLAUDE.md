@@ -60,10 +60,11 @@ two consumers both need goes *down*, never sideways.
 ## The one idea: the browser only ever talks to its own origin
 
 In production that is literally true. `apps/server/src/routes/dashboard.rs`
-mounts `dist/` at `/` and keeps `/api`, `/auth`, `/health`, `/docs` and
-`/api-docs` for itself, so the same Actix process answers the page and the API.
+mounts `dist/` at `/` and keeps the API prefixes (`/api`, `/auth`, `/mcp`,
+`/.well-known`…) for itself, so the same Actix process answers the page and the
+API.
 
-In development Vite owns the origin and proxies those same five prefixes to the
+In development Vite owns the origin and proxies those same prefixes to the
 server. The list lives in `vite.config.ts` and is the same one the server
 refuses to answer with the application shell; **the two must not drift**, or a
 route works in one environment and 404s in the other.

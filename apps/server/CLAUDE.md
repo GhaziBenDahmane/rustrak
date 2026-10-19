@@ -61,13 +61,24 @@ one module per area, mirroring `routes/`.
   cookie is refused, so a browser tab cannot call tools for its user. The
   tools act as the token's owner.
 - **OAuth** (`routes/oauth.rs`, `services/oauth.rs`): Rustrak is its own
-  authorization server. Clients identify with a Client ID Metadata Document,
-  fetched only from public addresses (`is_public`, IP pinned, no redirects);
-  PKCE S256 is required; codes and tokens are stored as SHA-256 hashes; an
-  access token is bound to `<base>/mcp` and refused everywhere else.
-  `/oauth/authorize` is a dashboard page (consent every time) and the shell
-  is served with `frame-ancestors 'none'` so it cannot be clickjacked. A
-  request whose client or redirect does not verify is never redirected.
+  authorization server, **only with `PUBLIC_URL`**: the issuer and the
+  resource are named after it, never after a request's headers or the bind
+  address. Without it discovery is a 404 and `/mcp` challenges with plain
+  `Bearer`.
+  - Clients identify with a Client ID Metadata Document, fetched only from
+    public addresses (`is_public`, which also unwraps NAT64/6to4; IP pinned,
+    no redirects, one 5 s budget). Redirects must be https, http on
+    loopback (any port), or an app's own scheme; never `javascript:` and
+    the like (`redirect_allowed`).
+  - PKCE S256 is required; codes and tokens are stored as SHA-256 hashes; an
+    access token is bound to `<PUBLIC_URL>/mcp` and refused everywhere else.
+  - Refresh tokens rotate inside one write transaction, and every spent one
+    is kept in `oauth_spent_refresh_tokens`: one presented again revokes the
+    grant (RFC 9700 4.14.2).
+  - `/oauth/authorize` is a dashboard page at `dashboard_url()` (consent every
+    time), and the shell is served with `frame-ancestors 'none'` so it
+    cannot be clickjacked. A request whose client or redirect does not
+    verify is never redirected.
 - **Stateless** (protocol `2026-07-28`, `rmcp`): one `POST` per call, nothing
   kept between calls, no session store.
 - **A tool calls the REST handler**, in-process, with extractors built from its
@@ -94,12 +105,12 @@ for anyone who never installs Node. `RUSTRAK_DASHBOARD=off` skips a build that
 is present, which is how a published image runs API-only.
 
 The one rule the fallback must not break: `API_PREFIXES` (`/api`, `/auth`,
-`/health`, `/docs`, `/api-docs`, `/metrics`, `/mcp`) never answer with the
-application shell. An
+`/health`, `/docs`, `/api-docs`, `/metrics`, `/mcp`, `/.well-known`) never
+answer with the application shell. An
 unmatched path under one of them is a JSON 404 like any other error, because a
 mistyped endpoint answering `200 text/html` makes `@rustrak/client` report a
 schema failure against itself. `apps/dashboard/vite.config.ts` proxies the same
-five prefixes in development; **the two lists must not drift.**
+prefixes in development; **the two lists must not drift.**
 
 ## `openapi.json` is a contract
 

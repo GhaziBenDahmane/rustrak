@@ -6,7 +6,7 @@
  */
 export type ConnectMethod = 'oauth' | 'token';
 
-export type SnippetClient = 'claudeCode' | 'json';
+export type SnippetClient = 'claudeCode' | 'json' | 'vscode';
 
 export interface Snippet {
   code: string;
@@ -33,12 +33,21 @@ export function mcpSnippet(
     };
   }
 
+  // `type` because a client that reads a URL without it (Claude Code's
+  // `.mcp.json`) takes the entry for a local stdio server.
   const server =
     method === 'oauth'
-      ? { url }
-      : { url, headers: { Authorization: `Bearer ${TOKEN_PLACEHOLDER}` } };
-  return {
-    language: 'json',
-    code: JSON.stringify({ mcpServers: { rustrak: server } }, null, 2),
-  };
+      ? { type: 'http', url }
+      : {
+          type: 'http',
+          url,
+          headers: { Authorization: `Bearer ${TOKEN_PLACEHOLDER}` },
+        };
+  // VS Code keeps its servers under `servers`; Cursor and most others under
+  // `mcpServers`.
+  const config =
+    client === 'vscode'
+      ? { servers: { rustrak: server } }
+      : { mcpServers: { rustrak: server } };
+  return { language: 'json', code: JSON.stringify(config, null, 2) };
 }
