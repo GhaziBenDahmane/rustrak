@@ -4,6 +4,7 @@ import { useTransition } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
 import { decideAuthorization } from '@/features/mcp/api/mutations';
+import { navigableRedirect } from '@/features/mcp/lib/pending-authorization';
 import { Button } from '@/shared/ui/components/shadcn/button';
 
 interface ConsentFormProps {
@@ -28,6 +29,10 @@ export function ConsentForm({ request, client, email }: ConsentFormProps) {
       const result = await decideAuthorization(request, approve);
       if (!result.success) {
         toast.error(t('decideFailed'), { description: result.error.message });
+        return;
+      }
+      if (!navigableRedirect(result.data.redirect_to)) {
+        toast.error(t('decideFailed'));
         return;
       }
       window.location.assign(result.data.redirect_to);

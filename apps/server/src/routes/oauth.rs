@@ -16,7 +16,7 @@
 use std::sync::Arc;
 
 use actix_web::http::StatusCode;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -28,16 +28,12 @@ use crate::services::oauth::{
     pkce_matches, same_resource, verify_client, ClientMetadata, ClientMetadataSource, OAuthService,
 };
 
-/// Where this server is reached: `PUBLIC_URL` when set, otherwise what the
-/// request says. Both the issuer and the resource tokens are bound to.
-pub fn base_url(req: &HttpRequest, config: &Config) -> String {
-    match &config.public_url {
-        Some(url) => url.clone(),
-        None => {
-            let info = req.connection_info();
-            format!("{}://{}", info.scheme(), info.host())
-        }
-    }
+/// Where this server is reached, and so the issuer and the resource tokens
+/// are bound to. Configuration only (`PUBLIC_URL`): a request's `Host` or
+/// `X-Forwarded-Host` is the caller's to choose, and a cache in front would
+/// serve metadata naming the caller's server to everyone.
+pub fn base_url(config: &Config) -> String {
+    config.public_base_url()
 }
 
 /// The resource a token for `/mcp` is issued for (RFC 8707).
@@ -50,8 +46,8 @@ pub fn resource_metadata_url(base: &str) -> String {
     format!("{base}/.well-known/oauth-protected-resource/mcp")
 }
 
-async fn protected_resource(req: HttpRequest, config: web::Data<Config>) -> HttpResponse {
-    let base = base_url(&req, &config);
+async fn protected_resource(config: web::Data<Config>) -> HttpResponse {
+    let base = base_url(&config);
     HttpResponse::Ok().json(json!({
         "resource": mcp_resource(&base),
         "authorization_servers": [base],
@@ -60,8 +56,8 @@ async fn protected_resource(req: HttpRequest, config: web::Data<Config>) -> Http
     }))
 }
 
-async fn authorization_server(req: HttpRequest, config: web::Data<Config>) -> HttpResponse {
-    let base = base_url(&req, &config);
+async fn authorization_server(config: web::Data<Config>) -> HttpResponse {
+    let base = base_url(&config);
     HttpResponse::Ok().json(json!({
         "issuer": base,
         "authorization_endpoint": format!("{base}/oauth/authorize"),
@@ -156,14 +152,13 @@ async fn verify(
 ))]
 /// Verifies an authorization request and says who is asking.
 pub async fn get_authorization(
-    req: HttpRequest,
     config: web::Data<Config>,
     clients: Clients,
     // Before the query: a signed-out caller learns nothing about the request.
     _user: AuthenticatedUser,
     query: web::Query<AuthorizationRequest>,
 ) -> AppResult<HttpResponse> {
-    let base = base_url(&req, &config);
+    let base = base_url(&config);
     let (client, _) = verify(&query, &base, clients.get_ref().as_ref()).await?;
     let redirect_host = url::Url::parse(&query.redirect_uri)
         .ok()
@@ -190,14 +185,13 @@ pub async fn get_authorization(
 ))]
 /// Approves or denies an authorization request as the signed-in user.
 pub async fn decide_authorization(
-    req: HttpRequest,
     pool: web::Data<DbPool>,
     config: web::Data<Config>,
     clients: Clients,
     user: AuthenticatedUser,
     body: web::Json<AuthorizationDecision>,
 ) -> AppResult<HttpResponse> {
-    let base = base_url(&req, &config);
+    let base = base_url(&config);
     let request = &body.request;
     // Verified again: the page could have been handed anything since.
     let (client, resource) = verify(request, &base, clients.get_ref().as_ref()).await?;

@@ -267,10 +267,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Build base URL from config
 fn build_base_url(config: &Config) -> String {
-    config
-        .public_url
-        .clone()
-        .unwrap_or_else(|| format!("http://{}:{}", config.host, config.port))
+    config.public_base_url()
 }
 
 #[cfg(test)]

@@ -68,6 +68,11 @@ pub async fn verify_client(
             "Only public clients (token_endpoint_auth_method \"none\") are supported".into(),
         ));
     }
+    if !redirect_allowed(redirect_uri) {
+        return Err(AppError::Validation(
+            "redirect_uri must be https, http on loopback, or an app's own scheme".into(),
+        ));
+    }
     if !client
         .redirect_uris
         .iter()
@@ -78,6 +83,24 @@ pub async fn verify_client(
         ));
     }
     Ok(client)
+}
+
+/// Whether the browser may be sent to `redirect_uri` after consent. The
+/// client's own document registers it, so it must not be able to name
+/// something the browser runs in the dashboard's origin (`javascript:`) or
+/// reads locally: https, plain http only to a loopback address (RFC 8252 7.3),
+/// or a native app's own scheme such as `cursor://` (RFC 8252 7.1).
+pub fn redirect_allowed(redirect_uri: &str) -> bool {
+    let Ok(url) = url::Url::parse(redirect_uri) else {
+        return false;
+    };
+    match url.scheme() {
+        "https" => true,
+        "http" => matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")),
+        "javascript" | "data" | "vbscript" | "file" | "blob" | "about" | "filesystem"
+        | "view-source" => false,
+        _ => !url.cannot_be_a_base(),
+    }
 }
 
 /// Whether `requested` is the redirect `registered` stands for: the same
@@ -111,56 +134,65 @@ const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
 #[async_trait::async_trait]
 impl ClientMetadataSource for HttpClientMetadata {
     async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata> {
-        let invalid = |why: &str| AppError::Validation(format!("client_id: {why}"));
-        let url = url::Url::parse(client_id).map_err(|_| invalid("not a URL"))?;
-        if url.scheme() != "https" || url.path() == "/" || url.fragment().is_some() {
-            return Err(invalid("must be an https URL with a path"));
-        }
-        let host = url.host_str().ok_or_else(|| invalid("has no host"))?;
-        let port = url.port_or_known_default().unwrap_or(443);
-
-        // The URL comes from whoever starts an authorization, so it must not
-        // reach anything a public request could not. The address checked is
-        // the one connected to: resolving again at connect time would let a
-        // rebinding DNS answer differently the second time.
-        let addr: SocketAddr = tokio::net::lookup_host((host, port))
+        // One budget for the whole lookup: a DNS server that never answers
+        // must not hold the consent page past it.
+        tokio::time::timeout(Duration::from_secs(5), fetch_metadata(client_id))
             .await
-            .map_err(|_| invalid("its host does not resolve"))?
-            .next()
-            .ok_or_else(|| invalid("its host does not resolve"))?;
-        if !is_public(addr.ip()) {
-            return Err(invalid("its host is not on the public internet"));
-        }
-
-        let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(Duration::from_secs(5))
-            .resolve(host, addr)
-            .build()
-            .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
-        let mut response = client
-            .get(url.clone())
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|_| invalid("its metadata document could not be fetched"))?;
-        if !response.status().is_success() {
-            return Err(invalid("its metadata document could not be fetched"));
-        }
-        let mut body = Vec::new();
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|_| invalid("its metadata document could not be read"))?
-        {
-            body.extend_from_slice(&chunk);
-            if body.len() > MAX_DOCUMENT_BYTES {
-                return Err(invalid("its metadata document is too large"));
-            }
-        }
-        serde_json::from_slice(&body)
-            .map_err(|_| invalid("its metadata document is not valid client metadata"))
+            .map_err(|_| {
+                AppError::Validation("client_id: its metadata document timed out".into())
+            })?
     }
+}
+
+async fn fetch_metadata(client_id: &str) -> AppResult<ClientMetadata> {
+    let invalid = |why: &str| AppError::Validation(format!("client_id: {why}"));
+    let url = url::Url::parse(client_id).map_err(|_| invalid("not a URL"))?;
+    if url.scheme() != "https" || url.path() == "/" || url.fragment().is_some() {
+        return Err(invalid("must be an https URL with a path"));
+    }
+    let host = url.host_str().ok_or_else(|| invalid("has no host"))?;
+    let port = url.port_or_known_default().unwrap_or(443);
+
+    // The URL comes from whoever starts an authorization, so it must not
+    // reach anything a public request could not. The address checked is
+    // the one connected to: resolving again at connect time would let a
+    // rebinding DNS answer differently the second time.
+    let addr: SocketAddr = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(|_| invalid("its host does not resolve"))?
+        .next()
+        .ok_or_else(|| invalid("its host does not resolve"))?;
+    if !is_public(addr.ip()) {
+        return Err(invalid("its host is not on the public internet"));
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .resolve(host, addr)
+        .build()
+        .map_err(|e| AppError::Internal(format!("HTTP client: {e}")))?;
+    let mut response = client
+        .get(url.clone())
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|_| invalid("its metadata document could not be fetched"))?;
+    if !response.status().is_success() {
+        return Err(invalid("its metadata document could not be fetched"));
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| invalid("its metadata document could not be read"))?
+    {
+        body.extend_from_slice(&chunk);
+        if body.len() > MAX_DOCUMENT_BYTES {
+            return Err(invalid("its metadata document is too large"));
+        }
+    }
+    serde_json::from_slice(&body)
+        .map_err(|_| invalid("its metadata document is not valid client metadata"))
 }
 
 /// Whether an address is reachable from the public internet: not loopback,
@@ -491,6 +523,33 @@ mod tests {
             err.to_string().contains("not on the public internet"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn only_redirects_that_load_a_page_or_open_an_app_are_allowed() {
+        for allowed in [
+            "https://claude.ai/api/mcp/auth_callback",
+            "http://localhost:49581/callback",
+            "http://127.0.0.1/callback",
+            "cursor://anysphere.cursor-mcp/oauth/callback",
+            "com.example.app:/oauth2redirect",
+        ] {
+            assert!(redirect_allowed(allowed), "{allowed}");
+        }
+        for refused in [
+            "javascript:alert(document.domain)//",
+            "javascript://%0aalert(1)",
+            "JavaScript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "vbscript:msgbox(1)",
+            "file:///etc/passwd",
+            "blob:https://evil.example/x",
+            "about:blank",
+            "http://evil.example/callback",
+            "not a url",
+        ] {
+            assert!(!redirect_allowed(refused), "{refused}");
+        }
     }
 
     #[test]

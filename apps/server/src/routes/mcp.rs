@@ -130,7 +130,7 @@ pub async fn serve(
     if !is_enabled(pool.get_ref()).await? {
         return Err(AppError::NotFound("Not found".to_string()));
     }
-    let base = oauth::base_url(&req, &config);
+    let base = oauth::base_url(&config);
     let Some(actor) = caller(&req, pool.get_ref(), &oauth::mcp_resource(&base)).await? else {
         // RFC 9728: tells an OAuth client where to start authorizing.
         return Ok(HttpResponse::Unauthorized()

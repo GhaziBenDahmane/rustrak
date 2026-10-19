@@ -12,6 +12,7 @@ use actix_web::cookie::{Cookie, Key};
 use actix_web::dev::{Service, ServiceResponse};
 use actix_web::{test, web, App};
 use base64::Engine;
+use rustrak::config::Config;
 use rustrak::db::DbPool;
 use rustrak::error::{AppError, AppResult};
 use rustrak::models::{CreateAuthToken, CreateProject, CreateUserRequest, ProjectRole, UserRole};
@@ -29,19 +30,25 @@ const ISSUER: &str = "http://localhost:8080";
 const RESOURCE: &str = "http://localhost:8080/mcp";
 const VERIFIER: &str = "a-verifier-that-is-long-enough-to-be-valid-0123456789";
 
-/// Serves one client's metadata, and refuses every other `client_id`.
+/// A client whose document registers a script as its redirect.
+const SCRIPT_CLIENT: &str = "https://evil.example/oauth/metadata.json";
+const SCRIPT_REDIRECT: &str = "javascript:alert(document.domain)//";
+
+/// Serves two clients' metadata, and refuses every other `client_id`.
 struct FakeClients;
 
 #[async_trait::async_trait]
 impl ClientMetadataSource for FakeClients {
     async fn fetch(&self, client_id: &str) -> AppResult<ClientMetadata> {
-        if client_id != CLIENT_ID {
-            return Err(AppError::Validation("unknown client".into()));
-        }
+        let redirect = match client_id {
+            CLIENT_ID => REDIRECT,
+            SCRIPT_CLIENT => SCRIPT_REDIRECT,
+            _ => return Err(AppError::Validation("unknown client".into())),
+        };
         Ok(serde_json::from_value(json!({
-            "client_id": CLIENT_ID,
+            "client_id": client_id,
             "client_name": "Example Assistant",
-            "redirect_uris": [REDIRECT],
+            "redirect_uris": [redirect],
             "token_endpoint_auth_method": "none"
         }))
         .unwrap())
@@ -55,13 +62,21 @@ fn challenge(verifier: &str) -> String {
 async fn app(
     pool: &DbPool,
 ) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
+    app_with(pool, Some(ISSUER)).await
+}
+
+async fn app_with(
+    pool: &DbPool,
+    public_url: Option<&str>,
+) -> impl Service<Request, Response = ServiceResponse, Error = actix_web::Error> {
     let clients: Arc<dyn ClientMetadataSource> = Arc::new(FakeClients);
     test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
-            .app_data(web::Data::new(
-                crate::integration::mcp_test::create_test_config(),
-            ))
+            .app_data(web::Data::new(Config {
+                public_url: public_url.map(str::to_string),
+                ..crate::integration::mcp_test::create_test_config()
+            }))
             .app_data(web::Data::new(clients))
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::from(&[0u8; 64]))
@@ -493,6 +508,10 @@ async fn a_request_that_cannot_be_trusted_is_never_redirected() {
     let mut unregistered = authorization();
     unregistered["redirect_uri"] = json!("https://attacker.example/steal");
     cases.push(("an unregistered redirect_uri", unregistered));
+    let mut script = authorization();
+    script["client_id"] = json!(SCRIPT_CLIENT);
+    script["redirect_uri"] = json!(SCRIPT_REDIRECT);
+    cases.push(("a redirect that runs script", script));
     let mut unknown = authorization();
     unknown["client_id"] = json!("https://unknown.example/metadata.json");
     cases.push(("an unknown client", unknown));
@@ -637,4 +656,25 @@ async fn a_signed_out_caller_is_told_to_sign_in_before_anything_else() {
     )
     .await;
     assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn forwarded_headers_cannot_rename_the_issuer() {
+    let db = TestDb::new().await;
+    let app = app_with(&db.pool, None).await;
+
+    // The issuer and the resource are configuration, not what a request
+    // claims about itself: a cache in front would otherwise serve the forged
+    // metadata to everyone.
+    let server: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::get()
+            .uri("/.well-known/oauth-authorization-server")
+            .insert_header(("X-Forwarded-Host", "evil.example"))
+            .insert_header(("Forwarded", "host=evil.example;proto=https"))
+            .to_request(),
+    )
+    .await;
+    // Without PUBLIC_URL, the address the server is configured to listen on.
+    assert_eq!(server["issuer"], "http://127.0.0.1:0");
 }
