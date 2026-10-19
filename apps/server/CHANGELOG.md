@@ -1,5 +1,11 @@
 # @rustrak/server
 
+## 0.19.0
+
+### Minor Changes
+
+- [`fe59a31`](https://github.com/rustrak/rustrak/commit/fe59a316a70e01ce99e42a52535cd069c4e2882e) Thanks [@AbianS](https://github.com/AbianS)! - The MCP server now ships inside Rustrak at `/mcp`, off until an instance admin turns it on in Settings → AI assistants (MCP). Assistants connect with an API token, or sign in through OAuth 2.1 with PKCE, which lets web assistants such as claude.ai and ChatGPT connect without a token. `@rustrak/mcp` is deprecated in favour of it. `@rustrak/client` is now generated from `openapi.json`: every method takes one `{ path, query, body }` object and several methods and types are renamed (breaking). Logs and spans accept RFC 3339 timestamps, so sentry-go logs are no longer dropped. Dashboard time charts no longer clip their first and last bars, and model ids stay on one line (@rookbreezy).
+
 ## 0.18.1
 
 ### Patch Changes
