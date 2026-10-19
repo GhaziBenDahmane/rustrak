@@ -11,6 +11,14 @@ allowBuilds:
   '@swc/core': false
   vue-demi: false
 
+minimumReleaseAgeExclude:
+  - '@hookform/resolvers@6.0.0'
+  - cronstrue@3.33.0
+  - framer-motion@14.4.0
+  - motion-dom@14.4.0
+  - motion@14.4.0
+  - shadcn@4.22.1
+
 overrides:
   nextra>zod: 4.3.5
   nextra-theme-docs>zod: 4.3.5
