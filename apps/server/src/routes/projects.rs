@@ -19,6 +19,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects",
+    operation_id = "projects.list",
     tag = "Projects",
     params(ListProjectsQuery),
     responses(
@@ -78,6 +79,7 @@ pub async fn list_projects(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{id}",
+    operation_id = "projects.get",
     tag = "Projects",
     params(("id" = i32, Path, description = "Project ID")),
     responses(
@@ -113,6 +115,7 @@ pub async fn get_project(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects",
+    operation_id = "projects.create",
     tag = "Projects",
     request_body = CreateProject,
     responses(
@@ -149,6 +152,7 @@ pub async fn create_project(
 #[cfg_attr(feature = "openapi", utoipa::path(
     patch,
     path = "/api/projects/{id}",
+    operation_id = "projects.update",
     tag = "Projects",
     params(("id" = i32, Path, description = "Project ID")),
     request_body = UpdateProject,
@@ -187,6 +191,7 @@ pub async fn update_project(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{id}",
+    operation_id = "projects.delete",
     tag = "Projects",
     params(("id" = i32, Path, description = "Project ID")),
     responses(
@@ -229,6 +234,7 @@ pub struct RateLimitsResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/rate-limits",
+    operation_id = "projects.getRateLimits",
     tag = "Projects",
     responses(
         (status = 200, description = "The server's per-project limits", body = RateLimitsResponse),

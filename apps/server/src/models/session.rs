@@ -127,7 +127,9 @@ pub struct ReleaseHealthRow {
     pub crashed: i64,
     pub abnormal: i64,
     pub healthy: i64,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub crash_free_sessions_rate: Option<f64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub crash_free_users_rate: Option<f64>,
 }
 
@@ -139,7 +141,9 @@ pub struct SessionSummary {
     pub errored: i64,
     pub crashed: i64,
     pub abnormal: i64,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub crash_free_sessions_rate: Option<f64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub crash_free_users_rate: Option<f64>,
     pub active_releases: i64,
 }
@@ -152,6 +156,7 @@ pub struct SessionTimeseriesPoint {
     pub bucket: DateTime<Utc>,
     pub total: i64,
     pub crashed: i64,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub crash_free_sessions_rate: Option<f64>,
 }
 

@@ -15,6 +15,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/logs",
+    operation_id = "logs.list",
     tag = "Logs",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

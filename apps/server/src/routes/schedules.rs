@@ -29,6 +29,7 @@ pub struct SchedulePreview {
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/schedules/preview",
+    operation_id = "schedules.preview",
     tag = "Schedules",
     request_body = PreviewSchedule,
     responses(

@@ -91,6 +91,7 @@ pub struct AgentTraceSummary {
     /// single root name — Sentry's own Traces table shows them all.
     pub agent_names: Vec<String>,
     /// Duration of the root/longest AI span in this trace, in milliseconds.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub duration_ms: Option<f64>,
     pub total_tokens: f64,
     pub tool_call_count: i64,

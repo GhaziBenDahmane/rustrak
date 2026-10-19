@@ -68,6 +68,29 @@ mistyped endpoint answering `200 text/html` makes `@rustrak/client` report a
 schema failure against itself. `apps/dashboard/vite.config.ts` proxies the same
 five prefixes in development; **the two lists must not drift.**
 
+## `openapi.json` is a contract
+
+`@rustrak/client` is generated from it and validates every response with it,
+so the spec has to say exactly what the handler sends. Regenerate it with
+`cargo run --bin gen_openapi --features openapi`; CI fails when it is stale,
+and `tests/integration/openapi_contract_test.rs` calls every `GET` and fails
+when a real response disagrees with it.
+
+- Every handler is listed in `paths(...)` in `openapi.rs`, every response
+  declares its `body =`, and every status it can return is documented.
+- Return a `ToSchema` struct, never `json!`: an inline body has no schema.
+- utoipa leaves every `Option` field out of `required`, since only serde knows
+  about `skip_serializing_if`. A response field that is always sent, as `null`
+  when empty, needs `#[cfg_attr(feature = "openapi", schema(required))]`. The
+  contract test fails on a `null` field that is not required.
+- A `String` that only holds a fixed set of values gets
+  `schema(value_type = SomeEnum)`, so the client types it as that set.
+- Sentry event ids are not RFC 4122 UUIDs: give them `value_type = String`.
+- Every `utoipa::path` declares `operation_id = "resource.method"`: it is the
+  client method's name (`issues.list` is `client.issues.list()`), so changing
+  it is a breaking change. The handler's doc comment's first sentence is the
+  client README's description of it.
+
 ## Tests
 
 ```bash

@@ -28,6 +28,7 @@ pub struct EventTimeseriesPoint {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct MetricDelta {
     pub current: i64,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub previous: Option<i64>,
 }
 
@@ -76,6 +77,7 @@ pub struct ProjectListStats {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ProjectStatsSummary {
     /// The resolved window in hours, or `None` for all time.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub period_hours: Option<i64>,
     /// Error events ingested in the window.
     pub events: MetricDelta,

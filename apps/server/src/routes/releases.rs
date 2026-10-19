@@ -29,6 +29,7 @@ impl NewIssuesQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/releases/{release}/new-issues",
+    operation_id = "releases.newIssues",
     tag = "Releases",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -99,6 +100,7 @@ async fn resolve_project_id_by_slug(pool: &DbPool, project_slug: &str) -> AppRes
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/0/projects/{org_slug}/{project_slug}/releases/",
+    operation_id = "releases.create",
     tag = "Releases",
     params(
         ("org_slug" = String, Path, description = "Organization slug (synthetic — accepted and ignored)"),
@@ -159,6 +161,7 @@ pub async fn create_release(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/0/projects/{org_slug}/{project_slug}/releases/{version}/",
+    operation_id = "releases.finalize",
     tag = "Releases",
     params(
         ("org_slug" = String, Path, description = "Organization slug (synthetic — accepted and ignored)"),

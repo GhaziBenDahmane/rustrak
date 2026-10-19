@@ -34,6 +34,7 @@ impl EventTimeseriesQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/events/stats",
+    operation_id = "stats.getEventTimeseries",
     tag = "Stats",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -92,6 +93,7 @@ impl StatsSummaryQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/stats/summary",
+    operation_id = "stats.getSummary",
     tag = "Stats",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

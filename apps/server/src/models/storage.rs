@@ -99,6 +99,7 @@ pub struct CleanupCounts {
     pub issues_removed: i64,
     /// Unused source maps deleted; only a retention cleanup removes them.
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub source_maps: i64,
 }
 
@@ -135,9 +136,12 @@ pub struct CleanupStatus {
     pub state: CleanupState,
     /// Rows removed so far while `running`; the total once it has finished.
     pub removed: CleanupCounts,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Why a `failed` run stopped. Batches committed before it stay deleted.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub error: Option<String>,
 }
 
@@ -187,6 +191,7 @@ pub const AGE_BUCKET_DAYS: [i64; 6] = [7, 14, 30, 90, 180, 365];
 pub struct KindAge {
     /// One count per bucket, `AGE_BUCKET_DAYS.len() + 1` of them.
     pub counts: Vec<i64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub oldest: Option<chrono::DateTime<chrono::Utc>>,
 }
 
@@ -234,9 +239,12 @@ pub struct SourceMapStorage {
 #[serde(default)]
 pub struct RetentionWindows {
     /// Error events, and the issues they leave empty.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub events_days: Option<i64>,
     /// Transactions with their spans.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub transactions_days: Option<i64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub logs_days: Option<i64>,
 }
 
@@ -286,8 +294,11 @@ impl RetentionWindows {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct ProjectRetention {
     pub project_id: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub events_days: Option<i64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub transactions_days: Option<i64>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub logs_days: Option<i64>,
 }
 
@@ -319,14 +330,17 @@ pub enum CleanupFrequency {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(default)]
 pub struct RetentionSettings {
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub defaults: RetentionWindows,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub overrides: Vec<ProjectRetention>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub frequency: CleanupFrequency,
     /// Hour of the day it runs, UTC.
-    #[cfg_attr(feature = "openapi", schema(minimum = 0, maximum = 23))]
+    #[cfg_attr(feature = "openapi", schema(minimum = 0, maximum = 23, required))]
     pub hour: u8,
     /// Day a weekly cleanup runs, 0 = Sunday.
-    #[cfg_attr(feature = "openapi", schema(minimum = 0, maximum = 6))]
+    #[cfg_attr(feature = "openapi", schema(minimum = 0, maximum = 6, required))]
     pub weekday: u8,
 }
 
@@ -404,10 +418,13 @@ impl RetentionSettings {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct RetentionRun {
     pub started_at: chrono::DateTime<chrono::Utc>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     /// `running`, `ok` or `error`.
     pub status: String,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub removed: Option<CleanupCounts>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub error: Option<String>,
 }
 
@@ -417,6 +434,8 @@ pub struct RetentionResponse {
     pub settings: RetentionSettings,
     /// `null` while everything is kept forever, and for up to a minute after
     /// the settings change.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub next_run_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_run: Option<RetentionRun>,
 }

@@ -35,6 +35,7 @@ pub struct GitHubAppInfo {
     pub owner_login: String,
     /// Where people install the app on an account or organization.
     pub install_url: String,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_webhook_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
@@ -67,6 +68,7 @@ pub struct GitHubInstallation {
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GitHubStatus {
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub app: Option<GitHubAppInfo>,
     pub installations: Vec<GitHubInstallation>,
     /// The address GitHub delivers webhooks to.
@@ -111,7 +113,9 @@ pub struct ProjectRepository {
     pub auto_create_conditions: serde_json::Value,
     /// How many ownership rules the last CODEOWNERS sync found; `None` before
     /// the first sync.
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub codeowners_rules: Option<usize>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub codeowners_synced_at: Option<DateTime<Utc>>,
 }
 
@@ -163,6 +167,7 @@ pub struct RepoCommit {
     pub sha: String,
     pub message: String,
     pub author_name: String,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub author_login: Option<String>,
     pub url: String,
     #[serde(skip)]

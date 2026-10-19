@@ -13,6 +13,7 @@ use crate::error::AppResult;
 pub struct ActivityEntry {
     pub id: Uuid,
     pub issue_id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub user_id: Option<i32>,
     #[sqlx(rename = "type")]
     #[serde(rename = "type")]
@@ -27,7 +28,9 @@ pub struct ActivityEntry {
 pub struct UserReport {
     pub id: Uuid,
     pub project_id: i32,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub issue_id: Option<Uuid>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub event_id: Option<Uuid>,
     pub name: String,
     pub email: String,

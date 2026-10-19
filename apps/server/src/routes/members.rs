@@ -23,6 +23,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/members",
+    operation_id = "members.list",
     tag = "Members",
     params(("project_id" = i32, Path, description = "Project ID")),
     responses(
@@ -59,11 +60,12 @@ pub async fn list_members(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/projects/{project_id}/members",
+    operation_id = "members.upsert",
     tag = "Members",
     params(("project_id" = i32, Path, description = "Project ID")),
     request_body = UpsertProjectMember,
     responses(
-        (status = 200, description = "Member added or updated"),
+        (status = 200, description = "Member added or updated", body = crate::models::project_member::ProjectMember),
         (status = 400, description = "Invalid role", body = crate::error::ErrorResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
@@ -108,6 +110,7 @@ pub async fn upsert_member(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/members/{user_id}",
+    operation_id = "members.remove",
     tag = "Members",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

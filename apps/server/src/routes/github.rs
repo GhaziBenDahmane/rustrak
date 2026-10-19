@@ -54,6 +54,7 @@ fn redirect(location: &str) -> HttpResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/github",
+    operation_id = "github.status",
     tag = "GitHub",
     responses(
         (status = 200, description = "GitHub App and installations", body = GitHubStatus),
@@ -80,6 +81,7 @@ pub async fn status(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/github",
+    operation_id = "github.disconnect",
     tag = "GitHub",
     responses(
         (status = 204, description = "GitHub App removed"),
@@ -98,6 +100,7 @@ pub async fn disconnect(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<H
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/github/manifest",
+    operation_id = "github.manifest",
     tag = "GitHub",
     request_body = ManifestRequest,
     responses(
@@ -160,6 +163,7 @@ pub struct CallbackQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/github/callback",
+    operation_id = "github.callback",
     tag = "GitHub",
     params(
         ("code" = String, Query, description = "Manifest code from GitHub"),
@@ -234,6 +238,7 @@ pub struct InstalledQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/github/installed",
+    operation_id = "github.installed",
     tag = "GitHub",
     params(
         ("installation_id" = i64, Query, description = "GitHub installation ID"),
@@ -276,12 +281,14 @@ pub struct RepositoriesQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/github/repositories",
+    operation_id = "github.repositories",
     tag = "GitHub",
     params(
         ("project_id" = i32, Query, description = "Project ID"),
     ),
     responses(
         (status = 200, description = "Repositories the installations reach", body = Vec<crate::models::github::GitHubRepository>),
+        (status = 400, description = "GitHub is not connected", body = crate::error::ErrorResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
         (status = 404, description = "Not found", body = crate::error::ErrorResponse),
@@ -334,6 +341,7 @@ async fn require_project(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/github",
+    operation_id = "github.getProjectRepository",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -361,6 +369,7 @@ pub async fn get_project_repository(
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/projects/{project_id}/github",
+    operation_id = "github.putProjectRepository",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -415,6 +424,7 @@ pub async fn put_project_repository(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/github",
+    operation_id = "github.deleteProjectRepository",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -442,6 +452,7 @@ pub async fn delete_project_repository(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/github/codeowners",
+    operation_id = "github.syncCodeowners",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -508,6 +519,7 @@ async fn require_issue(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}/github",
+    operation_id = "github.issue",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -572,6 +584,7 @@ pub async fn issue_github(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/issues/{issue_id}/github/issues",
+    operation_id = "github.createIssue",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -621,6 +634,7 @@ pub async fn create_github_issue(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/issues/{issue_id}/github/links",
+    operation_id = "github.linkIssue",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -668,6 +682,7 @@ pub async fn link_github_issue(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/issues/{issue_id}/github/links/{link_id}",
+    operation_id = "github.unlinkIssue",
     tag = "GitHub",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -705,6 +720,7 @@ pub async fn unlink_github_issue(
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct GitHubLogin {
     /// The person's GitHub username; `null` clears it.
+    #[cfg_attr(feature = "openapi", schema(required))]
     login: Option<String>,
 }
 
@@ -720,6 +736,7 @@ async fn my_login(pool: &DbPool, user_id: i32) -> AppResult<HttpResponse> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/github/me",
+    operation_id = "github.getMyLogin",
     tag = "GitHub",
     responses(
         (status = 200, description = "Your GitHub username", body = GitHubLogin),
@@ -735,6 +752,7 @@ pub async fn get_my_login(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult
 #[cfg_attr(feature = "openapi", utoipa::path(
     put,
     path = "/api/github/me",
+    operation_id = "github.putMyLogin",
     tag = "GitHub",
     request_body = GitHubLogin,
     responses(
@@ -779,6 +797,7 @@ pub async fn put_my_login(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/github/webhook",
+    operation_id = "github.webhook",
     tag = "GitHub",
     request_body(content = Object, content_type = "application/json", description = "GitHub event payload, signed in X-Hub-Signature-256"),
     responses(

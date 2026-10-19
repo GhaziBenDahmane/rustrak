@@ -16,6 +16,7 @@ use utoipa::OpenApi;
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/transactions",
+    operation_id = "transactions.list",
     tag = "Transactions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -73,6 +74,7 @@ pub async fn list_transactions(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/transactions/{transaction_id}",
+    operation_id = "transactions.get",
     tag = "Transactions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -113,6 +115,7 @@ pub async fn get_transaction(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/transactions/{transaction_id}/spans",
+    operation_id = "transactions.getSpans",
     tag = "Transactions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -152,6 +155,7 @@ pub async fn get_transaction_spans(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/transactions/stats",
+    operation_id = "transactions.getStats",
     tag = "Transactions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -196,6 +200,7 @@ pub async fn get_transaction_stats(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/transactions/stats/group",
+    operation_id = "transactions.getStatGroup",
     tag = "Transactions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

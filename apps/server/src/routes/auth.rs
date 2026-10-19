@@ -27,12 +27,15 @@ struct AuthResponse {
 struct UserResponse {
     id: i32,
     email: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::UserRole))]
     role: String,
     /// Convenience flag derived from `role` (kept for backward compatibility).
     is_admin: bool,
     /// Chosen dashboard language, or `null` when the user never chose one.
+    #[cfg_attr(feature = "openapi", schema(required))]
     language: Option<String>,
     /// Chosen IANA timezone, or `null` when the user never chose one.
+    #[cfg_attr(feature = "openapi", schema(required))]
     timezone: Option<String>,
 }
 
@@ -74,6 +77,7 @@ enum CallbackResult {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 struct SsoConfigResponse {
     enabled: bool,
+    #[cfg_attr(feature = "openapi", schema(required))]
     provider_name: Option<String>,
 }
 
@@ -151,6 +155,7 @@ pub(crate) fn is_valid_email(email: &str) -> bool {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 struct InvitationInfoResponse {
     email: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::UserRole))]
     role: String,
     status: String,
     expires_at: DateTime<Utc>,
@@ -159,6 +164,7 @@ struct InvitationInfoResponse {
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/register",
+    operation_id = "auth.register",
     tag = "Auth",
     request_body = CreateUserRequest,
     responses(
@@ -181,6 +187,7 @@ pub async fn register(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/accept-invitation",
+    operation_id = "auth.acceptInvitation",
     tag = "Auth",
     request_body = AcceptInvitation,
     responses(
@@ -206,6 +213,7 @@ pub async fn accept_invitation(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/auth/invitation/{token}",
+    operation_id = "auth.getInvitation",
     tag = "Auth",
     params(("token" = String, Path, description = "Invitation token")),
     responses(
@@ -242,6 +250,7 @@ pub async fn get_invitation(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/login",
+    operation_id = "auth.login",
     tag = "Auth",
     request_body = LoginRequest,
     responses(
@@ -284,6 +293,7 @@ pub async fn login(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/auth/sso/config",
+    operation_id = "auth.ssoConfig",
     tag = "Auth",
     responses((status = 200, description = "Public SSO configuration", body = SsoConfigResponse)),
     security(()),
@@ -303,6 +313,7 @@ pub async fn sso_config(oidc: web::Data<Option<OidcService>>) -> impl Responder 
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/sso/start",
+    operation_id = "auth.ssoStart",
     tag = "Auth",
     responses(
         (status = 200, description = "OIDC authorization URL", body = SsoStartResponse),
@@ -397,6 +408,7 @@ async fn handle_sso_callback(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/auth/sso/callback",
+    operation_id = "auth.ssoCallback",
     tag = "Auth",
     params(SsoCallbackQuery),
     responses(
@@ -480,6 +492,7 @@ fn pending_link(session: &Session) -> AppResult<PendingLink> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/auth/sso/link",
+    operation_id = "auth.ssoLink",
     tag = "Auth",
     responses(
         (status = 200, description = "The account waiting for its password", body = SsoLinkResponse),
@@ -507,6 +520,7 @@ pub async fn sso_link(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/sso/link",
+    operation_id = "auth.confirmSsoLink",
     tag = "Auth",
     request_body = ConfirmSsoLinkRequest,
     responses(
@@ -556,6 +570,7 @@ fn take_session_value(session: &Session, key: &str) -> AppResult<String> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/logout",
+    operation_id = "auth.logout",
     tag = "Auth",
     responses(
         (status = 204, description = "Logged out"),
@@ -572,6 +587,7 @@ pub async fn logout(session: Session) -> impl Responder {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/auth/me",
+    operation_id = "auth.getCurrentUser",
     tag = "Auth",
     responses(
         (status = 200, description = "Current user", body = UserResponse),
@@ -640,6 +656,7 @@ fn is_time_zone_name(value: &str) -> bool {
 #[cfg_attr(feature = "openapi", utoipa::path(
     patch,
     path = "/auth/me",
+    operation_id = "auth.updateCurrentUser",
     tag = "Auth",
     request_body = UpdatePreferencesRequest,
     responses(
@@ -686,6 +703,7 @@ pub async fn update_current_user(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/auth/me/password",
+    operation_id = "auth.changePassword",
     tag = "Auth",
     request_body = ChangePasswordRequest,
     responses(

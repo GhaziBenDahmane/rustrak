@@ -27,6 +27,7 @@ fn require_admin(actor: &ApiActor) -> AppResult<()> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/invitations",
+    operation_id = "invitations.create",
     tag = "Invitations",
     request_body = CreateInvitation,
     responses(
@@ -56,6 +57,7 @@ pub async fn create_invitation(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/invitations",
+    operation_id = "invitations.list",
     tag = "Invitations",
     responses(
         (status = 200, description = "List of invitations", body = Vec<InvitationResponse>),
@@ -80,6 +82,7 @@ pub async fn list_invitations(pool: web::Data<DbPool>, actor: ApiActor) -> AppRe
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/invitations/{token}",
+    operation_id = "invitations.revoke",
     tag = "Invitations",
     params(("token" = String, Path, description = "Invitation token")),
     responses(

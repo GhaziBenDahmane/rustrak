@@ -151,6 +151,7 @@ pub fn validate_routing_override(
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct TestIntegrationBody {
     #[serde(default)]
+    #[cfg_attr(feature = "openapi", schema(value_type = Option<Object>))]
     pub routing_override: Option<serde_json::Value>,
 }
 
@@ -182,6 +183,7 @@ fn require_admin(actor: &ApiActor) -> AppResult<()> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/integrations",
+    operation_id = "alertChannels.list",
     tag = "Alert Channels",
     responses(
         (status = 200, description = "List of notification channels", body = Vec<NotificationChannel>),
@@ -200,6 +202,7 @@ pub async fn list_channels(pool: web::Data<DbPool>, actor: ApiActor) -> AppResul
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/integrations",
+    operation_id = "alertChannels.create",
     tag = "Alert Channels",
     request_body = CreateNotificationChannel,
     responses(
@@ -222,6 +225,7 @@ pub async fn create_channel(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/integrations/{id}",
+    operation_id = "alertChannels.get",
     tag = "Alert Channels",
     params(("id" = i32, Path, description = "Channel ID")),
     responses(
@@ -245,6 +249,7 @@ pub async fn get_channel(
 #[cfg_attr(feature = "openapi", utoipa::path(
     patch,
     path = "/api/integrations/{id}",
+    operation_id = "alertChannels.update",
     tag = "Alert Channels",
     params(("id" = i32, Path, description = "Channel ID")),
     request_body = UpdateNotificationChannel,
@@ -271,6 +276,7 @@ pub async fn update_channel(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/integrations/{id}",
+    operation_id = "alertChannels.delete",
     tag = "Alert Channels",
     params(("id" = i32, Path, description = "Channel ID")),
     responses(
@@ -298,13 +304,25 @@ pub struct PreviewTemplateBody {
     pub template: String,
 }
 
+/// `rendered` when `ok`, `error` otherwise.
+#[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct PreviewTemplateResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendered: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/integrations/preview-template",
+    operation_id = "alertChannels.previewTemplate",
     tag = "Alert Channels",
     request_body = PreviewTemplateBody,
     responses(
-        (status = 200, description = "Rendered body, or why it would not render"),
+        (status = 200, description = "Rendered body, or why it would not render", body = PreviewTemplateResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
@@ -320,27 +338,42 @@ pub async fn preview_template(
     body: web::Json<PreviewTemplateBody>,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(
-        match crate::services::notification::CustomWebhookNotifier::preview_template(
-            &body.into_inner().template,
-        ) {
-            Ok(rendered) => HttpResponse::Ok().json(serde_json::json!({
-                "ok": true, "rendered": rendered,
-            })),
-            Err(error) => HttpResponse::Ok().json(serde_json::json!({
-                "ok": false, "error": error,
-            })),
+    let response = match crate::services::notification::CustomWebhookNotifier::preview_template(
+        &body.into_inner().template,
+    ) {
+        Ok(rendered) => PreviewTemplateResponse {
+            ok: true,
+            rendered: Some(rendered),
+            error: None,
         },
-    )
+        Err(error) => PreviewTemplateResponse {
+            ok: false,
+            rendered: None,
+            error: Some(error),
+        },
+    };
+    Ok(HttpResponse::Ok().json(response))
+}
+
+/// Outcome of a test notification.
+#[derive(Debug, serde::Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct TestChannelResponse {
+    pub success: bool,
+    pub message: String,
+    /// What the endpoint answered, when it answered anything.
+    #[cfg_attr(feature = "openapi", schema(required))]
+    pub response_body: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/integrations/{id}/test",
+    operation_id = "alertChannels.test",
     tag = "Alert Channels",
     params(("id" = i32, Path, description = "Channel ID")),
     responses(
-        (status = 200, description = "Test notification sent"),
+        (status = 200, description = "Test notification sent", body = TestChannelResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
         (status = 404, description = "Not found", body = crate::error::ErrorResponse),
     ),
@@ -400,11 +433,11 @@ pub async fn test_channel(
             .error_message
             .unwrap_or_else(|| "Unknown error".to_string())
     };
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "success": result.success,
-        "message": message,
-        "response_body": result.response_body,
-    })))
+    Ok(HttpResponse::Ok().json(TestChannelResponse {
+        success: result.success,
+        message,
+        response_body: result.response_body,
+    }))
 }
 
 // =============================================================================
@@ -414,6 +447,7 @@ pub async fn test_channel(
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/alert-rules",
+    operation_id = "alertRules.list",
     tag = "Alert Rules",
     params(("project_id" = i32, Path, description = "Project ID")),
     responses(
@@ -464,6 +498,7 @@ pub async fn list_rules(
 #[cfg_attr(feature = "openapi", utoipa::path(
     post,
     path = "/api/projects/{project_id}/alert-rules",
+    operation_id = "alertRules.create",
     tag = "Alert Rules",
     params(("project_id" = i32, Path, description = "Project ID")),
     request_body = CreateAlertRule,
@@ -529,6 +564,7 @@ pub struct RulePath {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/alert-rules/{rule_id}",
+    operation_id = "alertRules.get",
     tag = "Alert Rules",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -585,6 +621,7 @@ pub async fn get_rule(
 #[cfg_attr(feature = "openapi", utoipa::path(
     patch,
     path = "/api/projects/{project_id}/alert-rules/{rule_id}",
+    operation_id = "alertRules.update",
     tag = "Alert Rules",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -657,6 +694,7 @@ pub async fn update_rule(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/projects/{project_id}/alert-rules/{rule_id}",
+    operation_id = "alertRules.delete",
     tag = "Alert Rules",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -719,6 +757,7 @@ fn default_limit() -> i64 {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/alert-history",
+    operation_id = "alertRules.listHistory",
     tag = "Alert Rules",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

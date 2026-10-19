@@ -49,6 +49,7 @@ impl StatsQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/sessions/stats",
+    operation_id = "sessions.getStats",
     tag = "Sessions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -122,6 +123,7 @@ impl SummaryQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/sessions/summary",
+    operation_id = "sessions.getSummary",
     tag = "Sessions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),
@@ -180,6 +182,7 @@ impl TimeseriesQuery {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/sessions/timeseries",
+    operation_id = "sessions.getTimeseries",
     tag = "Sessions",
     params(
         ("project_id" = i32, Path, description = "Project ID"),

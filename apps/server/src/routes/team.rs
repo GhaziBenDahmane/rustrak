@@ -22,12 +22,14 @@ use utoipa::OpenApi;
 pub struct TeamMemberResponse {
     pub id: i32,
     pub email: String,
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::UserRole))]
     pub role: String,
     pub is_active: bool,
     /// True for the first-registered (primary) account, which cannot be demoted
     /// or deleted.
     pub is_primary: bool,
     pub created_at: DateTime<Utc>,
+    #[cfg_attr(feature = "openapi", schema(required))]
     pub last_login: Option<DateTime<Utc>>,
 }
 
@@ -49,6 +51,7 @@ impl TeamMemberResponse {
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct UpdateUserRole {
+    #[cfg_attr(feature = "openapi", schema(value_type = crate::models::UserRole))]
     pub role: String,
 }
 
@@ -64,6 +67,7 @@ fn require_admin(actor: &ApiActor) -> AppResult<()> {
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/team",
+    operation_id = "team.list",
     tag = "Team",
     responses(
         (status = 200, description = "List of team members", body = Vec<TeamMemberResponse>),
@@ -89,6 +93,7 @@ pub async fn list_team(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<Ht
 #[cfg_attr(feature = "openapi", utoipa::path(
     patch,
     path = "/api/team/{user_id}/role",
+    operation_id = "team.updateRole",
     tag = "Team",
     params(("user_id" = i32, Path, description = "User ID")),
     request_body = UpdateUserRole,
@@ -155,6 +160,7 @@ pub async fn update_team_role(
 #[cfg_attr(feature = "openapi", utoipa::path(
     delete,
     path = "/api/team/{user_id}",
+    operation_id = "team.deleteUser",
     tag = "Team",
     params(("user_id" = i32, Path, description = "User ID")),
     responses(
