@@ -84,10 +84,12 @@ where
         //            SentryAuth for ingest, AuthenticatedUser for management)
         // - /health - health check routes
         // - /metrics - opt-in Prometheus scrape, restricted at the network edge
+        // - /mcp - MCP endpoint, Bearer token checked by its handler
         let is_api = path.starts_with("/auth")
             || path.starts_with("/api/")
             || path.starts_with("/health")
             || path == "/metrics"
+            || path == "/mcp"
             || {
                 #[cfg(feature = "openapi")]
                 {

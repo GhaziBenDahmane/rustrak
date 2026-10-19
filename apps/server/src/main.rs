@@ -386,6 +386,7 @@ async fn main() -> std::io::Result<()> {
             .route("/health", web::get().to(routes::health::liveness))
             // Off by default; returns 404 unless RUSTRAK_METRICS=on.
             .configure(routes::metrics::configure)
+            .configure(routes::mcp::configure)
             // Auth routes (public - no Bearer auth required)
             .configure(routes::auth::configure)
             // API routes (auth required)

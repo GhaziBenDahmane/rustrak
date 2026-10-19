@@ -408,6 +408,13 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 | `sessions.getSummary({ path, query? })` | `GET /api/projects/{project_id}/sessions/summary` |  |
 | `sessions.getTimeseries({ path, query? })` | `GET /api/projects/{project_id}/sessions/timeseries` |  |
 
+### Settings
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `settings.getMcp()` | `GET /api/settings/mcp` | Whether the MCP endpoint at `/mcp` is on. |
+| `settings.updateMcp({ body })` | `PUT /api/settings/mcp` | Turns the MCP endpoint at `/mcp` on or off. |
+
 ### Source Maps
 
 | Method | Endpoint | Description |

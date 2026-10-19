@@ -763,6 +763,13 @@ export const zManifestResponse = z.object({
 });
 
 /**
+ * Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
+ */
+export const zMcpSettings = z.object({
+    enabled: z.boolean()
+});
+
+/**
  * A counter measured over the requested window alongside the same counter
  * over the window immediately before it.
  *
@@ -2941,6 +2948,18 @@ export const zSchedulesPreviewBody = zPreviewSchedule;
  * The next five runs
  */
 export const zSchedulesPreviewResponse = zSchedulePreview;
+
+/**
+ * Whether the MCP endpoint is on
+ */
+export const zSettingsGetMcpResponse = zMcpSettings;
+
+export const zSettingsUpdateMcpBody = zMcpSettings;
+
+/**
+ * The MCP endpoint's new state
+ */
+export const zSettingsUpdateMcpResponse = zMcpSettings;
 
 /**
  * How long ago each project's data arrived, per kind

@@ -113,6 +113,8 @@ impl Modify for SecurityAddon {
         crate::routes::transactions::get_transaction_stats,
         crate::routes::transactions::get_transaction_stat_group,
         crate::routes::logs::list_logs,
+        crate::routes::mcp::get_settings,
+        crate::routes::mcp::update_settings,
         crate::routes::monitors::list_monitors,
         crate::routes::monitors::create_monitor,
         crate::routes::schedules::preview_schedule,
@@ -164,6 +166,7 @@ impl Modify for SecurityAddon {
         crate::routes::github::webhook,
     ),
     components(schemas(
+        crate::routes::mcp::McpSettings,
         crate::pagination::SortOrder,
         crate::pagination::IssueSort,
         crate::models::issue::IssueStatsWindow,

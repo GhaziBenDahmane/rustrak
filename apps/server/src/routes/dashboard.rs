@@ -55,7 +55,15 @@ use crate::error::AppError;
 /// not a handler claimed it. The dashboard's Vite proxy keeps the same list in
 /// `apps/dashboard/vite.config.ts`, so that development routes requests the
 /// same way production does; the two must not drift.
-pub const API_PREFIXES: [&str; 6] = ["/api", "/auth", "/health", "/docs", "/api-docs", "/metrics"];
+pub const API_PREFIXES: [&str; 7] = [
+    "/api",
+    "/auth",
+    "/health",
+    "/docs",
+    "/api-docs",
+    "/metrics",
+    "/mcp",
+];
 
 /// How long a hashed asset may be cached: one year, the maximum HTTP defines
 /// as meaningful.

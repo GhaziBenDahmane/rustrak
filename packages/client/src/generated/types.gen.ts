@@ -982,6 +982,13 @@ export type ManifestResponse = {
 };
 
 /**
+ * Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.
+ */
+export type McpSettings = {
+    enabled: boolean;
+};
+
+/**
  * A counter measured over the requested window alongside the same counter
  * over the window immediately before it.
  *
@@ -6163,6 +6170,60 @@ export type SchedulesPreviewResponses = {
 };
 
 export type SchedulesPreviewResponse = SchedulesPreviewResponses[keyof SchedulesPreviewResponses];
+
+export type SettingsGetMcpData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/settings/mcp';
+};
+
+export type SettingsGetMcpErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+};
+
+export type SettingsGetMcpError = SettingsGetMcpErrors[keyof SettingsGetMcpErrors];
+
+export type SettingsGetMcpResponses = {
+    /**
+     * Whether the MCP endpoint is on
+     */
+    200: McpSettings;
+};
+
+export type SettingsGetMcpResponse = SettingsGetMcpResponses[keyof SettingsGetMcpResponses];
+
+export type SettingsUpdateMcpData = {
+    body: McpSettings;
+    path?: never;
+    query?: never;
+    url: '/api/settings/mcp';
+};
+
+export type SettingsUpdateMcpErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Not an instance admin
+     */
+    403: ErrorResponse;
+};
+
+export type SettingsUpdateMcpError = SettingsUpdateMcpErrors[keyof SettingsUpdateMcpErrors];
+
+export type SettingsUpdateMcpResponses = {
+    /**
+     * The MCP endpoint's new state
+     */
+    200: McpSettings;
+};
+
+export type SettingsUpdateMcpResponse = SettingsUpdateMcpResponses[keyof SettingsUpdateMcpResponses];
 
 export type StorageGetAgeData = {
     body?: never;

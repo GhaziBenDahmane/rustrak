@@ -54,7 +54,8 @@ pub async fn get_summary(
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(HttpResponse::Ok().json(&job.snapshot(pool.get_ref()).await?.summary))
+    let snapshot = job.snapshot(pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(&snapshot.summary))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -75,7 +76,8 @@ pub async fn get_projects(
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(HttpResponse::Ok().json(&job.snapshot(pool.get_ref()).await?.projects))
+    let snapshot = job.snapshot(pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(&snapshot.projects))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -264,7 +266,8 @@ pub async fn get_retention(
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     require_admin(&actor)?;
-    Ok(HttpResponse::Ok().json(retention_response(pool.get_ref(), &job).await?))
+    let retention = retention_response(pool.get_ref(), &job).await?;
+    Ok(HttpResponse::Ok().json(retention))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -297,7 +300,8 @@ pub async fn update_retention(
         serde_json::to_value(&settings).unwrap_or_default(),
     )
     .await?;
-    Ok(HttpResponse::Ok().json(retention_response(pool.get_ref(), &job).await?))
+    let retention = retention_response(pool.get_ref(), &job).await?;
+    Ok(HttpResponse::Ok().json(retention))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(

@@ -30,6 +30,7 @@ export default defineConfig(({ mode }) => {
     '/docs',
     '/api-docs',
     '/metrics',
+    '/mcp',
   ];
 
   const proxy = Object.fromEntries(

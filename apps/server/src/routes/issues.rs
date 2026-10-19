@@ -531,16 +531,6 @@ pub async fn bulk_delete_issues(
     body: Result<web::Json<BulkDeleteIssues>, actix_web::Error>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
-    let project_id = path.into_inner();
-    access::require(
-        pool.get_ref(),
-        actor.is_admin(),
-        actor.user_id(),
-        project_id,
-        Action::MutateIssue,
-    )
-    .await?;
-
     let body = body.map_err(|error| {
         if error.as_response_error().status_code() == actix_web::http::StatusCode::PAYLOAD_TOO_LARGE {
             AppError::PayloadTooLarge("Bulk delete request is too large".to_string())
@@ -550,7 +540,28 @@ pub async fn bulk_delete_issues(
                     .to_string(),
             )
         }
-    })?;
+    });
+    delete_issues(pool, path.into_inner(), body, actor).await
+}
+
+/// [`bulk_delete_issues`] past the extractor, whose `actix_web::Error` is not
+/// `Send`: what the MCP tool calls.
+pub async fn delete_issues(
+    pool: web::Data<DbPool>,
+    project_id: i32,
+    body: AppResult<web::Json<BulkDeleteIssues>>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    access::require(
+        pool.get_ref(),
+        actor.is_admin(),
+        actor.user_id(),
+        project_id,
+        Action::MutateIssue,
+    )
+    .await?;
+
+    let body = body?;
     body.validate_size()?;
 
     let deleted = match &*body {
