@@ -1,5 +1,11 @@
 # docs
 
+## 0.16.3
+
+### Patch Changes
+
+- [`fe59a31`](https://github.com/rustrak/rustrak/commit/fe59a316a70e01ce99e42a52535cd069c4e2882e) Thanks [@AbianS](https://github.com/AbianS)! - Rewrite the client and MCP SDK pages for the generated client and the built-in `/mcp` server, and stop clipping glyphs in editorial page titles.
+
 ## 0.16.2
 
 ### Patch Changes

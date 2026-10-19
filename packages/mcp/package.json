@@ -1,6 +1,6 @@
 {
   "name": "@rustrak/mcp",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "description": "Deprecated: the Rustrak MCP server now ships inside the Rustrak server itself. See https://rustrak.dev/sdks/mcp",
   "homepage": "https://rustrak.dev/sdks/mcp",
   "repository": {
