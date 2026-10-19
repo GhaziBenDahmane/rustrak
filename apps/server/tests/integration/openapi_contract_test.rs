@@ -390,7 +390,8 @@ async fn every_get_matches_the_published_spec() {
             .configure(routes::alerts::configure_channels)
             .configure(routes::sourcemaps::configure)
             .configure(routes::storage::configure)
-            .configure(routes::telemetry::configure),
+            .configure(routes::telemetry::configure)
+            .configure(routes::mcp::configure),
     )
     .await;
 

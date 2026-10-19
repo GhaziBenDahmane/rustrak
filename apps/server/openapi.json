@@ -8446,6 +8446,96 @@
         ]
       }
     },
+    "/api/settings/mcp": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Whether the MCP endpoint at `/mcp` is on.",
+        "operationId": "settings.getMcp",
+        "responses": {
+          "200": {
+            "description": "Whether the MCP endpoint is on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Turns the MCP endpoint at `/mcp` on or off. Instance admins only.",
+        "operationId": "settings.updateMcp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The MCP endpoint's new state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not an instance admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/storage/age": {
       "get": {
         "tags": [
@@ -12545,6 +12635,18 @@
           "manifest": {
             "type": "string",
             "description": "The form's one field, `manifest`."
+          }
+        }
+      },
+      "McpSettings": {
+        "type": "object",
+        "description": "Whether `/mcp` answers. Returned by `GET` and accepted by `PUT`.",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         }
       },

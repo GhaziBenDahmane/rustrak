@@ -19,6 +19,7 @@ mod health_test;
 mod ingest_test;
 mod issues_api_test;
 mod logs_api_test;
+pub(crate) mod mcp_test;
 mod metrics_test;
 mod monitors_api_test;
 mod monitors_service_test;

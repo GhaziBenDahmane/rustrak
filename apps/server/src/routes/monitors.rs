@@ -66,7 +66,8 @@ pub async fn list_monitors(
 ) -> AppResult<HttpResponse> {
     let project_id = path.into_inner();
     require(&pool, &actor, project_id, Action::ViewProject).await?;
-    Ok(HttpResponse::Ok().json(MonitorService::list(&pool, project_id).await?))
+    let monitors = MonitorService::list(&pool, project_id).await?;
+    Ok(HttpResponse::Ok().json(monitors))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -121,7 +122,8 @@ pub async fn get_monitor(
 ) -> AppResult<HttpResponse> {
     let (project_id, slug) = path.into_inner();
     require(&pool, &actor, project_id, Action::ViewProject).await?;
-    Ok(HttpResponse::Ok().json(MonitorService::get_by_slug(&pool, project_id, &slug).await?))
+    let monitor = MonitorService::get_by_slug(&pool, project_id, &slug).await?;
+    Ok(HttpResponse::Ok().json(monitor))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(

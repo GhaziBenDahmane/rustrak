@@ -10,6 +10,7 @@ pub mod digest;
 pub mod error;
 pub mod ingest;
 pub mod logging;
+pub mod mcp;
 pub mod middleware;
 pub mod models;
 #[cfg(feature = "openapi")]

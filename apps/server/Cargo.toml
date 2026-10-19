@@ -125,6 +125,11 @@ url = "2.5.8"
 # Async trait support
 async-trait = "0.1.92"
 
+# MCP server at /mcp (stateless Streamable HTTP, protocol 2026-07-28)
+rmcp = { version = "3.5.1", features = ["transport-streamable-http-server"] }
+http = "1.5.0"
+http-body-util = "0.1.5"
+
 # Source map processing
 sourcemap = "9"
 zip = { version = "9.0", default-features = false, features = ["deflate-flate2"] }  # CVE-2025-29787 fixed in 2.3+; DO NOT lower below 2.3; no zstd (non-SPDX license)
