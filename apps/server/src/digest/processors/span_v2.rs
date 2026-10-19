@@ -1,10 +1,9 @@
 use super::span::{insert_span_rows, SpanRow};
-use super::{clamp, clamp_opt, epoch_to_utc, Processor, ProcessorCtx};
+use super::{clamp, clamp_opt, Processor, ProcessorCtx};
 use crate::error::AppResult;
 use crate::models::span_v2::{parse_span_v2_container, SpanV2Entry};
 use crate::services::gen_ai::extract_gen_ai_columns;
 use bytes::Bytes;
-use chrono::{DateTime, Utc};
 
 pub struct SpanV2Processor;
 
@@ -35,12 +34,13 @@ impl Processor for SpanV2Processor {
             // after end. Mirrors Relay's `validate_timestamps` exactly,
             // including that `start == end` is valid
             // (relay-server/src/processing/spans/process.rs:367).
-            let (Some(start_epoch), Some(end_epoch)) = (entry.start_timestamp, entry.end_timestamp)
+            let (Some(start_timestamp), Some(timestamp)) =
+                (entry.start_timestamp, entry.end_timestamp)
             else {
                 log::warn!("span v2 entry missing start_timestamp/end_timestamp, skipping");
                 continue;
             };
-            if start_epoch > end_epoch {
+            if start_timestamp > timestamp {
                 log::warn!("span v2 entry start_timestamp is after end_timestamp, skipping");
                 continue;
             }
@@ -54,14 +54,6 @@ impl Processor for SpanV2Processor {
             // consistent with what was normalized.
             let gen_ai = extract_gen_ai_columns(&mut flat, op.as_deref());
 
-            let Some(start_timestamp) = epoch_to_datetime(start_epoch) else {
-                log::warn!("span v2 entry has invalid start_timestamp, skipping");
-                continue;
-            };
-            let Some(timestamp) = epoch_to_datetime(end_epoch) else {
-                log::warn!("span v2 entry has invalid end_timestamp, skipping");
-                continue;
-            };
             let duration_ms = (timestamp - start_timestamp)
                 .num_microseconds()
                 .map(|us| (us as f64 / 1000.0).max(0.0));
@@ -105,15 +97,4 @@ impl Processor for SpanV2Processor {
         tx.commit().await?;
         Ok(())
     }
-}
-
-/// Converts an epoch-seconds float (v2's `start_timestamp`/`end_timestamp`)
-/// to a UTC instant. `0.0` (serde's `#[serde(default)]` fallback for a
-/// missing field) is treated as absent, matching `LogsProcessor`'s
-/// `epoch_to_datetime`.
-fn epoch_to_datetime(epoch: f64) -> Option<DateTime<Utc>> {
-    if !epoch.is_finite() || epoch <= 0.0 {
-        return None;
-    }
-    epoch_to_utc(epoch)
 }

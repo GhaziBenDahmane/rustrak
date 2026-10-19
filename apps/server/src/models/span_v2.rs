@@ -12,6 +12,7 @@
 //! replaces the legacy `timestamp` field name.
 
 use crate::error::{AppError, AppResult};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -36,10 +37,10 @@ pub struct SpanV2Entry {
     /// default — mirrors Relay's `validate_timestamps`, which rejects a span
     /// with a missing start or end
     /// (relay-server/src/processing/spans/process.rs:367).
-    #[serde(default)]
-    pub start_timestamp: Option<f64>,
-    #[serde(default)]
-    pub end_timestamp: Option<f64>,
+    #[serde(default, deserialize_with = "crate::models::deserialize_timestamp")]
+    pub start_timestamp: Option<DateTime<Utc>>,
+    #[serde(default, deserialize_with = "crate::models::deserialize_timestamp")]
+    pub end_timestamp: Option<DateTime<Utc>>,
     /// Typed attribute map: `{"key": {"value": ..., "type": "string"|...}}`.
     /// Use [`Self::flat_attributes`] to unwrap into the plain `{key: value}`
     /// shape the rest of Rustrak's span-storage/gen_ai code expects.

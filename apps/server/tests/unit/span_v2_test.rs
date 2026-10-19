@@ -1002,3 +1002,18 @@ fn test_flat_attributes_drops_an_unknown_declared_type() {
     assert!(flat.get("future").is_none());
     assert_eq!(flat["kept"], "ok");
 }
+
+/// Relay's `SpanV2.start_timestamp`/`end_timestamp` are `Annotated<Timestamp>`,
+/// which accept an RFC 3339 string as well as epoch seconds (issue #427).
+#[test]
+fn test_parse_container_accepts_rfc3339_timestamps() {
+    let body = br#"{"version":2,"items":[{
+        "trace_id":"d3d20f000885466b8c8f947c9b92b8d3",
+        "span_id":"dddddddddddddddd",
+        "start_timestamp":"2026-10-19T09:50:34.5Z",
+        "end_timestamp":1792403435.0
+    }]}"#;
+    let spans = parse_span_v2_container(body).unwrap();
+    assert!(spans[0].start_timestamp.is_some());
+    assert!(spans[0].end_timestamp.is_some());
+}

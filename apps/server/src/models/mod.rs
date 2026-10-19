@@ -42,6 +42,23 @@ where
     deserializer.deserialize_seq(BoundedItems(PhantomData))
 }
 
+/// A Relay `Timestamp` field: epoch seconds or RFC 3339. An unparseable value
+/// is `None`, as Relay annotates it away instead of failing the whole item, and
+/// so is one at or before 1970, which Relay's `TimestampProcessor` rejects
+/// (relay-event-normalization/src/timestamp.rs).
+pub(crate) fn deserialize_timestamp<'de, D>(
+    deserializer: D,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = <Option<serde_json::Value> as serde::Deserialize>::deserialize(deserializer)?;
+    Ok(raw
+        .as_ref()
+        .and_then(crate::digest::processors::timestamp_from_value)
+        .filter(|dt| dt.timestamp_millis() > 0))
+}
+
 pub mod alert;
 pub mod auth_token;
 pub mod event;
