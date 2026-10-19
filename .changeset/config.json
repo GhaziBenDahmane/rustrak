@@ -3,7 +3,7 @@
   "changelog": ["@changesets/changelog-github", { "repo": "rustrak/rustrak" }],
   "commit": false,
   "fixed": [
-    ["@rustrak/server", "@rustrak/dashboard", "@rustrak/client", "@rustrak/mcp"]
+    ["@rustrak/server", "@rustrak/dashboard", "@rustrak/client"]
   ],
   "linked": [],
   "access": "public",

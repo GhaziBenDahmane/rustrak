@@ -29,7 +29,6 @@ who never installs Node.
 | `apps/docs` | Public documentation site (Nextra) |
 | `packages/ui` | `@rustrak/ui`, the design system. Storybook only for now |
 | `packages/client` | `@rustrak/client`, the TypeScript API client |
-| `packages/mcp` | `@rustrak/mcp`, deprecated: a stub that points to `/mcp`. Removed after its last release |
 | `packages/test-sentry` | CLI to send test events to a DSN |
 | `packages/benchmarks` | Load and throughput benchmarks |
 
@@ -99,8 +98,8 @@ CREATE_SUPERUSER="admin@example.com:password" cargo run
 
 ## Versioning
 
-`@rustrak/server`, `@rustrak/dashboard`, `@rustrak/client` and `@rustrak/mcp` are a
-`fixed` group in `.changeset/config.json`. They always share one number, even
+`@rustrak/server`, `@rustrak/dashboard` and `@rustrak/client` are a `fixed`
+group in `.changeset/config.json`. They always share one number, even
 when a package has no changes, because that number identifies the **Rustrak
 release** rather than the semver of any single artifact. It is what lets someone
 answer "which version am I running?" and makes `@rustrak/client@X.Y.Z`

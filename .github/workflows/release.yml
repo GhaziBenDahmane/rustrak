@@ -123,7 +123,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
       # If there are NO changesets, we just merged a version PR - cut the release.
-      # The shipped artifacts (server, ui, client, mcp) are a `fixed` group in
+      # The shipped artifacts (server, ui, client) are a `fixed` group in
       # .changeset/config.json, so they share one version and ship together: one
       # tag, one GitHub release. `docs` is deliberately outside that group and
       # carries its own version - it is private, never published, and nothing
@@ -154,7 +154,7 @@ jobs:
           # single tag would be a lie about what the other images contain.
           # `apps/docs` is not in the group and is expected to drift - do not
           # add it back here.
-          for pkg in apps/dashboard packages/client packages/mcp; do
+          for pkg in apps/dashboard packages/client; do
             PKG_VERSION=$(node -p "require('./$pkg/package.json').version")
             if [[ "$PKG_VERSION" != "$VERSION" ]]; then
               echo "::error::$pkg is at $PKG_VERSION but the release is $VERSION."
@@ -200,7 +200,7 @@ jobs:
             echo "rustrak/rustrak-ui:v$VERSION"
             echo '```'
             echo
-            echo "\`@rustrak/client@$VERSION\` and \`@rustrak/mcp@$VERSION\` on npm."
+            echo "\`@rustrak/client@$VERSION\` on npm."
           } >> "$NOTES_FILE"
 
           # Which moving tags this build took. Named here because the notes are

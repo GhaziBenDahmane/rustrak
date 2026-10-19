@@ -39,7 +39,7 @@ permissions:
   id-token: write
 
 jobs:
-  # The published artifacts (server, dashboard, client, mcp) are a `fixed` group
+  # The published artifacts (server, dashboard, client) are a `fixed` group
   # in .changeset/config.json: one version, one tag, one release, everything
   # ships together. So there is nothing to detect, we only need the version off
   # the tag. `docs` is outside the group, versioned on its own and deployed by
@@ -274,9 +274,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # mcp depends on client, so client must build first.
-      - name: Build packages
-        run: pnpm --filter @rustrak/client build && pnpm --filter @rustrak/mcp build
+      - name: Build @rustrak/client
+        run: pnpm --filter @rustrak/client build
 
       # `--tag` is the dist-tag. Without it npm points `latest` at whatever was
       # published last, prerelease included, and `npm install @rustrak/client`
@@ -293,16 +292,4 @@ jobs:
             echo "@rustrak/client@$VERSION is already published, skipping"
           else
             pnpm --filter @rustrak/client publish --no-git-checks --access public --tag "$CHANNEL"
-          fi
-
-      - name: Publish @rustrak/mcp
-        env:
-          VERSION: ${{ needs.version.outputs.version }}
-          CHANNEL: ${{ needs.version.outputs.channel }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if npm view "@rustrak/mcp@$VERSION" version >/dev/null 2>&1; then
-            echo "@rustrak/mcp@$VERSION is already published, skipping"
-          else
-            pnpm --filter @rustrak/mcp publish --no-git-checks --access public --tag "$CHANNEL"
           fi

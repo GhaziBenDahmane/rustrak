@@ -4,8 +4,8 @@ import packageJson from '../../../package.json';
  * The dashboard's own version, as the About page reports it.
  *
  * Read out of `package.json` at build time, which is the same number the
- * server carries: `@rustrak/server`, `@rustrak/dashboard`, `@rustrak/client`
- * and `@rustrak/mcp` are a `fixed` changeset group precisely so that one
+ * server carries: `@rustrak/server`, `@rustrak/dashboard` and
+ * `@rustrak/client` are a `fixed` changeset group precisely so that one
  * number identifies the Rustrak release rather than the semver of any single
  * artifact.
  *
