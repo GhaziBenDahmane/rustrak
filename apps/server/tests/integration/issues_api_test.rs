@@ -596,6 +596,31 @@ async fn test_get_issue_wrong_project() {
     assert_eq!(resp.status(), 404);
 }
 
+/// Sentry's API (and GitLab's client of it) addresses an issue by a numeric
+/// id, unique across projects.
+#[actix_web::test]
+async fn test_issue_numeric_id_is_unique_across_projects_and_resolves() {
+    let db = TestDb::new().await;
+    let project1 = create_test_project(&db.pool, "Numeric 1").await;
+    let project2 = create_test_project(&db.pool, "Numeric 2").await;
+
+    let first = create_test_issue(&db.pool, project1.id, "TypeError", "a").await;
+    let second = create_test_issue(&db.pool, project2.id, "TypeError", "a").await;
+
+    assert!(second.numeric_id > first.numeric_id);
+
+    let found = IssueService::get_by_numeric_id(&db.pool, second.numeric_id)
+        .await
+        .expect("issue by numeric id");
+    assert_eq!(found.id, second.id);
+
+    let missing = IssueService::get_by_numeric_id(&db.pool, second.numeric_id + 1).await;
+    assert!(matches!(
+        missing,
+        Err(rustrak::error::AppError::NotFound(_))
+    ));
+}
+
 // =============================================================================
 // Update Issue Tests
 // =============================================================================

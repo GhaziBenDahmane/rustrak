@@ -100,6 +100,8 @@ pub struct Issue {
     pub id: Uuid,
     pub project_id: i32,
     pub digest_order: i32,
+    /// Unique across projects: the id the Sentry-compatible API (`/api/0/issues/{id}/`) exposes.
+    pub numeric_id: i64,
     pub first_seen: DateTime<Utc>,
     pub last_seen: DateTime<Utc>,
     pub digested_event_count: i32,
