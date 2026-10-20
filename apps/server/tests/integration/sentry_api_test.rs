@@ -1078,6 +1078,7 @@ async fn link_header_is_relative_without_a_public_url() {
 
 /// Rustrak's Sentry issue ids are digits; the spec says so, so the
 /// generated client refuses anything else before sending it.
+#[cfg(feature = "openapi")]
 #[actix_web::test]
 async fn the_spec_constrains_sentry_issue_ids_to_digits() {
     use utoipa::OpenApi;
