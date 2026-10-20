@@ -1,5 +1,11 @@
 # docs
 
+## 0.16.4
+
+### Patch Changes
+
+- [`168388a`](https://github.com/rustrak/rustrak/commit/168388ac445de2a7b2d9d73babeb70fe0ea5379d) Thanks [@AbianS](https://github.com/AbianS)! - Add a GitLab guide: how to connect a project to Rustrak, what the Error Tracking panel shows, and how resolve, ignore and "View in Sentry" map back to Rustrak. Add the `sentry` methods to the client reference and drop `@rustrak/mcp` from the upgrading notes.
+
 ## 0.16.3
 
 ### Patch Changes

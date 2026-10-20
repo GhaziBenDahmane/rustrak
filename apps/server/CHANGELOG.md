@@ -1,5 +1,11 @@
 # @rustrak/server
 
+## 0.19.1
+
+### Patch Changes
+
+- [`168388a`](https://github.com/rustrak/rustrak/commit/168388ac445de2a7b2d9d73babeb70fe0ea5379d) Thanks [@AbianS](https://github.com/AbianS)! - Serve the subset of Sentry's API that GitLab's Error Tracking reads, so a GitLab project can list, open, resolve, ignore and reopen Rustrak issues and jump back to the dashboard. Issues now carry a numeric id, unique across projects, next to the existing UUID, and a deleted issue's id is never reused. `@rustrak/mcp` is no longer published; its replacement, MCP served by the server at `/mcp`, has shipped since 0.19.0.
+
 ## 0.19.0
 
 ### Minor Changes
