@@ -55,13 +55,12 @@ pub struct IssueAggregates {
 const AGGREGATE_SCAN_CAP: i64 = 1000;
 
 /// `issues.numeric_id` of a new row. Postgres has an identity column; SQLite
-/// takes MAX + 1, safe because it has a single writer.
-// ponytail: SQLite reuses the id of the newest issue if it is deleted; add a
-// counter table if a cached id pointing at a different issue ever matters.
+/// reads a counter that a trigger advances on insert (single writer, so the
+/// read and the advance cannot interleave). Neither reuses a deleted id.
 #[cfg(feature = "postgres")]
 pub(crate) const NEXT_NUMERIC_ID: &str = "DEFAULT";
 #[cfg(feature = "sqlite")]
-pub(crate) const NEXT_NUMERIC_ID: &str = "(SELECT COALESCE(MAX(numeric_id), 0) + 1 FROM issues)";
+pub(crate) const NEXT_NUMERIC_ID: &str = "(SELECT value + 1 FROM issue_numeric_id_counter)";
 
 /// Per-issue supplementary stats for the issue list (unique user count + a
 /// compact 24h hourly trend), computed from a single capped scan per issue.
