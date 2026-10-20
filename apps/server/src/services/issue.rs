@@ -54,6 +54,14 @@ pub struct IssueAggregates {
 /// Max events scanned when computing per-issue aggregates (tags, user count).
 const AGGREGATE_SCAN_CAP: i64 = 1000;
 
+/// `issues.numeric_id` of a new row. Postgres has an identity column; SQLite
+/// reads a counter that a trigger advances on insert (single writer, so the
+/// read and the advance cannot interleave). Neither reuses a deleted id.
+#[cfg(feature = "postgres")]
+pub(crate) const NEXT_NUMERIC_ID: &str = "DEFAULT";
+#[cfg(feature = "sqlite")]
+pub(crate) const NEXT_NUMERIC_ID: &str = "(SELECT value + 1 FROM issue_numeric_id_counter)";
+
 /// Per-issue supplementary stats for the issue list (unique user count + a
 /// compact 24h hourly trend), computed from a single capped scan per issue.
 #[derive(Debug, Serialize)]
@@ -625,6 +633,17 @@ impl IssueService {
         Ok(issue)
     }
 
+    /// Gets an issue by its numeric id (the Sentry-compatible API's id)
+    pub async fn get_by_numeric_id(pool: &DbPool, numeric_id: i64) -> AppResult<Issue> {
+        let issue = sqlx::query_as::<_, Issue>("SELECT * FROM issues WHERE numeric_id = $1")
+            .bind(numeric_id)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Issue {} not found", numeric_id)))?;
+
+        Ok(issue)
+    }
+
     /// Creates a new issue
     pub async fn create(
         pool: &DbPool,
@@ -648,7 +667,7 @@ impl IssueService {
 
         let priority = derive_priority(level);
 
-        let issue = sqlx::query_as::<_, Issue>(
+        let issue = sqlx::query_as::<_, Issue>(sqlx::AssertSqlSafe(format!(
             r#"
             INSERT INTO issues (
                 id, project_id, digest_order, first_seen, last_seen,
@@ -656,15 +675,15 @@ impl IssueService {
                 calculated_type, calculated_value, "transaction",
                 last_frame_filename, last_frame_module, last_frame_function,
                 level, platform, status, substatus, priority, culprit, logger,
-                first_release, last_release
+                first_release, last_release, numeric_id
             )
             VALUES (
                 $1, $2, $3, $4, $4, 1, 1, $5, $6, $7, $8, $9, $10, $11, $12,
-                'unresolved', 'new', $13, $14, $15, $16, $16
+                'unresolved', 'new', $13, $14, $15, $16, $16, {NEXT_NUMERIC_ID}
             )
             RETURNING *
             "#,
-        )
+        )))
         .bind(issue_id)
         .bind(project_id)
         .bind(digest_order)

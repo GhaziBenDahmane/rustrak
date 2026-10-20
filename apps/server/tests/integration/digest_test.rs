@@ -329,6 +329,14 @@ async fn test_digest_creates_separate_issues_for_different_errors() {
     .expect("Failed to list issues");
 
     assert_eq!(issues.len(), 3);
+    let mut numeric_ids: Vec<i64> = issues.iter().map(|i| i.numeric_id).collect();
+    numeric_ids.sort();
+    numeric_ids.dedup();
+    assert_eq!(
+        numeric_ids.len(),
+        3,
+        "digest gives each issue its own numeric id"
+    );
 }
 
 #[actix_web::test]

@@ -1068,7 +1068,7 @@ async fn find_or_create_issue_and_grouping_inner(
     // Create new issue (generate UUID in application for cross-DB compatibility)
     let issue_id = Uuid::new_v4();
     let priority = crate::services::issue::derive_priority(level);
-    let issue: Issue = sqlx::query_as(
+    let issue: Issue = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         r#"
         INSERT INTO issues (
             id, project_id, digest_order, first_seen, last_seen,
@@ -1076,15 +1076,16 @@ async fn find_or_create_issue_and_grouping_inner(
             calculated_type, calculated_value, "transaction",
             last_frame_filename, last_frame_module, last_frame_function,
             level, platform, status, substatus, priority, culprit, logger,
-            first_release, last_release
+            first_release, last_release, numeric_id
         )
         VALUES (
             $1, $2, $3, $4, $4, 1, 1, $5, $6, $7, $8, $9, $10, $11, $12,
-            'unresolved', 'new', $13, $14, $15, $16, $16
+            'unresolved', 'new', $13, $14, $15, $16, $16, {}
         )
         RETURNING *
         "#,
-    )
+        crate::services::issue::NEXT_NUMERIC_ID
+    )))
     .bind(issue_id)
     .bind(project_id)
     .bind(digest_order)
