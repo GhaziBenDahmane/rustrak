@@ -398,7 +398,8 @@ impl Page {
     /// `OffsetPaginator`); `is_prev` is parsed but unused. A cursor Rustrak
     /// could not have issued is a 400.
     fn from_cursor(raw: Option<&str>, limit: i64) -> AppResult<Self> {
-        let Some(raw) = raw else {
+        // An empty `cursor` is none, as Sentry's `if request.GET.get("cursor")`.
+        let Some(raw) = raw.filter(|r| !r.is_empty()) else {
             return Ok(Self {
                 size: limit,
                 number: 0,
@@ -430,7 +431,8 @@ impl Page {
 
 /// Sentry's `Link` header: `previous` and `next`, always both
 /// (`api/base.py`, `CURSOR_LINK_HEADER`). Like Sentry's `absolute_uri`, it
-/// names the configured public URL, never the request's `Host`.
+/// names the configured public URL, never the request's `Host`; without
+/// `PUBLIC_URL` the links are relative paths.
 fn link_header(req: &HttpRequest, config: &Config, page: &Page, has_more: bool) -> String {
     let query: Vec<String> = req
         .query_string()
@@ -440,7 +442,7 @@ fn link_header(req: &HttpRequest, config: &Config, page: &Page, has_more: bool) 
         .collect();
     let base = format!(
         "{}{}?{}",
-        crate::routes::projects::build_base_url(config),
+        config.public_url.as_deref().unwrap_or_default(),
         req.path(),
         query.join("&")
     );
@@ -633,7 +635,7 @@ pub struct IssuePath {
     operation_id = "sentry.getIssue",
     tag = "Sentry API",
     params(
-        ("issue_id" = String, Path, description = "Issue id (`numeric_id`)")
+        ("issue_id" = String, Path, description = "Issue id (`numeric_id`)", pattern = "^[0-9]+$")
     ),
     responses(
         (status = 200, description = "Issue details", body = SentryIssueDetails),
@@ -889,7 +891,7 @@ impl SentryEvent {
     operation_id = "sentry.getLatestEvent",
     tag = "Sentry API",
     params(
-        ("issue_id" = String, Path, description = "Issue id (`numeric_id`)")
+        ("issue_id" = String, Path, description = "Issue id (`numeric_id`)", pattern = "^[0-9]+$")
     ),
     responses(
         (status = 200, description = "The issue's latest event", body = SentryEvent),
@@ -934,7 +936,7 @@ pub struct IssueUpdate {
     operation_id = "sentry.updateIssue",
     tag = "Sentry API",
     params(
-        ("issue_id" = String, Path, description = "Issue id (`numeric_id`)")
+        ("issue_id" = String, Path, description = "Issue id (`numeric_id`)", pattern = "^[0-9]+$")
     ),
     request_body = IssueUpdate,
     responses(
@@ -1018,7 +1020,7 @@ pub async fn list_repos(_actor: ApiActor) -> AppResult<HttpResponse> {
     params(
         ("org_slug" = String, Path, description = "Organization slug (synthetic — accepted and ignored)"),
         ("project_slug" = String, Path, description = "Project slug (ignored: the id names the issue)"),
-        ("issue_id" = String, Path, description = "Issue id (`numeric_id`), digits only"),
+        ("issue_id" = String, Path, description = "Issue id (`numeric_id`), digits only", pattern = "^[0-9]+$"),
     ),
     responses(
         (status = 302, description = "Browser redirect to the issue in the dashboard, or to the login page"),

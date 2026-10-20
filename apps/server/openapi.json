@@ -28,7 +28,8 @@
             "description": "Issue id (`numeric_id`)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[0-9]+$"
             }
           }
         ],
@@ -84,7 +85,8 @@
             "description": "Issue id (`numeric_id`)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[0-9]+$"
             }
           }
         ],
@@ -172,7 +174,8 @@
             "description": "Issue id (`numeric_id`)",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[0-9]+$"
             }
           }
         ],
@@ -11080,7 +11083,8 @@
             "description": "Issue id (`numeric_id`), digits only",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[0-9]+$"
             }
           }
         ],

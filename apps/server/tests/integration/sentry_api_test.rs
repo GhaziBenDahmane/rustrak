@@ -31,6 +31,10 @@ macro_rules! app {
 
 /// The dashboard is at `https://rustrak.example.com`.
 fn config() -> rustrak::config::Config {
+    config_at(Some("https://rustrak.example.com"))
+}
+
+fn config_at(public_url: Option<&str>) -> rustrak::config::Config {
     use rustrak::config::*;
     use std::time::Duration;
     Config {
@@ -55,7 +59,7 @@ fn config() -> rustrak::config::Config {
             session_secret_key: None,
         },
         ingest_dir: None,
-        public_url: Some("https://rustrak.example.com".to_string()),
+        public_url: public_url.map(str::to_string),
         sourcemap_storage_path: "/tmp/test_sourcemaps".to_string(),
         sourcemap_cache_bytes: 1024,
         max_chunk_size_bytes: 1024,
@@ -1026,4 +1030,72 @@ async fn issue_link_redirects_a_stranger_even_without_a_dashboard() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401, "only the issue link is let through");
+}
+
+/// An empty `cursor` is no cursor, as in Sentry (`if request.GET.get("cursor")`).
+#[actix_web::test]
+async fn an_empty_cursor_is_the_first_page() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let app = app!(db.pool);
+
+    for uri in [
+        "/api/0/projects/?cursor=",
+        "/api/0/projects/rustrak/demo-app/issues/?cursor=",
+    ] {
+        let (status, body) = get_json(&app, uri, &token).await;
+        assert_eq!(status, 200, "{uri}");
+        assert_eq!(body.as_array().unwrap().len(), 1, "{uri}");
+    }
+}
+
+/// Without `PUBLIC_URL` the server cannot know its public address, so the
+/// `Link` names a path relative to the one requested.
+#[actix_web::test]
+async fn link_header_is_relative_without_a_public_url() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    project(&db.pool, "Demo App").await;
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(db.pool.clone()))
+            .app_data(web::Data::new(config_at(None)))
+            .configure(routes::sentry_api::configure),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri("/api/0/projects/")
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let link = resp.headers().get("Link").unwrap().to_str().unwrap();
+
+    assert!(link.starts_with("</api/0/projects/?&cursor="), "{link}");
+}
+
+/// Rustrak's Sentry issue ids are digits; the spec says so, so the
+/// generated client refuses anything else before sending it.
+#[actix_web::test]
+async fn the_spec_constrains_sentry_issue_ids_to_digits() {
+    use utoipa::OpenApi;
+    let spec = serde_json::to_value(rustrak::openapi::ApiDoc::openapi()).unwrap();
+    let paths = spec["paths"].as_object().unwrap();
+    let mut checked = 0;
+    for (path, item) in paths
+        .iter()
+        .filter(|(p, _)| p.contains("{issue_id}") && !p.starts_with("/api/projects"))
+    {
+        for op in item.as_object().unwrap().values() {
+            for param in op["parameters"].as_array().unwrap() {
+                if param["name"] == "issue_id" {
+                    assert_eq!(param["schema"]["pattern"], "^[0-9]+$", "{path}");
+                    checked += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(checked, 4, "get, put and latest event, plus the issue link");
 }

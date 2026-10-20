@@ -1823,7 +1823,7 @@ export const zVersionResponse = z.object({
 });
 
 export const zSentryGetIssuePath = z.object({
-    issue_id: z.string()
+    issue_id: z.string().regex(/^[0-9]+$/)
 });
 
 /**
@@ -1834,7 +1834,7 @@ export const zSentryGetIssueResponse = zSentryIssueDetails;
 export const zSentryUpdateIssueBody = zIssueUpdate;
 
 export const zSentryUpdateIssuePath = z.object({
-    issue_id: z.string()
+    issue_id: z.string().regex(/^[0-9]+$/)
 });
 
 /**
@@ -1843,7 +1843,7 @@ export const zSentryUpdateIssuePath = z.object({
 export const zSentryUpdateIssueResponse = zSentryIssue;
 
 export const zSentryGetLatestEventPath = z.object({
-    issue_id: z.string()
+    issue_id: z.string().regex(/^[0-9]+$/)
 });
 
 /**
@@ -3490,5 +3490,5 @@ export const zHealthVersionResponse = zVersionResponse;
 export const zSentryOpenIssuePath = z.object({
     org_slug: z.string(),
     project_slug: z.string(),
-    issue_id: z.string()
+    issue_id: z.string().regex(/^[0-9]+$/)
 });
