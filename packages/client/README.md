@@ -409,6 +409,19 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 |---|---|---|
 | `schedules.preview({ body })` | `POST /api/schedules/preview` | Validates a schedule and lists its next five runs from now, so no client ever parses a crontab itself. |
 
+### Sentry API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `sentry.getIssue({ path })` | `GET /api/0/issues/{issue_id}/` | One issue with its releases and its 24h and 30d series (Sentry's `GroupDetailsEndpoint`). |
+| `sentry.getLatestEvent({ path })` | `GET /api/0/issues/{issue_id}/events/latest/` | The issue's most recent event (Sentry's `GroupEventDetailsEndpoint`, `issues/endpoints/group_event_details.py`). |
+| `sentry.listIssues({ path, query? })` | `GET /api/0/projects/{org_slug}/{project_slug}/issues/` | A project's issues, filtered by `query`, sorted by `sort` and paginated by `cursor` (Sentry's `ProjectGroupIndexEndpoint`, `issues/endpoints/project_group_index.py`). |
+| `sentry.listOrganizations()` | `GET /api/0/organizations/` | The organizations the token belongs to (Sentry's `OrganizationIndexEndpoint`): always the one synthetic org. |
+| `sentry.listProjects({ query? })` | `GET /api/0/projects/` | The projects the token can see, newest first (Sentry's `ProjectIndexEndpoint`, `core/endpoints/project_index.py`). |
+| `sentry.listRepos({ path })` | `GET /api/0/organizations/{org_slug}/repos/` | The code repositories connected to the organization (Sentry's `OrganizationRepositoriesEndpoint`). |
+| `sentry.openIssue({ path })` | `GET /{org_slug}/{project_slug}/issues/{issue_id}` | The issue page GitLab's "View in Sentry" opens: Sentry redirects this legacy path to the issue (`static/app/router/routes.tsx`), Rustrak to its dashboard. |
+| `sentry.updateIssue({ path, body })` | `PUT /api/0/issues/{issue_id}/` | Sets an issue's status and returns the issue (Sentry's `GroupDetailsEndpoint.put`). |
+
 ### Sessions
 
 | Method | Endpoint | Description |

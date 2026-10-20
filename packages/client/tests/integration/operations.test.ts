@@ -41,6 +41,29 @@ const spec = JSON.parse(
 const BASE = 'http://rustrak.test';
 const CHUNK_NAME = 'da39a3ee5e6b4b0d3255bfef95601890afd80709';
 
+/** A string that satisfies `schema`'s pattern, format or length. */
+function sampleString(schema: Schema): string {
+  if (typeof schema.pattern === 'string') {
+    const value = ({ '^[0-9]+$': '1' } as Record<string, string>)[
+      schema.pattern
+    ];
+    if (value === undefined) {
+      throw new Error(`no sample for pattern ${schema.pattern}`);
+    }
+    return value;
+  }
+  return (
+    (
+      {
+        uuid: '3f2b8c1e-9a4d-4c6b-8e2f-1a2b3c4d5e6f',
+        'date-time': '2026-01-01T00:00:00Z',
+        email: 'contract@example.com',
+        uri: 'https://example.com',
+      } as Record<string, string>
+    )[schema.format as string] ?? 'x'.repeat(Number(schema.minLength ?? 1))
+  );
+}
+
 /** A value that satisfies `schema`, built from the spec alone. */
 function sample(schema: Schema | undefined): unknown {
   if (!schema) return {};
@@ -59,14 +82,7 @@ function sample(schema: Schema | undefined): unknown {
   const types = [schema.type].flat().filter((t) => t !== 'null');
   switch (types[0]) {
     case 'string':
-      return (
-        {
-          uuid: '3f2b8c1e-9a4d-4c6b-8e2f-1a2b3c4d5e6f',
-          'date-time': '2026-01-01T00:00:00Z',
-          email: 'contract@example.com',
-          uri: 'https://example.com',
-        }[schema.format as string] ?? 'x'.repeat(Number(schema.minLength ?? 1))
-      );
+      return sampleString(schema);
     case 'integer':
     case 'number':
       return Number(schema.minimum ?? 1);

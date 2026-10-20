@@ -429,6 +429,8 @@ async fn main() -> std::io::Result<()> {
             .configure(routes::alerts::configure_channels)
             // Source map upload routes (Bearer auth, Sentry-cli compatible)
             .configure(routes::sourcemaps::configure)
+            // Sentry management API subset (Bearer auth, GitLab error tracking)
+            .configure(routes::sentry_api::configure)
             // Storage usage + retention/cleanup (admin only)
             .configure(routes::storage::configure)
             // What the anonymous telemetry would send (admin only)

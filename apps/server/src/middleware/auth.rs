@@ -113,7 +113,9 @@ where
                 .iter()
                 .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")));
 
-        let is_exempt = is_api || is_dashboard;
+        // GitLab's "View in Sentry" link authenticates in its handler, so a
+        // stranger reaches its login redirect rather than a bare 401.
+        let is_exempt = is_api || is_dashboard || crate::routes::sentry_api::is_issue_link(&path);
 
         if is_exempt {
             let service = Rc::clone(&self.service);

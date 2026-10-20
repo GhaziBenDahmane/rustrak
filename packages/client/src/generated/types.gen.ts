@@ -949,6 +949,18 @@ export type IssueTagValue = {
 };
 
 /**
+ * Body of an issue update: the fields of `GroupValidator`
+ * (`api/helpers/group_index/validators/group.py`) Rustrak acts on.
+ */
+export type IssueUpdate = {
+    /**
+     * `resolved`, `unresolved`, `ignored`, `resolvedInNextRelease` or `muted`.
+     */
+    status?: string | null;
+    substatus?: string | null;
+};
+
+/**
  * How long ago a kind of data arrived: rows per age bucket, and the oldest.
  */
 export type KindAge = {
@@ -1492,6 +1504,155 @@ export type SchedulePreview = {
 
 export type SeenResponse = {
     has_seen: boolean;
+};
+
+/**
+ * Subset of `EventSerializer` for an error event
+ * (`api/serializers/models/event.py`).
+ */
+export type SentryEvent = {
+    culprit: string;
+    dateCreated: string;
+    dateReceived: string;
+    entries: Array<{
+        [key: string]: unknown;
+    }>;
+    eventID: string;
+    groupID: string;
+    id: string;
+    message: string;
+    metadata: {
+        [key: string]: unknown;
+    };
+    platform: string;
+    projectID: string;
+    tags: Array<SentryTag>;
+    title: string;
+    type: string;
+};
+
+/**
+ * `GroupProjectResponse` (`api/serializers/models/group.py`).
+ */
+export type SentryGroupProject = {
+    id: string;
+    name: string;
+    platform: string | null;
+    slug: string;
+};
+
+/**
+ * Subset of `GroupSerializer` plus its seen stats
+ * (`api/serializers/models/group.py`), and `stats` when the caller asked
+ * for a series (`StreamGroupSerializer`, `group_stream.py`).
+ */
+export type SentryIssue = {
+    /**
+     * Links to external issues; Rustrak keeps none, so always empty.
+     */
+    annotations: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * `str(times_seen)`: Sentry sends the count as a string.
+     */
+    count: string;
+    culprit: string;
+    firstSeen: string;
+    /**
+     * The issue's `numeric_id`: Sentry's group ids are integers.
+     */
+    id: string;
+    issueCategory: string;
+    issueType: string;
+    lastSeen: string;
+    level: string;
+    logger: string | null;
+    metadata: {
+        [key: string]: unknown;
+    };
+    platform: string | null;
+    priority: string | null;
+    project: SentryGroupProject;
+    shortId: string;
+    /**
+     * `[unix_ts, count]` per bucket, keyed by stats period.
+     */
+    stats?: {
+        [key: string]: unknown;
+    } | null;
+    status: string;
+    statusDetails: {
+        [key: string]: unknown;
+    };
+    substatus: string | null;
+    title: string;
+    /**
+     * `error`, or `default` for an issue made of messages.
+     */
+    type: string;
+    userCount: number;
+};
+
+/**
+ * Subset of `GroupDetailsEndpoint`'s response
+ * (`issues/endpoints/group_details.py`).
+ */
+export type SentryIssueDetails = SentryIssue & {
+    firstRelease: SentryRelease | null;
+    lastRelease: SentryRelease | null;
+    userReportCount: number;
+};
+
+/**
+ * Subset of `OrganizationSummarySerializer`
+ * (`api/serializers/models/organization.py`).
+ */
+export type SentryOrganization = {
+    id: string;
+    name: string;
+    slug: string;
+    status: SentryStatus;
+};
+
+/**
+ * Subset of `ProjectWithOrganizationSerializer`
+ * (`api/serializers/models/project.py`). Sentry's ids are strings.
+ */
+export type SentryProject = {
+    dateCreated: string;
+    id: string;
+    name: string;
+    organization: SentryOrganization;
+    platform: string | null;
+    slug: string;
+    /**
+     * `STATUS_LABELS[ObjectStatus.ACTIVE]`: Rustrak only lists live projects.
+     */
+    status: string;
+};
+
+/**
+ * A release as `serialize_releases` (`api/helpers/group_index/index.py`)
+ * falls back to it, with the serializer's `shortVersion`, which is the
+ * version itself (`api/serializers/models/release.py`).
+ */
+export type SentryRelease = {
+    shortVersion: string;
+    version: string;
+};
+
+/**
+ * `{"id", "name"}` of a status, as Sentry nests it in an organization.
+ */
+export type SentryStatus = {
+    id: string;
+    name: string;
+};
+
+export type SentryTag = {
+    key: string;
+    value: string;
 };
 
 /**
@@ -2066,6 +2227,141 @@ export type VersionResponse = {
     version: string;
 };
 
+export type SentryGetIssueData = {
+    body?: never;
+    path: {
+        /**
+         * Issue id (`numeric_id`)
+         */
+        issue_id: string;
+    };
+    query?: never;
+    url: '/api/0/issues/{issue_id}/';
+};
+
+export type SentryGetIssueErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentryGetIssueError = SentryGetIssueErrors[keyof SentryGetIssueErrors];
+
+export type SentryGetIssueResponses = {
+    /**
+     * Issue details
+     */
+    200: SentryIssueDetails;
+};
+
+export type SentryGetIssueResponse = SentryGetIssueResponses[keyof SentryGetIssueResponses];
+
+export type SentryUpdateIssueData = {
+    body: IssueUpdate;
+    path: {
+        /**
+         * Issue id (`numeric_id`)
+         */
+        issue_id: string;
+    };
+    query?: never;
+    url: '/api/0/issues/{issue_id}/';
+};
+
+export type SentryUpdateIssueErrors = {
+    /**
+     * Invalid query parameter
+     */
+    400: ErrorResponse;
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentryUpdateIssueError = SentryUpdateIssueErrors[keyof SentryUpdateIssueErrors];
+
+export type SentryUpdateIssueResponses = {
+    /**
+     * Issue updated
+     */
+    200: SentryIssue;
+};
+
+export type SentryUpdateIssueResponse = SentryUpdateIssueResponses[keyof SentryUpdateIssueResponses];
+
+export type SentryGetLatestEventData = {
+    body?: never;
+    path: {
+        /**
+         * Issue id (`numeric_id`)
+         */
+        issue_id: string;
+    };
+    query?: never;
+    url: '/api/0/issues/{issue_id}/events/latest/';
+};
+
+export type SentryGetLatestEventErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentryGetLatestEventError = SentryGetLatestEventErrors[keyof SentryGetLatestEventErrors];
+
+export type SentryGetLatestEventResponses = {
+    /**
+     * The issue's latest event
+     */
+    200: SentryEvent;
+};
+
+export type SentryGetLatestEventResponse = SentryGetLatestEventResponses[keyof SentryGetLatestEventResponses];
+
+export type SentryListOrganizationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/0/organizations/';
+};
+
+export type SentryListOrganizationsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+};
+
+export type SentryListOrganizationsError = SentryListOrganizationsErrors[keyof SentryListOrganizationsErrors];
+
+export type SentryListOrganizationsResponses = {
+    /**
+     * The synthetic organization
+     */
+    200: Array<SentryOrganization>;
+};
+
+export type SentryListOrganizationsResponse = SentryListOrganizationsResponses[keyof SentryListOrganizationsResponses];
+
 export type SourceMapsOrgDetailsData = {
     body?: never;
     path: {
@@ -2190,6 +2486,76 @@ export type SourceMapsChunkUploadResponses = {
     200: unknown;
 };
 
+export type SentryListReposData = {
+    body?: never;
+    path: {
+        /**
+         * Organization slug (synthetic — accepted and ignored)
+         */
+        org_slug: string;
+    };
+    query?: never;
+    url: '/api/0/organizations/{org_slug}/repos/';
+};
+
+export type SentryListReposErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+};
+
+export type SentryListReposError = SentryListReposErrors[keyof SentryListReposErrors];
+
+export type SentryListReposResponses = {
+    /**
+     * Connected repositories: always none
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type SentryListReposResponse = SentryListReposResponses[keyof SentryListReposResponses];
+
+export type SentryListProjectsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Page size, at most 100 (default: 100).
+         */
+        per_page?: number | null;
+        /**
+         * A cursor from the `Link` header.
+         */
+        cursor?: string | null;
+    };
+    url: '/api/0/projects/';
+};
+
+export type SentryListProjectsErrors = {
+    /**
+     * Invalid query parameter
+     */
+    400: ErrorResponse;
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+};
+
+export type SentryListProjectsError = SentryListProjectsErrors[keyof SentryListProjectsErrors];
+
+export type SentryListProjectsResponses = {
+    /**
+     * Projects, newest first; paginated by the `Link` header
+     */
+    200: Array<SentryProject>;
+};
+
+export type SentryListProjectsResponse = SentryListProjectsResponses[keyof SentryListProjectsResponses];
+
 export type SourceMapsListData = {
     body?: never;
     path: {
@@ -2227,6 +2593,69 @@ export type SourceMapsListResponses = {
 };
 
 export type SourceMapsListResponse = SourceMapsListResponses[keyof SourceMapsListResponses];
+
+export type SentryListIssuesData = {
+    body?: never;
+    path: {
+        /**
+         * Organization slug (synthetic — accepted and ignored)
+         */
+        org_slug: string;
+        /**
+         * Project slug
+         */
+        project_slug: string;
+    };
+    query?: {
+        /**
+         * Search: `is:unresolved|resolved|ignored` and free text (default: `is:unresolved`).
+         */
+        query?: string | null;
+        /**
+         * `date` (default), `new` or `freq`.
+         */
+        sort?: string | null;
+        /**
+         * Page size, at most 100 (default: 100).
+         */
+        limit?: string | null;
+        /**
+         * A cursor from the `Link` header.
+         */
+        cursor?: string | null;
+        /**
+         * `24h` (default), `14d`, or empty for no stats.
+         */
+        statsPeriod?: string | null;
+    };
+    url: '/api/0/projects/{org_slug}/{project_slug}/issues/';
+};
+
+export type SentryListIssuesErrors = {
+    /**
+     * Invalid query parameter
+     */
+    400: ErrorResponse;
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentryListIssuesError = SentryListIssuesErrors[keyof SentryListIssuesErrors];
+
+export type SentryListIssuesResponses = {
+    /**
+     * Issues; paginated by the `Link` header
+     */
+    200: Array<SentryIssue>;
+};
+
+export type SentryListIssuesResponse = SentryListIssuesResponses[keyof SentryListIssuesResponses];
 
 export type ReleasesCreateData = {
     body: CreateRelease;
@@ -7438,3 +7867,32 @@ export type HealthVersionResponses = {
 };
 
 export type HealthVersionResponse = HealthVersionResponses[keyof HealthVersionResponses];
+
+export type SentryOpenIssueData = {
+    body?: never;
+    path: {
+        /**
+         * Organization slug (synthetic — accepted and ignored)
+         */
+        org_slug: string;
+        /**
+         * Project slug (ignored: the id names the issue)
+         */
+        project_slug: string;
+        /**
+         * Issue id (`numeric_id`), digits only
+         */
+        issue_id: string;
+    };
+    query?: never;
+    url: '/{org_slug}/{project_slug}/issues/{issue_id}';
+};
+
+export type SentryOpenIssueErrors = {
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentryOpenIssueError = SentryOpenIssueErrors[keyof SentryOpenIssueErrors];

@@ -283,7 +283,7 @@ fn kotlin_diagnostic_wrapper(exceptions: &[&Value]) -> Option<u64> {
     None
 }
 
-fn exception_values(event_data: &Value) -> Option<&Vec<Value>> {
+pub(crate) fn exception_values(event_data: &Value) -> Option<&Vec<Value>> {
     let exception = event_data.get("exception")?;
     if exception.is_array() {
         exception.as_array()

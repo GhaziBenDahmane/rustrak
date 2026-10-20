@@ -54,6 +54,7 @@ const REDIRECTS: &[&str] = &[
     "/api/github/callback",
     "/api/github/installed",
     "/auth/sso/callback",
+    "/{org_slug}/{project_slug}/issues/{issue_id}",
 ];
 
 /// `GET`s that cannot answer 200 against the seed: a row it has no way to
@@ -72,6 +73,7 @@ struct Seed {
     project_slug: String,
     token_id: i32,
     issue_id: Uuid,
+    issue_numeric_id: i64,
     event_row_id: Uuid,
     sdk_event_id: Uuid,
     transaction_id: Uuid,
@@ -238,6 +240,7 @@ async fn seed(db: &TestDb) -> (Seed, String) {
         project_slug: project.slug,
         token_id: token.id,
         issue_id: issue.id,
+        issue_numeric_id: issue.numeric_id,
         event_row_id,
         sdk_event_id,
         transaction_id,
@@ -257,6 +260,7 @@ fn param_value(name: &str, path: &str, schema: &Value, seed: &Seed) -> String {
         "id" if path.starts_with("/api/tokens/") => seed.token_id.to_string(),
         "id" if path.starts_with("/api/integrations/") => seed.integration_id.to_string(),
         "name" if path.ends_with("/transactions/stats/group") => "GET%20%2Fcontract".into(),
+        "issue_id" if path.starts_with("/api/0/") => seed.issue_numeric_id.to_string(),
         "issue_id" => seed.issue_id.to_string(),
         "event_id" if path.contains("/events/sentry/") => seed.sdk_event_id.simple().to_string(),
         "event_id" => seed.event_row_id.to_string(),
@@ -418,6 +422,7 @@ async fn every_get_matches_the_published_spec() {
             .configure(routes::invitations::configure)
             .configure(routes::alerts::configure_channels)
             .configure(routes::sourcemaps::configure)
+            .configure(routes::sentry_api::configure)
             .configure(routes::storage::configure)
             .configure(routes::telemetry::configure)
             .configure(routes::mcp::configure)

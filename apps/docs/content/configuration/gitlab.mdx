@@ -1,0 +1,58 @@
+# GitLab
+
+GitLab's **Error Tracking** panel can show Rustrak's issues inside GitLab.
+GitLab does not receive your errors: your apps keep sending them to Rustrak
+with any Sentry SDK, and GitLab reads them from Rustrak's API. From a GitLab
+project you can then:
+
+- **List the project's errors** under **Monitor → Error tracking**, filter
+  them by status and search them.
+- **Open an error** with its stack trace, from its latest event.
+- **Resolve, ignore or reopen it.** The change is made in Rustrak.
+- **Jump to Rustrak** with **View in Sentry**.
+
+GitLab talks to Rustrak as it would to a self-hosted Sentry: Rustrak answers
+the part of Sentry's API that GitLab reads.
+
+## Connect a GitLab project
+
+1. In Rustrak, create an API token under **Settings → API Tokens**. GitLab
+   acts with that token, so it sees the projects its owner sees. Resolving
+   needs at least the **Editor** role on the project.
+2. In GitLab, open the project's **Settings → Monitor → Error Tracking**,
+   enable it and choose **Sentry** as the backend.
+3. Set **Sentry API URL** to your Rustrak address, for example
+   `https://rustrak.example.com`, and paste the token as the
+   **Auth Token**.
+4. Press **Connect**, pick the Rustrak project from the list and save.
+
+The project list shows each project under an organization called
+**Rustrak**: Rustrak has no organizations, so one stands in for the whole
+server.
+
+## What GitLab must be able to reach
+
+GitLab calls Rustrak, never the other way round, so only GitLab needs a
+route to Rustrak.
+
+- GitLab refuses an API URL on `localhost` or on a private network address.
+  Give it an address it accepts as public.
+- Rustrak must answer at the root of that address: GitLab rejects a URL with
+  a path such as `https://example.com/rustrak`.
+- **View in Sentry** opens `/<organization>/<project>/issues/<id>` on the same
+  address, which Rustrak redirects to the issue in its dashboard. Set
+  `PUBLIC_URL` (or `DASHBOARD_URL`) to the address people use, so the
+  redirect lands there.
+
+## Differences from Sentry
+
+- **Search** understands `is:unresolved`, `is:resolved` and `is:ignored`;
+  everything else in the search box matches the issue's title, culprit and
+  location as free text.
+- **Sorting** by last seen, first seen and number of events works. Sorting
+  by number of users does not.
+- **Users** counts the distinct users of the last 24 hours, as Rustrak's own
+  issue list does.
+- **Creating a GitLab issue from an error** works, but GitLab cannot link
+  the two back, because Rustrak connects no repositories through Sentry's
+  integrations.
