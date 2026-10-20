@@ -1,0 +1,63 @@
+---
+version: v0.19.1
+title: GitLab Error Tracking
+description: GitLab's Error Tracking panel can list and triage Rustrak issues, issues get a numeric id, and @rustrak/mcp is no longer published
+date: 2026-10-20
+tags: [server, client, gitlab, mcp]
+---
+
+## GitLab Error Tracking
+
+GitLab's **Monitor → Error tracking** panel can now show Rustrak's issues.
+Your apps keep sending errors to Rustrak with any Sentry SDK; GitLab reads
+them from Rustrak's API, and nothing is forwarded to GitLab.
+
+- List a project's errors, filter them by status and search them. Search
+  understands `is:unresolved`, `is:resolved` and `is:ignored`; anything else
+  matches the issue's title, culprit and location
+- Open an error with its stack trace, from its latest event
+- Resolve, ignore or reopen it. The change is made in Rustrak
+- **View in Sentry** jumps to the issue in the dashboard. Set `PUBLIC_URL`
+  to the address people use, so the redirect lands on the right host
+- GitLab sees one organization called **Rustrak**, standing in for the whole
+  server, and no repositories: Rustrak connects none through Sentry's
+  integrations, so GitLab cannot link an error to a GitLab issue
+
+Connect a project with an API token; resolving needs the **Editor** role.
+GitLab refuses an API URL on `localhost` or a private address. See
+[GitLab](/configuration/gitlab) for the steps.
+
+Under the hood Rustrak answers the part of Sentry's API that GitLab reads:
+projects, organizations, a project's issues, one issue and its latest event,
+issue updates, and the legacy issue page GitLab opens.
+
+## Numeric issue ids
+
+GitLab only accepts digits as an issue id, so every issue now carries a
+`numeric_id` next to its UUID, unique across projects.
+
+- Existing issues are numbered when the migration runs
+- An id is never reused: a deleted issue's number is not handed to a later one.
+  SQLite keeps a counter that a trigger advances on insert; Postgres uses an
+  identity column
+
+## `@rustrak/mcp` is no longer published
+
+The standalone package is removed. The server has served MCP at `/mcp` with
+the same tools since 0.19.0, and nothing needs to be installed next to an
+assistant. If you still install the package, pin `@rustrak/mcp@0.18.1` or
+move the connection to `/mcp`. See [MCP](/sdks/mcp).
+
+## Client
+
+`@rustrak/client` gains a `sentry` resource: `getIssue`, `getLatestEvent`,
+`listIssues`, `listOrganizations`, `listProjects`, `listRepos`, `openIssue`
+and `updateIssue`. It is generated from the OpenAPI spec like the rest of the
+client.
+
+## Improvements
+
+- The new endpoints are in the OpenAPI spec and the generated client, covered
+  by a contract test that runs with the `openapi` feature
+- A new [GitLab](/configuration/gitlab) page covers connecting a project, what
+  GitLab must be able to reach, and where the panel differs from Sentry
