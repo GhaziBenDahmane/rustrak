@@ -13,6 +13,248 @@
     "version": "0.19.0"
   },
   "paths": {
+    "/api/0/issues/{issue_id}/": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /api/0/issues/{issue_id}/",
+        "description": "One issue with its releases and its 24h and 30d series (Sentry's\n`GroupDetailsEndpoint`). Also served under `/groups/` and the\norganization-scoped paths, as Sentry does.",
+        "operationId": "sentry.getIssue",
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue id (`numeric_id`)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issue details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentryIssueDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "PUT /api/0/issues/{issue_id}/",
+        "description": "Sets an issue's status and returns the issue (Sentry's\n`GroupDetailsEndpoint.put`). The change goes through Rustrak's own\nissue update, so it is recorded and mirrored like any other.",
+        "operationId": "sentry.updateIssue",
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue id (`numeric_id`)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Issue updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentryIssue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/0/issues/{issue_id}/events/latest/": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /api/0/issues/{issue_id}/events/latest/",
+        "description": "The issue's most recent event (Sentry's `GroupEventDetailsEndpoint`,\n`issues/endpoints/group_event_details.py`).",
+        "operationId": "sentry.getLatestEvent",
+        "parameters": [
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue id (`numeric_id`)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The issue's latest event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentryEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/0/organizations/": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /api/0/organizations/",
+        "description": "The organizations the token belongs to (Sentry's\n`OrganizationIndexEndpoint`): always the one synthetic org.",
+        "operationId": "sentry.listOrganizations",
+        "responses": {
+          "200": {
+            "description": "The synthetic organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SentryOrganization"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/0/organizations/{org_slug}/": {
       "get": {
         "tags": [
@@ -228,6 +470,134 @@
         ]
       }
     },
+    "/api/0/organizations/{org_slug}/repos/": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /api/0/organizations/{org_slug}/repos/",
+        "description": "The code repositories connected to the organization (Sentry's\n`OrganizationRepositoriesEndpoint`). Rustrak connects none through\nSentry's integrations, so the list is always empty.",
+        "operationId": "sentry.listRepos",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "description": "Organization slug (synthetic — accepted and ignored)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connected repositories: always none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/0/projects/": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /api/0/projects/",
+        "description": "The projects the token can see, newest first (Sentry's\n`ProjectIndexEndpoint`, `core/endpoints/project_index.py`).",
+        "operationId": "sentry.listProjects",
+        "parameters": [
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "Page size, at most 100 (default: 100).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "A cursor from the `Link` header.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projects, newest first; paginated by the `Link` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SentryProject"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/0/projects/{org_slug}/{project_slug}/files/source-maps/": {
       "get": {
         "tags": [
@@ -278,6 +648,146 @@
           },
           "404": {
             "description": "Project not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/0/projects/{org_slug}/{project_slug}/issues/": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /api/0/projects/{org_slug}/{project_slug}/issues/",
+        "description": "A project's issues, filtered by `query`, sorted by `sort` and paginated\nby `cursor` (Sentry's `ProjectGroupIndexEndpoint`,\n`issues/endpoints/project_group_index.py`).",
+        "operationId": "sentry.listIssues",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "description": "Organization slug (synthetic — accepted and ignored)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project_slug",
+            "in": "path",
+            "description": "Project slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "description": "Search: `is:unresolved|resolved|ignored` and free text (default: `is:unresolved`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`date` (default), `new` or `freq`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size, at most 100 (default: 100).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "A cursor from the `Link` header.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "statsPeriod",
+            "in": "query",
+            "description": "`24h` (default), `14d`, or empty for no stats.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Issues; paginated by the `Link` header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SentryIssue"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -12812,6 +13322,25 @@
           }
         }
       },
+      "IssueUpdate": {
+        "type": "object",
+        "description": "Body of an issue update: the fields of `GroupValidator`\n(`api/helpers/group_index/validators/group.py`) Rustrak acts on.",
+        "properties": {
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`resolved`, `unresolved`, `ignored`, `resolvedInNextRelease` or `muted`."
+          },
+          "substatus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "KindAge": {
         "type": "object",
         "description": "How long ago a kind of data arrived: rows per age bucket, and the oldest.",
@@ -14162,6 +14691,380 @@
         "properties": {
           "has_seen": {
             "type": "boolean"
+          }
+        }
+      },
+      "SentryEvent": {
+        "type": "object",
+        "description": "Subset of `EventSerializer` for an error event\n(`api/serializers/models/event.py`).",
+        "required": [
+          "id",
+          "eventID",
+          "groupID",
+          "projectID",
+          "entries",
+          "message",
+          "title",
+          "platform",
+          "type",
+          "metadata",
+          "tags",
+          "culprit",
+          "dateCreated",
+          "dateReceived"
+        ],
+        "properties": {
+          "culprit": {
+            "type": "string"
+          },
+          "dateCreated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "dateReceived": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "eventID": {
+            "type": "string"
+          },
+          "groupID": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "projectID": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SentryTag"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "SentryGroupProject": {
+        "type": "object",
+        "description": "`GroupProjectResponse` (`api/serializers/models/group.py`).",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "platform"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "platform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "SentryIssue": {
+        "type": "object",
+        "description": "Subset of `GroupSerializer` plus its seen stats\n(`api/serializers/models/group.py`), and `stats` when the caller asked\nfor a series (`StreamGroupSerializer`, `group_stream.py`).",
+        "required": [
+          "id",
+          "shortId",
+          "title",
+          "culprit",
+          "logger",
+          "level",
+          "status",
+          "statusDetails",
+          "substatus",
+          "platform",
+          "project",
+          "type",
+          "metadata",
+          "issueType",
+          "issueCategory",
+          "priority",
+          "count",
+          "userCount",
+          "firstSeen",
+          "lastSeen",
+          "annotations"
+        ],
+        "properties": {
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Links to external issues; Rustrak keeps none, so always empty."
+          },
+          "count": {
+            "type": "string",
+            "description": "`str(times_seen)`: Sentry sends the count as a string."
+          },
+          "culprit": {
+            "type": "string"
+          },
+          "firstSeen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "description": "The issue's `numeric_id`: Sentry's group ids are integers."
+          },
+          "issueCategory": {
+            "type": "string"
+          },
+          "issueType": {
+            "type": "string"
+          },
+          "lastSeen": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "level": {
+            "type": "string"
+          },
+          "logger": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "platform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/SentryGroupProject"
+          },
+          "shortId": {
+            "type": "string"
+          },
+          "stats": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "`[unix_ts, count]` per bucket, keyed by stats period."
+          },
+          "status": {
+            "type": "string"
+          },
+          "statusDetails": {
+            "type": "object"
+          },
+          "substatus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "`error`, or `default` for an issue made of messages."
+          },
+          "userCount": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SentryIssueDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SentryIssue"
+          },
+          {
+            "type": "object",
+            "required": [
+              "firstRelease",
+              "lastRelease",
+              "userReportCount"
+            ],
+            "properties": {
+              "firstRelease": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SentryRelease"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "lastRelease": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SentryRelease"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "userReportCount": {
+                "type": "integer",
+                "format": "int64"
+              }
+            }
+          }
+        ],
+        "description": "Subset of `GroupDetailsEndpoint`'s response\n(`issues/endpoints/group_details.py`)."
+      },
+      "SentryOrganization": {
+        "type": "object",
+        "description": "Subset of `OrganizationSummarySerializer`\n(`api/serializers/models/organization.py`).",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SentryStatus"
+          }
+        }
+      },
+      "SentryProject": {
+        "type": "object",
+        "description": "Subset of `ProjectWithOrganizationSerializer`\n(`api/serializers/models/project.py`). Sentry's ids are strings.",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "platform",
+          "dateCreated",
+          "status",
+          "organization"
+        ],
+        "properties": {
+          "dateCreated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/SentryOrganization"
+          },
+          "platform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`STATUS_LABELS[ObjectStatus.ACTIVE]`: Rustrak only lists live projects."
+          }
+        }
+      },
+      "SentryRelease": {
+        "type": "object",
+        "description": "A release as `serialize_releases` (`api/helpers/group_index/index.py`)\nfalls back to it, with the serializer's `shortVersion`, which is the\nversion itself (`api/serializers/models/release.py`).",
+        "required": [
+          "version",
+          "shortVersion"
+        ],
+        "properties": {
+          "shortVersion": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "SentryStatus": {
+        "type": "object",
+        "description": "`{\"id\", \"name\"}` of a status, as Sentry nests it in an organization.",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SentryTag": {
+        "type": "object",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
           }
         }
       },

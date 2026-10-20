@@ -539,8 +539,6 @@ impl IssueService {
         }
         let offset = (page - 1) * per_page;
 
-        let status_clause = filter_clause(filter);
-
         // Build ORDER BY clause
         let order_clause = match (sort, order) {
             (IssueSort::DigestOrder, SortOrder::Desc) => "digest_order DESC",
@@ -550,6 +548,33 @@ impl IssueService {
             (IssueSort::EventCount, SortOrder::Desc) => "digested_event_count DESC, id DESC",
             (IssueSort::EventCount, SortOrder::Asc) => "digested_event_count ASC, id ASC",
         };
+
+        Self::list_window(
+            pool,
+            project_id,
+            order_clause,
+            filter,
+            offset,
+            per_page,
+            search,
+        )
+        .await
+    }
+
+    /// One window of a project's issues: `filter` and `search` as in
+    /// [`Self::list_offset`], ordered by a trusted `order_clause`.
+    ///
+    /// Returns (issues, total_count) where total_count is the total matching issues.
+    pub(crate) async fn list_window(
+        pool: &DbPool,
+        project_id: i32,
+        order_clause: &str,
+        filter: IssueFilter,
+        offset: i64,
+        per_page: i64,
+        search: Option<&str>,
+    ) -> AppResult<(Vec<Issue>, i64)> {
+        let status_clause = filter_clause(filter);
 
         // Normalize the search term into a case-insensitive LIKE pattern (works
         // on both Postgres and SQLite, unlike Postgres-only ILIKE). Literal
@@ -1249,6 +1274,74 @@ impl IssueService {
             user_count: users.len() as i64,
             tags,
         })
+    }
+
+    /// Event counts of each issue in the last `segments` buckets of `interval`
+    /// seconds, oldest first, as `[bucket_start_unix, count]`: Sentry's issue
+    /// stats series, whose buckets are aligned to the epoch
+    /// (`tsdb/base.py::normalize_to_epoch`) and end at the current one.
+    pub async fn event_series(
+        pool: &DbPool,
+        issue_ids: &[Uuid],
+        segments: i64,
+        interval: i64,
+    ) -> AppResult<HashMap<Uuid, Vec<[i64; 2]>>> {
+        let last = Utc::now().timestamp() / interval * interval;
+        let first = last - (segments - 1) * interval;
+        let first_dt = DateTime::<Utc>::from_timestamp(first, 0).unwrap_or_else(Utc::now);
+
+        let mut out: HashMap<Uuid, Vec<[i64; 2]>> = issue_ids
+            .iter()
+            .map(|id| {
+                let series = (0..segments).map(|i| [first + i * interval, 0]).collect();
+                (*id, series)
+            })
+            .collect();
+        if issue_ids.is_empty() {
+            return Ok(out);
+        }
+
+        #[cfg(feature = "postgres")]
+        let rows: Vec<(Uuid, i64, i64)> = sqlx::query_as(
+            "SELECT issue_id, FLOOR(EXTRACT(EPOCH FROM timestamp))::BIGINT / $3 * $3 AS bucket, \
+             COUNT(*) FROM events WHERE issue_id = ANY($1) AND timestamp >= $2 \
+             GROUP BY issue_id, bucket",
+        )
+        .bind(issue_ids)
+        .bind(first_dt)
+        .bind(interval)
+        .fetch_all(pool)
+        .await?;
+
+        #[cfg(not(feature = "postgres"))]
+        let rows: Vec<(Uuid, i64, i64)> = {
+            use sqlx::QueryBuilder;
+            let mut qb =
+                QueryBuilder::new("SELECT issue_id, CAST(strftime('%s', timestamp) AS INTEGER) / ");
+            qb.push_bind(interval);
+            qb.push(" * ");
+            qb.push_bind(interval);
+            qb.push(" AS bucket, COUNT(*) FROM events WHERE issue_id IN (");
+            let mut sep = qb.separated(", ");
+            for id in issue_ids {
+                sep.push_bind(*id);
+            }
+            qb.push(") AND datetime(timestamp) >= datetime(");
+            qb.push_bind(first_dt.naive_utc());
+            qb.push(") GROUP BY issue_id, bucket");
+            qb.build_query_as().fetch_all(pool).await?
+        };
+
+        for (issue_id, bucket, count) in rows {
+            let idx = (bucket - first) / interval;
+            if let Some(slot) = out
+                .get_mut(&issue_id)
+                .and_then(|series| series.get_mut(idx as usize))
+            {
+                slot[1] = count;
+            }
+        }
+        Ok(out)
     }
 
     /// Bulk-computes [`IssueListStats`] (user_count + 24h trend) for the given

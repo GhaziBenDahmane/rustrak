@@ -18,6 +18,7 @@ pub mod period;
 pub mod projects;
 pub mod releases;
 pub mod schedules;
+pub mod sentry_api;
 pub mod sessions;
 pub mod sourcemaps;
 pub mod spans;

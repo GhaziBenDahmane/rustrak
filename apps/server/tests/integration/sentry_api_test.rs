@@ -1,0 +1,912 @@
+//! Integration tests for the Sentry management API subset (`/api/0/...`)
+//! that GitLab's error tracking consumes. Shapes follow Sentry's serializers;
+//! see `routes/sentry_api.rs` for the source references.
+
+use crate::common::{null_sourcemap_provider, process_error_event, TestDb};
+use actix_web::{test, web, App};
+use chrono::{DateTime, Utc};
+use rustrak::config::RateLimitConfig;
+use rustrak::db::DbPool;
+use rustrak::ingest::{store_event, EventMetadata};
+use rustrak::models::{CreateAuthToken, CreateProject, CreateUserRequest, ProjectRole, UserRole};
+use rustrak::routes;
+use rustrak::services::{
+    AuthTokenService, EventService, IssueService, ProjectMemberService, ProjectService,
+    UsersService,
+};
+use serde_json::{json, Value};
+use uuid::Uuid;
+
+macro_rules! app {
+    ($pool:expr) => {
+        test::init_service(
+            App::new()
+                .app_data(web::Data::new($pool.clone()))
+                .app_data(web::Data::new(config()))
+                .configure(routes::sentry_api::configure),
+        )
+        .await
+    };
+}
+
+/// The dashboard is at `https://rustrak.example.com`.
+fn config() -> rustrak::config::Config {
+    use rustrak::config::*;
+    use std::time::Duration;
+    Config {
+        host: "127.0.0.1".to_string(),
+        port: 0,
+        database: DatabaseConfig {
+            url: String::new(),
+            max_connections: 1,
+            min_connections: 1,
+            acquire_timeout: Duration::from_secs(5),
+            idle_timeout: Duration::from_secs(60),
+            max_lifetime: Duration::from_secs(300),
+        },
+        rate_limit: RateLimitConfig {
+            max_events_per_minute: 1000,
+            max_events_per_hour: 10000,
+            max_events_per_project_per_minute: 1000,
+            max_events_per_project_per_hour: 10000,
+        },
+        security: SecurityConfig {
+            ssl_proxy: false,
+            session_secret_key: None,
+        },
+        ingest_dir: None,
+        public_url: Some("https://rustrak.example.com".to_string()),
+        sourcemap_storage_path: "/tmp/test_sourcemaps".to_string(),
+        sourcemap_cache_bytes: 1024,
+        max_chunk_size_bytes: 1024,
+        session_flush_interval_secs: 30,
+        session_cardinality_cap: 10,
+        dashboard: DashboardConfig {
+            dir: "./static".to_string(),
+            enabled: true,
+            url: None,
+        },
+        telemetry: TelemetryConfig {
+            enabled: false,
+            do_not_track: false,
+        },
+    }
+}
+
+async fn admin_token(pool: &DbPool) -> String {
+    AuthTokenService::create(pool, CreateAuthToken { description: None })
+        .await
+        .expect("token")
+        .token
+}
+
+/// A token for a non-admin user holding `role` on `project_id`.
+async fn member_token(pool: &DbPool, project_id: i32, role: ProjectRole) -> String {
+    let req = CreateUserRequest {
+        email: format!("member-{project_id}-{}@example.com", role.as_str()),
+        password: "password123".to_string(),
+    };
+    let user = UsersService::create_user(pool, &req, UserRole::Member)
+        .await
+        .expect("user");
+    ProjectMemberService::upsert(pool, project_id, user.id, role)
+        .await
+        .expect("member");
+    AuthTokenService::create_for_user(pool, CreateAuthToken { description: None }, Some(user.id))
+        .await
+        .expect("token")
+        .token
+}
+
+async fn project(pool: &DbPool, name: &str) -> rustrak::models::Project {
+    ProjectService::create(
+        pool,
+        CreateProject {
+            name: name.to_string(),
+            slug: None,
+            platform: Some("python".to_string()),
+        },
+    )
+    .await
+    .expect("project")
+}
+
+/// Digests an error event through the real pipeline and returns its issue.
+async fn ingest(
+    pool: &DbPool,
+    project_id: i32,
+    exc_type: &str,
+    exc_value: &str,
+    timestamp: DateTime<Utc>,
+) -> rustrak::models::Issue {
+    ingest_with(pool, project_id, exc_type, exc_value, timestamp, json!({})).await
+}
+
+/// [`ingest`], with `extra` merged over the event's top-level fields.
+async fn ingest_with(
+    pool: &DbPool,
+    project_id: i32,
+    exc_type: &str,
+    exc_value: &str,
+    timestamp: DateTime<Utc>,
+    extra: Value,
+) -> rustrak::models::Issue {
+    let dir = tempfile::TempDir::new().unwrap();
+    let event_id = Uuid::new_v4();
+    let mut event = json!({
+        "event_id": event_id.simple().to_string(),
+        "timestamp": timestamp.timestamp() as f64,
+        "platform": "python",
+        "level": "error",
+        "user": {"id": exc_value},
+        "exception": {"values": [{
+            "type": exc_type,
+            "value": exc_value,
+            "stacktrace": {"frames": [{
+                "filename": "app.py",
+                "abs_path": "/srv/app.py",
+                "function": "main",
+                "lineno": 10,
+                "colno": 4,
+                "in_app": true,
+                "pre_context": ["def main():"],
+                "context_line": "    raise ValueError()",
+                "post_context": [""]
+            }]}
+        }]}
+    });
+    for (key, value) in extra.as_object().unwrap() {
+        event[key] = value.clone();
+    }
+    store_event(
+        dir.path(),
+        &event_id.simple().to_string(),
+        &serde_json::to_vec(&event).unwrap(),
+    )
+    .await
+    .unwrap();
+    let metadata = EventMetadata {
+        event_id: event_id.simple().to_string(),
+        project_id,
+        ingested_at: timestamp,
+        remote_addr: None,
+    };
+    let limits = RateLimitConfig {
+        max_events_per_minute: 1000,
+        max_events_per_hour: 10000,
+        max_events_per_project_per_minute: 1000,
+        max_events_per_project_per_hour: 10000,
+    };
+    process_error_event(
+        pool,
+        &metadata,
+        dir.path(),
+        &limits,
+        null_sourcemap_provider(),
+    )
+    .await
+    .expect("digest");
+    let issue_id = EventService::issue_id_for_event(pool, project_id, event_id)
+        .await
+        .unwrap()
+        .expect("event has an issue");
+    IssueService::get_by_id(pool, issue_id).await.unwrap()
+}
+
+async fn get_json(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    uri: &str,
+    token: &str,
+) -> (u16, Value) {
+    let req = test::TestRequest::get()
+        .uri(uri)
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    let status = resp.status().as_u16();
+    let body = test::read_body(resp).await;
+    (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
+}
+
+// =============================================================================
+// GET /api/0/projects/
+// =============================================================================
+
+#[actix_web::test]
+async fn projects_lists_projects_with_their_organization() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let app = app!(db.pool);
+
+    let (status, body) = get_json(&app, "/api/0/projects/", &token).await;
+
+    assert_eq!(status, 200);
+    let item = &body.as_array().expect("bare list")[0];
+    assert_eq!(item["id"], p.id.to_string());
+    assert_eq!(item["slug"], "demo-app");
+    assert_eq!(item["name"], "Demo App");
+    assert_eq!(item["platform"], "python");
+    assert_eq!(item["status"], "active");
+    assert!(item["dateCreated"].is_string());
+    assert_eq!(item["organization"]["id"], "1");
+    assert_eq!(item["organization"]["slug"], "rustrak");
+    assert_eq!(item["organization"]["name"], "Rustrak");
+    assert_eq!(item["organization"]["status"]["id"], "active");
+}
+
+#[actix_web::test]
+async fn projects_shows_a_member_only_their_projects() {
+    let db = TestDb::new().await;
+    let mine = project(&db.pool, "Mine").await;
+    project(&db.pool, "Not Mine").await;
+    let token = member_token(&db.pool, mine.id, ProjectRole::Viewer).await;
+    let app = app!(db.pool);
+
+    let (status, body) = get_json(&app, "/api/0/projects/", &token).await;
+
+    assert_eq!(status, 200);
+    let slugs: Vec<&str> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["slug"].as_str().unwrap())
+        .collect();
+    assert_eq!(slugs, vec!["mine"]);
+}
+
+#[actix_web::test]
+async fn projects_requires_a_token() {
+    let db = TestDb::new().await;
+    let app = app!(db.pool);
+
+    let req = test::TestRequest::get()
+        .uri("/api/0/projects/")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    assert_eq!(resp.status(), 401);
+}
+
+#[actix_web::test]
+async fn projects_paginate_with_per_page_and_the_link_header() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    project(&db.pool, "First").await;
+    project(&db.pool, "Second").await;
+    let app = app!(db.pool);
+
+    let page = |cursor: &str| {
+        test::TestRequest::get()
+            .uri(&format!("/api/0/projects/?per_page=1&cursor={cursor}"))
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .to_request()
+    };
+
+    let first: Value = test::call_and_read_body_json(&app, page("1:0:0")).await;
+    let resp = test::call_service(&app, page("1:1:0")).await;
+    let link = resp
+        .headers()
+        .get("Link")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let second: Value = test::read_body_json(resp).await;
+
+    let mut slugs = vec![first[0]["slug"].clone(), second[0]["slug"].clone()];
+    slugs.sort_by_key(|s| s.to_string());
+    assert_eq!(slugs, ["first", "second"]);
+    assert!(
+        link.contains(r#"rel="previous"; results="true"; cursor="1:0:1""#),
+        "{link}"
+    );
+    assert!(
+        link.contains(r#"rel="next"; results="false"; cursor="1:2:0""#),
+        "{link}"
+    );
+}
+
+// =============================================================================
+// GET /api/0/organizations/
+// =============================================================================
+
+#[actix_web::test]
+async fn organizations_lists_the_single_synthetic_org() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let app = app!(db.pool);
+
+    let (status, body) = get_json(&app, "/api/0/organizations/", &token).await;
+
+    assert_eq!(status, 200);
+    let orgs = body.as_array().expect("bare list");
+    assert_eq!(orgs.len(), 1);
+    assert_eq!(orgs[0]["slug"], "rustrak");
+    assert_eq!(orgs[0]["id"], "1");
+}
+
+// =============================================================================
+// GET /api/0/projects/{org}/{project}/issues/
+// =============================================================================
+
+#[actix_web::test]
+async fn issues_lists_unresolved_issues_in_sentry_shape() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let resolved = ingest(&db.pool, p.id, "KeyError", "gone", Utc::now()).await;
+    IssueService::set_status(&db.pool, resolved.id, "resolved", None)
+        .await
+        .unwrap();
+    let app = app!(db.pool);
+
+    let (status, body) = get_json(&app, "/api/0/projects/rustrak/demo-app/issues/", &token).await;
+
+    assert_eq!(status, 200);
+    let items = body.as_array().expect("bare list");
+    assert_eq!(items.len(), 1, "query defaults to is:unresolved");
+    let item = &items[0];
+    assert_eq!(item["id"], issue.numeric_id.to_string());
+    assert_eq!(item["shortId"], "DEMO-APP-1");
+    assert_eq!(item["title"], "ValueError: boom");
+    assert_eq!(item["culprit"], issue.culprit);
+    assert_eq!(item["level"], "error");
+    assert_eq!(item["status"], "unresolved");
+    assert_eq!(item["type"], "error");
+    assert_eq!(item["metadata"]["type"], "ValueError");
+    assert_eq!(item["metadata"]["value"], "boom");
+    assert_eq!(item["count"], "1");
+    assert_eq!(item["userCount"], 1);
+    assert!(item["firstSeen"].is_string());
+    assert!(item["lastSeen"].is_string());
+    assert_eq!(item["project"]["id"], p.id.to_string());
+    assert_eq!(item["project"]["slug"], "demo-app");
+    let hourly = item["stats"]["24h"].as_array().expect("24h stats");
+    assert_eq!(hourly.len(), 24);
+    assert_eq!(
+        hourly[23][1], 1,
+        "this hour's event lands in the last bucket"
+    );
+}
+
+#[actix_web::test]
+async fn issues_query_filters_by_status_and_text() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let resolved = ingest(&db.pool, p.id, "KeyError", "gone", Utc::now()).await;
+    IssueService::set_status(&db.pool, resolved.id, "resolved", None)
+        .await
+        .unwrap();
+    let ignored = ingest(&db.pool, p.id, "OSError", "disk", Utc::now()).await;
+    IssueService::set_status(&db.pool, ignored.id, "ignored", None)
+        .await
+        .unwrap();
+    let app = app!(db.pool);
+    let titles = |body: &Value| -> Vec<String> {
+        let mut t: Vec<String> = body
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["title"].as_str().unwrap().to_string())
+            .collect();
+        t.sort();
+        t
+    };
+    let base = "/api/0/projects/rustrak/demo-app/issues/";
+
+    let (_, body) = get_json(&app, &format!("{base}?query=is:resolved"), &token).await;
+    assert_eq!(titles(&body), ["KeyError: gone"]);
+    let (_, body) = get_json(&app, &format!("{base}?query=is:ignored"), &token).await;
+    assert_eq!(titles(&body), ["OSError: disk"]);
+    let (_, body) = get_json(&app, &format!("{base}?query="), &token).await;
+    assert_eq!(
+        body.as_array().unwrap().len(),
+        3,
+        "an empty query lists every issue"
+    );
+    let (_, body) = get_json(&app, &format!("{base}?query=is:unresolved%20boom"), &token).await;
+    assert_eq!(titles(&body), ["ValueError: boom"]);
+    let (_, body) = get_json(&app, &format!("{base}?query=is:unresolved%20gone"), &token).await;
+    assert!(body.as_array().unwrap().is_empty());
+
+    let (status, _) = get_json(&app, &format!("{base}?query=is:bookmarked"), &token).await;
+    assert_eq!(status, 400);
+}
+
+#[actix_web::test]
+async fn issues_sort_follows_sentry_sort_keys() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let old = ingest(
+        &db.pool,
+        p.id,
+        "OldError",
+        "x",
+        Utc::now() - chrono::Duration::hours(2),
+    )
+    .await;
+    ingest(
+        &db.pool,
+        p.id,
+        "OldError",
+        "x",
+        Utc::now() - chrono::Duration::hours(2),
+    )
+    .await;
+    let new = ingest(
+        &db.pool,
+        p.id,
+        "NewError",
+        "y",
+        Utc::now() - chrono::Duration::hours(1),
+    )
+    .await;
+    let app = app!(db.pool);
+    let first = |body: &Value| body[0]["id"].as_str().unwrap().to_string();
+    let base = "/api/0/projects/rustrak/demo-app/issues/";
+
+    let (_, body) = get_json(&app, base, &token).await;
+    assert_eq!(
+        first(&body),
+        new.numeric_id.to_string(),
+        "date: last seen first"
+    );
+    let (_, body) = get_json(&app, &format!("{base}?sort=new"), &token).await;
+    assert_eq!(
+        first(&body),
+        new.numeric_id.to_string(),
+        "new: first seen first"
+    );
+    let (_, body) = get_json(&app, &format!("{base}?sort=freq"), &token).await;
+    assert_eq!(
+        first(&body),
+        old.numeric_id.to_string(),
+        "freq: most events first"
+    );
+
+    let (status, body) = get_json(&app, &format!("{base}?sort=user"), &token).await;
+    assert_eq!(status, 400);
+    assert!(body.to_string().contains("Sort key 'user' not supported."));
+}
+
+#[actix_web::test]
+async fn issues_paginate_with_sentry_cursors_in_the_link_header() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    for n in 0..3 {
+        ingest(&db.pool, p.id, &format!("E{n}"), "x", Utc::now()).await;
+    }
+    let app = app!(db.pool);
+    let page = |uri: String| {
+        test::TestRequest::get()
+            .uri(&uri)
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .to_request()
+    };
+    let base = "/api/0/projects/rustrak/demo-app/issues/?limit=2";
+
+    let resp = test::call_service(&app, page(base.to_string())).await;
+    let link = resp
+        .headers()
+        .get("Link")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body.as_array().unwrap().len(), 2);
+    assert!(
+        link.contains(r#"rel="previous"; results="false"; cursor="2:-1:1""#),
+        "{link}"
+    );
+    assert!(
+        link.contains(r#"rel="next"; results="true"; cursor="2:1:0""#),
+        "{link}"
+    );
+    assert!(link.contains("/api/0/projects/rustrak/demo-app/issues/?limit=2&cursor=2:1:0>"));
+
+    let resp = test::call_service(&app, page(format!("{base}&cursor=2:1:0"))).await;
+    let link = resp
+        .headers()
+        .get("Link")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert!(
+        link.contains(r#"rel="previous"; results="true"; cursor="2:0:1""#),
+        "{link}"
+    );
+    assert!(
+        link.contains(r#"rel="next"; results="false"; cursor="2:2:0""#),
+        "{link}"
+    );
+
+    let (status, _) = get_json(&app, &format!("{base}&cursor=bogus"), &token).await;
+    assert_eq!(status, 400);
+}
+
+#[actix_web::test]
+async fn issues_stats_period_picks_the_series() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    ingest(
+        &db.pool,
+        p.id,
+        "ValueError",
+        "boom",
+        Utc::now() - chrono::Duration::days(2),
+    )
+    .await;
+    let app = app!(db.pool);
+    let base = "/api/0/projects/rustrak/demo-app/issues/";
+
+    let (_, body) = get_json(&app, &format!("{base}?statsPeriod=14d"), &token).await;
+    let daily = body[0]["stats"]["14d"].as_array().unwrap();
+    assert_eq!(daily.len(), 14);
+    assert_eq!(
+        daily[11][1], 1,
+        "two days ago lands two buckets before today"
+    );
+    assert_eq!(
+        daily[13][0].as_i64().unwrap() % 86_400,
+        0,
+        "buckets align to the day"
+    );
+
+    let (_, body) = get_json(&app, &format!("{base}?statsPeriod="), &token).await;
+    assert!(body[0].get("stats").is_none());
+
+    let (status, _) = get_json(&app, &format!("{base}?statsPeriod=7d"), &token).await;
+    assert_eq!(status, 400);
+}
+
+// =============================================================================
+// GET /api/0/issues/{id}/
+// =============================================================================
+
+#[actix_web::test]
+async fn issue_details_adds_releases_and_both_stats_series() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let app = app!(db.pool);
+
+    for uri in [
+        format!("/api/0/issues/{}/", issue.numeric_id),
+        format!("/api/0/groups/{}/", issue.numeric_id),
+        format!("/api/0/organizations/rustrak/issues/{}/", issue.numeric_id),
+        format!("/api/0/organizations/rustrak/groups/{}/", issue.numeric_id),
+    ] {
+        let (status, body) = get_json(&app, &uri, &token).await;
+        assert_eq!(status, 200, "{uri}");
+        assert_eq!(body["id"], issue.numeric_id.to_string());
+        assert_eq!(body["title"], "ValueError: boom");
+        assert_eq!(body["project"]["id"], p.id.to_string());
+        assert_eq!(body["annotations"], json!([]));
+        assert_eq!(body["userReportCount"], 0);
+        assert_eq!(body["userCount"], 1);
+        assert!(body["firstRelease"].is_null(), "the event named no release");
+        assert_eq!(body["stats"]["24h"].as_array().unwrap().len(), 24);
+        assert_eq!(body["stats"]["30d"].as_array().unwrap().len(), 30);
+    }
+}
+
+#[actix_web::test]
+async fn issue_details_404s_for_unknown_or_inaccessible_issues() {
+    let db = TestDb::new().await;
+    let p = project(&db.pool, "Demo App").await;
+    let other = project(&db.pool, "Other").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let outsider = member_token(&db.pool, other.id, ProjectRole::Admin).await;
+    let token = admin_token(&db.pool).await;
+    let app = app!(db.pool);
+
+    let (status, _) = get_json(
+        &app,
+        &format!("/api/0/issues/{}/", issue.numeric_id),
+        &outsider,
+    )
+    .await;
+    assert_eq!(status, 404);
+    let (status, _) = get_json(
+        &app,
+        &format!("/api/0/issues/{}/", issue.numeric_id + 1),
+        &token,
+    )
+    .await;
+    assert_eq!(status, 404);
+    let (status, _) = get_json(&app, &format!("/api/0/issues/{}/", issue.id), &token).await;
+    assert_eq!(status, 404, "a UUID is not a Sentry issue id");
+}
+
+#[actix_web::test]
+async fn issue_details_names_first_and_last_release() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let release = |v: &str| json!({"release": v});
+    ingest_with(
+        &db.pool,
+        p.id,
+        "ValueError",
+        "boom",
+        Utc::now(),
+        release("1.0.0"),
+    )
+    .await;
+    let issue = ingest_with(
+        &db.pool,
+        p.id,
+        "ValueError",
+        "boom",
+        Utc::now(),
+        release("1.1.0"),
+    )
+    .await;
+    let app = app!(db.pool);
+
+    let (_, body) = get_json(
+        &app,
+        &format!("/api/0/issues/{}/", issue.numeric_id),
+        &token,
+    )
+    .await;
+
+    assert_eq!(
+        body["firstRelease"],
+        json!({"version": "1.0.0", "shortVersion": "1.0.0"})
+    );
+    assert_eq!(
+        body["lastRelease"],
+        json!({"version": "1.1.0", "shortVersion": "1.1.0"})
+    );
+}
+
+// =============================================================================
+// GET /api/0/issues/{id}/events/latest/
+// =============================================================================
+
+#[actix_web::test]
+async fn latest_event_carries_the_stack_trace_as_sentry_entries() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    ingest(
+        &db.pool,
+        p.id,
+        "ValueError",
+        "older",
+        Utc::now() - chrono::Duration::hours(1),
+    )
+    .await;
+    let issue = ingest_with(
+        &db.pool,
+        p.id,
+        "ValueError",
+        "older",
+        Utc::now(),
+        json!({"logentry": {"formatted": "it broke"}, "tags": {"env": "prod"}}),
+    )
+    .await;
+    let app = app!(db.pool);
+
+    let (status, body) = get_json(
+        &app,
+        &format!("/api/0/issues/{}/events/latest/", issue.numeric_id),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, 200);
+    assert_eq!(body["groupID"], issue.numeric_id.to_string());
+    assert_eq!(body["projectID"], p.id.to_string());
+    assert_eq!(body["eventID"].as_str().unwrap().len(), 32, "dashless hex");
+    assert_eq!(body["id"], body["eventID"]);
+    assert!(body["dateReceived"].is_string());
+    assert!(body["dateCreated"].is_string());
+    assert_eq!(body["message"], "it broke");
+    assert_eq!(body["tags"], json!([{"key": "env", "value": "prod"}]));
+
+    // Message outranks exception (display scores 2050 and 2000).
+    let entries = body["entries"].as_array().unwrap();
+    assert_eq!(entries[0]["type"], "message");
+    assert_eq!(entries[0]["data"]["formatted"], "it broke");
+    assert_eq!(entries[1]["type"], "exception");
+    let value = &entries[1]["data"]["values"][0];
+    assert_eq!(value["type"], "ValueError");
+    assert_eq!(value["value"], "older");
+    let frame = &value["stacktrace"]["frames"][0];
+    assert_eq!(frame["filename"], "app.py");
+    assert_eq!(frame["absPath"], "/srv/app.py");
+    assert_eq!(frame["function"], "main");
+    assert_eq!(frame["lineNo"], 10);
+    assert_eq!(frame["colNo"], 4);
+    assert_eq!(frame["inApp"], true);
+    assert_eq!(
+        frame["context"],
+        json!([[9, "def main():"], [10, "    raise ValueError()"], [11, ""]])
+    );
+    assert_eq!(value["stacktrace"]["hasSystemFrames"], true);
+}
+
+#[actix_web::test]
+async fn latest_event_frame_without_source_has_an_empty_context() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest_with(
+        &db.pool,
+        p.id,
+        "ValueError",
+        "x",
+        Utc::now(),
+        json!({"exception": {"values": [{"type": "ValueError", "value": "x",
+            "stacktrace": {"frames": [{"function": "f", "lineno": 3}]}}]}}),
+    )
+    .await;
+    let app = app!(db.pool);
+
+    let (_, body) = get_json(
+        &app,
+        &format!("/api/0/groups/{}/events/latest/", issue.numeric_id),
+        &token,
+    )
+    .await;
+
+    let frame = &body["entries"][0]["data"]["values"][0]["stacktrace"]["frames"][0];
+    assert_eq!(frame["context"], json!([]));
+}
+
+// =============================================================================
+// PUT /api/0/issues/{id}/
+// =============================================================================
+
+async fn put_status(
+    app: &impl actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+    uri: &str,
+    token: &str,
+    status: &str,
+) -> (u16, Value) {
+    let req = test::TestRequest::put()
+        .uri(uri)
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .set_json(json!({ "status": status }))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    let code = resp.status().as_u16();
+    let body = test::read_body(resp).await;
+    (code, serde_json::from_slice(&body).unwrap_or(Value::Null))
+}
+
+#[actix_web::test]
+async fn update_issue_writes_the_status_back() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let app = app!(db.pool);
+    let uri = format!("/api/0/issues/{}/", issue.numeric_id);
+
+    for (sent, stored) in [
+        ("resolved", "resolved"),
+        ("unresolved", "unresolved"),
+        ("ignored", "ignored"),
+        ("muted", "ignored"),
+        ("resolvedInNextRelease", "resolved"),
+    ] {
+        let (status, body) = put_status(&app, &uri, &token, sent).await;
+        assert_eq!(status, 200, "{sent}");
+        assert_eq!(body["id"], issue.numeric_id.to_string());
+        assert_eq!(body["status"], stored, "{sent}");
+        let reloaded = IssueService::get_by_id(&db.pool, issue.id).await.unwrap();
+        assert_eq!(reloaded.status, stored, "{sent}");
+    }
+
+    let (status, _) = put_status(&app, &uri, &token, "bogus").await;
+    assert_eq!(status, 400);
+}
+
+#[actix_web::test]
+async fn update_issue_needs_an_editor() {
+    let db = TestDb::new().await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let viewer = member_token(&db.pool, p.id, ProjectRole::Viewer).await;
+    let app = app!(db.pool);
+
+    let (status, _) = put_status(
+        &app,
+        &format!("/api/0/issues/{}/", issue.numeric_id),
+        &viewer,
+        "resolved",
+    )
+    .await;
+
+    assert_eq!(status, 403);
+}
+
+// =============================================================================
+// GET /api/0/organizations/{org}/repos/
+// =============================================================================
+
+#[actix_web::test]
+async fn repos_is_an_empty_list() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let app = app!(db.pool);
+
+    let (status, body) = get_json(&app, "/api/0/organizations/rustrak/repos/", &token).await;
+
+    assert_eq!(status, 200);
+    assert_eq!(body, json!([]));
+}
+
+// =============================================================================
+// GET /{org}/{project}/issues/{id}/ ("View in Sentry")
+// =============================================================================
+
+#[actix_web::test]
+async fn issue_link_redirects_to_the_dashboard() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let app = app!(db.pool);
+    let location = |resp: &actix_web::dev::ServiceResponse| {
+        resp.headers()
+            .get("Location")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+    };
+
+    for uri in [
+        format!("/rustrak/demo-app/issues/{}", issue.numeric_id),
+        format!("/rustrak/demo-app/issues/{}/", issue.numeric_id),
+    ] {
+        let req = test::TestRequest::get()
+            .uri(&uri)
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 302, "{uri}");
+        assert_eq!(
+            location(&resp),
+            format!(
+                "https://rustrak.example.com/projects/{}/issues/{}",
+                p.id, issue.id
+            )
+        );
+    }
+
+    let req = test::TestRequest::get()
+        .uri(&format!("/rustrak/demo-app/issues/{}", issue.numeric_id))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        location(&resp),
+        "https://rustrak.example.com/login",
+        "no issue leaks to a stranger"
+    );
+}

@@ -751,6 +751,15 @@ export const zIssueTagValue = z.object({
 });
 
 /**
+ * Body of an issue update: the fields of `GroupValidator`
+ * (`api/helpers/group_index/validators/group.py`) Rustrak acts on.
+ */
+export const zIssueUpdate = z.object({
+    status: z.string().nullish(),
+    substatus: z.string().nullish()
+});
+
+/**
  * How long ago a kind of data arrived: rows per age bucket, and the oldest.
  */
 export const zKindAge = z.object({
@@ -1236,6 +1245,125 @@ export const zSeenResponse = z.object({
 });
 
 /**
+ * `GroupProjectResponse` (`api/serializers/models/group.py`).
+ */
+export const zSentryGroupProject = z.object({
+    id: z.string(),
+    name: z.string(),
+    platform: z.string().nullable(),
+    slug: z.string()
+});
+
+/**
+ * Subset of `GroupSerializer` plus its seen stats
+ * (`api/serializers/models/group.py`), and `stats` when the caller asked
+ * for a series (`StreamGroupSerializer`, `group_stream.py`).
+ */
+export const zSentryIssue = z.object({
+    annotations: z.array(z.record(z.string(), z.unknown())),
+    count: z.string(),
+    culprit: z.string(),
+    firstSeen: z.iso.datetime({ offset: true }),
+    id: z.string(),
+    issueCategory: z.string(),
+    issueType: z.string(),
+    lastSeen: z.iso.datetime({ offset: true }),
+    level: z.string(),
+    logger: z.string().nullable(),
+    metadata: z.record(z.string(), z.unknown()),
+    platform: z.string().nullable(),
+    priority: z.string().nullable(),
+    project: zSentryGroupProject,
+    shortId: z.string(),
+    stats: z.record(z.string(), z.unknown()).nullish(),
+    status: z.string(),
+    statusDetails: z.record(z.string(), z.unknown()),
+    substatus: z.string().nullable(),
+    title: z.string(),
+    type: z.string(),
+    userCount: z.int()
+});
+
+/**
+ * A release as `serialize_releases` (`api/helpers/group_index/index.py`)
+ * falls back to it, with the serializer's `shortVersion`, which is the
+ * version itself (`api/serializers/models/release.py`).
+ */
+export const zSentryRelease = z.object({
+    shortVersion: z.string(),
+    version: z.string()
+});
+
+/**
+ * Subset of `GroupDetailsEndpoint`'s response
+ * (`issues/endpoints/group_details.py`).
+ */
+export const zSentryIssueDetails = zSentryIssue.and(z.object({
+    firstRelease: zSentryRelease.nullable(),
+    lastRelease: zSentryRelease.nullable(),
+    userReportCount: z.int()
+}));
+
+/**
+ * `{"id", "name"}` of a status, as Sentry nests it in an organization.
+ */
+export const zSentryStatus = z.object({
+    id: z.string(),
+    name: z.string()
+});
+
+/**
+ * Subset of `OrganizationSummarySerializer`
+ * (`api/serializers/models/organization.py`).
+ */
+export const zSentryOrganization = z.object({
+    id: z.string(),
+    name: z.string(),
+    slug: z.string(),
+    status: zSentryStatus
+});
+
+/**
+ * Subset of `ProjectWithOrganizationSerializer`
+ * (`api/serializers/models/project.py`). Sentry's ids are strings.
+ */
+export const zSentryProject = z.object({
+    dateCreated: z.iso.datetime({ offset: true }),
+    id: z.string(),
+    name: z.string(),
+    organization: zSentryOrganization,
+    platform: z.string().nullable(),
+    slug: z.string(),
+    status: z.string()
+});
+
+export const zSentryTag = z.object({
+    key: z.string(),
+    value: z.string()
+});
+
+/**
+ * Subset of `EventSerializer` for an error event
+ * (`api/serializers/models/event.py`).
+ */
+export const zSentryEvent = z.object({
+    culprit: z.string(),
+    dateCreated: z.iso.datetime({ offset: true }),
+    dateReceived: z.iso.datetime({ offset: true }),
+    entries: z.array(z.record(z.string(), z.unknown())),
+    eventID: z.string(),
+    groupID: z.string(),
+    id: z.string(),
+    message: z.string(),
+    metadata: z.record(z.string(), z.unknown()),
+    platform: z.string(),
+    projectID: z.string(),
+    tags: z.array(zSentryTag),
+    title: z.string(),
+    type: z.string()
+});
+
+/**
  * Project-wide session health summary, aggregated across all releases and environments.
  */
 export const zSessionSummary = z.object({
@@ -1694,6 +1822,40 @@ export const zVersionResponse = z.object({
     version: z.string()
 });
 
+export const zSentryGetIssuePath = z.object({
+    issue_id: z.string()
+});
+
+/**
+ * Issue details
+ */
+export const zSentryGetIssueResponse = zSentryIssueDetails;
+
+export const zSentryUpdateIssueBody = zIssueUpdate;
+
+export const zSentryUpdateIssuePath = z.object({
+    issue_id: z.string()
+});
+
+/**
+ * Issue updated
+ */
+export const zSentryUpdateIssueResponse = zSentryIssue;
+
+export const zSentryGetLatestEventPath = z.object({
+    issue_id: z.string()
+});
+
+/**
+ * The issue's latest event
+ */
+export const zSentryGetLatestEventResponse = zSentryEvent;
+
+/**
+ * The synthetic organization
+ */
+export const zSentryListOrganizationsResponse = z.array(zSentryOrganization);
+
 export const zSourceMapsOrgDetailsPath = z.object({
     org_slug: z.string()
 });
@@ -1732,6 +1894,25 @@ export const zSourceMapsChunkUploadPath = z.object({
     org_slug: z.string()
 });
 
+export const zSentryListReposPath = z.object({
+    org_slug: z.string()
+});
+
+/**
+ * Connected repositories: always none
+ */
+export const zSentryListReposResponse = z.array(z.record(z.string(), z.unknown()));
+
+export const zSentryListProjectsQuery = z.object({
+    per_page: z.int().nullish(),
+    cursor: z.string().nullish()
+});
+
+/**
+ * Projects, newest first; paginated by the `Link` header
+ */
+export const zSentryListProjectsResponse = z.array(zSentryProject);
+
 export const zSourceMapsListPath = z.object({
     org_slug: z.string(),
     project_slug: z.string()
@@ -1741,6 +1922,24 @@ export const zSourceMapsListPath = z.object({
  * List of uploaded source map files
  */
 export const zSourceMapsListResponse = zSourceMapList;
+
+export const zSentryListIssuesPath = z.object({
+    org_slug: z.string(),
+    project_slug: z.string()
+});
+
+export const zSentryListIssuesQuery = z.object({
+    query: z.string().nullish(),
+    sort: z.string().nullish(),
+    limit: z.string().nullish(),
+    cursor: z.string().nullish(),
+    statsPeriod: z.string().nullish()
+});
+
+/**
+ * Issues; paginated by the `Link` header
+ */
+export const zSentryListIssuesResponse = z.array(zSentryIssue);
 
 export const zReleasesCreateBody = zCreateRelease;
 
