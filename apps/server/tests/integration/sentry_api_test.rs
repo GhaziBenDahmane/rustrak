@@ -910,3 +910,120 @@ async fn issue_link_redirects_to_the_dashboard() {
         "no issue leaks to a stranger"
     );
 }
+
+// =============================================================================
+// Review fixes (PR #439)
+// =============================================================================
+
+/// Sentry builds the `Link` from its configured URL prefix
+/// (`utils/http.py::absolute_uri`), never from the request's `Host`.
+#[actix_web::test]
+async fn link_header_uses_the_public_url_not_the_host_header() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    project(&db.pool, "Demo App").await;
+    let app = app!(db.pool);
+
+    let req = test::TestRequest::get()
+        .uri("/api/0/projects/rustrak/demo-app/issues/")
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .insert_header(("Host", "evil.example"))
+        .insert_header(("X-Forwarded-Host", "evil.example"))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let link = resp.headers().get("Link").unwrap().to_str().unwrap();
+
+    assert!(
+        link.starts_with("<https://rustrak.example.com/api/0/projects/rustrak/demo-app/issues/?"),
+        "{link}"
+    );
+    assert!(!link.contains("evil.example"), "{link}");
+}
+
+/// The cursor's page size wins over `limit`, so a cursor followed without
+/// repeating `limit` neither skips nor repeats issues.
+#[actix_web::test]
+async fn cursor_carries_the_page_size() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    for n in 0..3 {
+        ingest(&db.pool, p.id, &format!("E{n}"), "x", Utc::now()).await;
+    }
+    let app = app!(db.pool);
+
+    let req = test::TestRequest::get()
+        .uri("/api/0/projects/rustrak/demo-app/issues/?cursor=2:1:0")
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    let link = resp
+        .headers()
+        .get("Link")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let body: Value = test::read_body_json(resp).await;
+
+    assert_eq!(
+        body.as_array().unwrap().len(),
+        1,
+        "page 2 of size 2 holds the third issue"
+    );
+    assert!(link.contains(r#"cursor="2:0:1""#), "{link}");
+    assert!(link.contains(r#"cursor="2:2:0""#), "{link}");
+}
+
+#[actix_web::test]
+async fn out_of_range_cursors_are_rejected() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    project(&db.pool, "Demo App").await;
+    let app = app!(db.pool);
+
+    for cursor in ["100:9223372036854775807:0", "-5:1:0", "0:1:0", "101:0:0"] {
+        for base in [
+            "/api/0/projects/rustrak/demo-app/issues/",
+            "/api/0/projects/",
+        ] {
+            let (status, _) = get_json(&app, &format!("{base}?cursor={cursor}"), &token).await;
+            assert_eq!(status, 400, "{base} cursor={cursor}");
+        }
+    }
+}
+
+/// Without a dashboard the session middleware guards every path outside
+/// the API; the issue link authenticates itself and must still reach its
+/// login redirect.
+#[actix_web::test]
+async fn issue_link_redirects_a_stranger_even_without_a_dashboard() {
+    let db = TestDb::new().await;
+    let p = project(&db.pool, "Demo App").await;
+    let issue = ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let app = test::init_service(
+        App::new()
+            .wrap(rustrak::middleware::auth::RequireAuth::new(false))
+            .app_data(web::Data::new(db.pool.clone()))
+            .app_data(web::Data::new(config()))
+            .configure(routes::sentry_api::configure),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri(&format!("/rustrak/demo-app/issues/{}", issue.numeric_id))
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers().get("Location").unwrap(),
+        "https://rustrak.example.com/login"
+    );
+
+    let req = test::TestRequest::get()
+        .uri("/rustrak/demo-app/other/1")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401, "only the issue link is let through");
+}

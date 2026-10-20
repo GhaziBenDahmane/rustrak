@@ -266,7 +266,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 /// Build base URL from config
-fn build_base_url(config: &Config) -> String {
+pub(crate) fn build_base_url(config: &Config) -> String {
     config
         .public_url
         .clone()

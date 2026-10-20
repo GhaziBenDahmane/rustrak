@@ -419,6 +419,7 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 | `sentry.listOrganizations()` | `GET /api/0/organizations/` | The organizations the token belongs to (Sentry's `OrganizationIndexEndpoint`): always the one synthetic org. |
 | `sentry.listProjects({ query? })` | `GET /api/0/projects/` | The projects the token can see, newest first (Sentry's `ProjectIndexEndpoint`, `core/endpoints/project_index.py`). |
 | `sentry.listRepos({ path })` | `GET /api/0/organizations/{org_slug}/repos/` | The code repositories connected to the organization (Sentry's `OrganizationRepositoriesEndpoint`). |
+| `sentry.openIssue({ path })` | `GET /{org_slug}/{project_slug}/issues/{issue_id}` | The issue page GitLab's "View in Sentry" opens: Sentry redirects this legacy path to the issue (`static/app/router/routes.tsx`), Rustrak to its dashboard. |
 | `sentry.updateIssue({ path, body })` | `PUT /api/0/issues/{issue_id}/` | Sets an issue's status and returns the issue (Sentry's `GroupDetailsEndpoint.put`). |
 
 ### Sessions

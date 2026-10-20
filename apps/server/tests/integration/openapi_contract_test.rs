@@ -54,6 +54,7 @@ const REDIRECTS: &[&str] = &[
     "/api/github/callback",
     "/api/github/installed",
     "/auth/sso/callback",
+    "/{org_slug}/{project_slug}/issues/{issue_id}",
 ];
 
 /// `GET`s that cannot answer 200 against the seed: a row it has no way to

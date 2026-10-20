@@ -133,6 +133,7 @@ pub struct ProjectListQuery {
 pub async fn list_projects(
     req: HttpRequest,
     pool: web::Data<DbPool>,
+    config: web::Data<Config>,
     query: web::Query<ProjectListQuery>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
@@ -140,9 +141,10 @@ pub async fn list_projects(
         .per_page
         .unwrap_or(MAX_PER_PAGE)
         .clamp(1, MAX_PER_PAGE);
-    let page = Cursor::page(query.cursor.as_deref(), limit)?;
+    let page = Page::from_cursor(query.cursor.as_deref(), limit)?;
     let (projects, total) = if actor.is_admin() {
-        ProjectService::list_offset(pool.get_ref(), SortOrder::Desc, page.offset + 1, limit).await?
+        ProjectService::list_offset(pool.get_ref(), SortOrder::Desc, page.number + 1, page.size)
+            .await?
     } else {
         let uid = actor
             .user_id()
@@ -152,16 +154,16 @@ pub async fn list_projects(
             pool.get_ref(),
             &ids,
             SortOrder::Desc,
-            page.offset + 1,
-            limit,
+            page.number + 1,
+            page.size,
         )
         .await?
     };
 
     let body: Vec<SentryProject> = projects.iter().map(SentryProject::from).collect();
-    let has_more = page.offset * limit + (projects.len() as i64) < total;
+    let has_more = page.start + (projects.len() as i64) < total;
     Ok(HttpResponse::Ok()
-        .insert_header(("Link", link_header(&req, limit, page.offset, has_more)))
+        .insert_header(("Link", link_header(&req, &config, &page, has_more)))
         .json(body))
 }
 
@@ -379,51 +381,57 @@ fn order_clause(sort: Option<&str>) -> AppResult<&'static str> {
     }
 }
 
-/// A Sentry cursor, `"{value}:{offset}:{is_prev}"` (`utils/cursors.py`). For
-/// offset pagination `value` is the page size and `offset` the page number
-/// (`api/paginator.py`, `OffsetPaginator`).
-/// `is_prev` is parsed but unused: `OffsetPaginator` reads only the page.
-struct Cursor {
-    value: i64,
-    offset: i64,
+/// One page of an offset pagination.
+struct Page {
+    size: i64,
+    /// Zero-based.
+    number: i64,
+    /// Index of the page's first row.
+    start: i64,
 }
 
-impl Cursor {
-    fn parse(raw: &str) -> AppResult<Self> {
+impl Page {
+    /// The page a Sentry cursor names, `"{value}:{offset}:{is_prev}"`
+    /// (`utils/cursors.py`), or the first page of `limit` rows without one.
+    /// For offset pagination `value` is the page size and `offset` the page
+    /// number, and the cursor's size wins over `limit` (`api/paginator.py`,
+    /// `OffsetPaginator`); `is_prev` is parsed but unused. A cursor Rustrak
+    /// could not have issued is a 400.
+    fn from_cursor(raw: Option<&str>, limit: i64) -> AppResult<Self> {
+        let Some(raw) = raw else {
+            return Ok(Self {
+                size: limit,
+                number: 0,
+                start: 0,
+            });
+        };
         let invalid = || AppError::Validation("Invalid cursor parameter.".to_string());
         let bits: Vec<&str> = raw.split(':').collect();
         let [value, offset, is_prev] = bits[..] else {
             return Err(invalid());
         };
         is_prev.parse::<i64>().map_err(|_| invalid())?;
-        Ok(Self {
-            value: value.parse().map_err(|_| invalid())?,
-            offset: offset.parse().map_err(|_| invalid())?,
-        })
-    }
-
-    /// The requested page, or the first one.
-    fn page(raw: Option<&str>, limit: i64) -> AppResult<Self> {
-        let cursor = match raw {
-            Some(raw) => Self::parse(raw)?,
-            None => Self {
-                value: limit,
-                offset: 0,
-            },
-        };
-        if cursor.offset < 0 {
-            return Err(AppError::Validation(
-                "Pagination offset cannot be negative".to_string(),
-            ));
+        let size: i64 = value.parse().map_err(|_| invalid())?;
+        let number: i64 = offset.parse().map_err(|_| invalid())?;
+        if !(1..=MAX_PER_PAGE).contains(&size) || number < 0 {
+            return Err(invalid());
         }
-        Ok(cursor)
+        let start = number
+            .checked_add(1)
+            .and_then(|_| number.checked_mul(size))
+            .ok_or_else(invalid)?;
+        Ok(Self {
+            size,
+            number,
+            start,
+        })
     }
 }
 
 /// Sentry's `Link` header: `previous` and `next`, always both
-/// (`api/base.py`, `CURSOR_LINK_HEADER`).
-fn link_header(req: &HttpRequest, limit: i64, page: i64, has_more: bool) -> String {
-    let info = req.connection_info();
+/// (`api/base.py`, `CURSOR_LINK_HEADER`). Like Sentry's `absolute_uri`, it
+/// names the configured public URL, never the request's `Host`.
+fn link_header(req: &HttpRequest, config: &Config, page: &Page, has_more: bool) -> String {
     let query: Vec<String> = req
         .query_string()
         .split('&')
@@ -431,19 +439,19 @@ fn link_header(req: &HttpRequest, limit: i64, page: i64, has_more: bool) -> Stri
         .map(str::to_string)
         .collect();
     let base = format!(
-        "{}://{}{}?{}",
-        info.scheme(),
-        info.host(),
+        "{}{}?{}",
+        crate::routes::projects::build_base_url(config),
         req.path(),
         query.join("&")
     );
     let link = |name: &str, cursor: String, results: bool| {
         format!(r#"<{base}&cursor={cursor}>; rel="{name}"; results="{results}"; cursor="{cursor}""#)
     };
+    let (size, number) = (page.size, page.number);
     format!(
         "{}, {}",
-        link("previous", format!("{limit}:{}:1", page - 1), page > 0),
-        link("next", format!("{limit}:{}:0", page + 1), has_more)
+        link("previous", format!("{size}:{}:1", number - 1), number > 0),
+        link("next", format!("{size}:{}:0", number + 1), has_more)
     )
 }
 
@@ -488,6 +496,7 @@ fn stats_period(period: Option<&str>) -> AppResult<Option<(&str, i64, i64)>> {
 pub async fn list_issues(
     req: HttpRequest,
     pool: web::Data<DbPool>,
+    config: web::Data<Config>,
     path: web::Path<(String, String)>,
     query: web::Query<IssueListQuery>,
     actor: ApiActor,
@@ -512,7 +521,7 @@ pub async fn list_issues(
         None => MAX_PER_PAGE,
     }
     .clamp(1, MAX_PER_PAGE);
-    let page = Cursor::page(query.cursor.as_deref(), limit)?;
+    let page = Page::from_cursor(query.cursor.as_deref(), limit)?;
     let period = stats_period(query.stats_period.as_deref())?;
 
     let (issues, total) = IssueService::list_window(
@@ -520,8 +529,8 @@ pub async fn list_issues(
         project.id,
         order,
         filter,
-        page.offset * page.value,
-        limit,
+        page.start,
+        page.size,
         text.as_deref(),
     )
     .await?;
@@ -548,9 +557,9 @@ pub async fn list_issues(
         })
         .collect();
 
-    let has_more = page.offset * page.value + (issues.len() as i64) < total;
+    let has_more = page.start + (issues.len() as i64) < total;
     Ok(HttpResponse::Ok()
-        .insert_header(("Link", link_header(&req, limit, page.offset, has_more)))
+        .insert_header(("Link", link_header(&req, &config, &page, has_more)))
         .json(body))
 }
 
@@ -611,6 +620,13 @@ async fn issue_details(
     })
 }
 
+/// The issue in a path, named so the organization-scoped routes, whose
+/// `{org_slug}` is ignored, share the handler.
+#[derive(Debug, Deserialize)]
+pub struct IssuePath {
+    pub issue_id: String,
+}
+
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/0/issues/{issue_id}/",
@@ -633,21 +649,12 @@ async fn issue_details(
 /// organization-scoped paths, as Sentry does.
 pub async fn get_issue(
     pool: web::Data<DbPool>,
-    path: web::Path<String>,
+    path: web::Path<IssuePath>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
-    let (issue, project) = issue_for(pool.get_ref(), &actor, &path, Action::ViewProject).await?;
+    let (issue, project) =
+        issue_for(pool.get_ref(), &actor, &path.issue_id, Action::ViewProject).await?;
     Ok(HttpResponse::Ok().json(issue_details(pool.get_ref(), &issue, &project).await?))
-}
-
-/// The same handler under an `{org_slug}` it ignores.
-pub async fn get_org_issue(
-    pool: web::Data<DbPool>,
-    path: web::Path<(String, String)>,
-    actor: ApiActor,
-) -> AppResult<HttpResponse> {
-    let (_org_slug, issue_id) = path.into_inner();
-    get_issue(pool, web::Path::from(issue_id), actor).await
 }
 
 /// Subset of `EventSerializer` for an error event
@@ -1003,6 +1010,22 @@ pub async fn list_repos(_actor: ApiActor) -> AppResult<HttpResponse> {
     Ok(HttpResponse::Ok().json([(); 0]))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/{org_slug}/{project_slug}/issues/{issue_id}",
+    operation_id = "sentry.openIssue",
+    tag = "Sentry API",
+    params(
+        ("org_slug" = String, Path, description = "Organization slug (synthetic — accepted and ignored)"),
+        ("project_slug" = String, Path, description = "Project slug (ignored: the id names the issue)"),
+        ("issue_id" = String, Path, description = "Issue id (`numeric_id`), digits only"),
+    ),
+    responses(
+        (status = 302, description = "Browser redirect to the issue in the dashboard, or to the login page"),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security((), ("session_cookie" = []), ("bearer_auth" = [])),
+))]
 /// GET /{org_slug}/{project_slug}/issues/{issue_id}/
 ///
 /// The issue page GitLab's "View in Sentry" opens: Sentry redirects this
@@ -1026,6 +1049,21 @@ pub async fn issue_link(
         "{dashboard}/projects/{}/issues/{}",
         project.id, issue.id
     )))
+}
+
+/// Whether `path` is [`issue_link`]'s: `/{org}/{project}/issues/{digits}`,
+/// with or without a trailing slash. The session middleware lets it through
+/// because the handler authenticates the visitor itself.
+pub fn is_issue_link(path: &str) -> bool {
+    let parts: Vec<&str> = path.strip_suffix('/').unwrap_or(path).split('/').collect();
+    matches!(
+        parts[..],
+        ["", org, project, "issues", id]
+            if !org.is_empty()
+                && !project.is_empty()
+                && !id.is_empty()
+                && id.bytes().all(|b| b.is_ascii_digit())
+    )
 }
 
 fn redirect(location: String) -> HttpResponse {
@@ -1093,7 +1131,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     for kind in ["issues", "groups"] {
         cfg.route(
             &format!("/api/0/organizations/{{org_slug}}/{kind}/{{issue_id}}/"),
-            web::get().to(get_org_issue),
+            web::get().to(get_issue),
         );
     }
 }

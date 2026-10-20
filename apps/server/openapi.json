@@ -11046,6 +11046,69 @@
           }
         ]
       }
+    },
+    "/{org_slug}/{project_slug}/issues/{issue_id}": {
+      "get": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "GET /{org_slug}/{project_slug}/issues/{issue_id}/",
+        "description": "The issue page GitLab's \"View in Sentry\" opens: Sentry redirects this\nlegacy path to the issue (`static/app/router/routes.tsx`), Rustrak to its\ndashboard. A visitor who is not signed in goes to the login page instead,\nso a stranger learns nothing about which issues exist.",
+        "operationId": "sentry.openIssue",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "description": "Organization slug (synthetic — accepted and ignored)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project_slug",
+            "in": "path",
+            "description": "Project slug (ignored: the id names the issue)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue id (`numeric_id`), digits only",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Browser redirect to the issue in the dashboard, or to the login page"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "session_cookie": []
+          },
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
     }
   },
   "components": {

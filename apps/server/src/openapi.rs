@@ -114,6 +114,7 @@ impl Modify for SecurityAddon {
         crate::routes::sentry_api::latest_event,
         crate::routes::sentry_api::update_issue,
         crate::routes::sentry_api::list_repos,
+        crate::routes::sentry_api::issue_link,
         crate::routes::transactions::list_transactions,
         crate::routes::transactions::get_transaction,
         crate::routes::transactions::get_transaction_spans,

@@ -3486,3 +3486,9 @@ export const zHealthReadinessResponse = zReadinessResponse;
  * Server version info
  */
 export const zHealthVersionResponse = zVersionResponse;
+
+export const zSentryOpenIssuePath = z.object({
+    org_slug: z.string(),
+    project_slug: z.string(),
+    issue_id: z.string()
+});

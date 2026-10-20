@@ -7867,3 +7867,32 @@ export type HealthVersionResponses = {
 };
 
 export type HealthVersionResponse = HealthVersionResponses[keyof HealthVersionResponses];
+
+export type SentryOpenIssueData = {
+    body?: never;
+    path: {
+        /**
+         * Organization slug (synthetic — accepted and ignored)
+         */
+        org_slug: string;
+        /**
+         * Project slug (ignored: the id names the issue)
+         */
+        project_slug: string;
+        /**
+         * Issue id (`numeric_id`), digits only
+         */
+        issue_id: string;
+    };
+    query?: never;
+    url: '/{org_slug}/{project_slug}/issues/{issue_id}';
+};
+
+export type SentryOpenIssueErrors = {
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentryOpenIssueError = SentryOpenIssueErrors[keyof SentryOpenIssueErrors];
