@@ -10,25 +10,38 @@ import {
   transformHttpError,
 } from './utils/http.js';
 
-/** Operations whose 2xx is a file, not JSON: read as a `Blob`. */
-const BINARY = new Set(['events.downloadAttachment']);
+/**
+ * Operations whose 2xx is a file, not JSON: read as a `Blob`. The spec leaves
+ * the body untyped (zod has no binary type), so the type comes from here.
+ */
+type Binary = 'events.downloadAttachment';
+const BINARY: ReadonlySet<string> = new Set<Binary>([
+  'events.downloadAttachment',
+]);
 
 /** What a caller may pass: the request's own parts, never client plumbing. */
 type RequestKeys = 'path' | 'query' | 'body' | 'headers' | 'signal';
 
-type Call<F> = F extends (options: infer O) => infer R
+type Call<F, Bytes extends boolean> = F extends (options: infer O) => infer R
   ? (
       ...args: {} extends Pick<O, Extract<keyof O, RequestKeys>>
         ? [options?: Pick<O, Extract<keyof O, RequestKeys>>]
         : [options: Pick<O, Extract<keyof O, RequestKeys>>]
-    ) => Promise<Result<Data<Awaited<R>>, RustrakError>>
+    ) => Promise<
+      Result<Bytes extends true ? Blob : Data<Awaited<R>>, RustrakError>
+    >
   : never;
 
 /** The success half of the generated `{ data, error }` union. */
 type Data<R> =
   Extract<R, { error: undefined }> extends { data: infer D } ? D : never;
 
-type Resource<T> = { readonly [M in keyof T]: Call<T[M]> };
+type Resource<T, Name extends string> = {
+  readonly [M in keyof T]: Call<
+    T[M],
+    `${Name}.${M & string}` extends Binary ? true : false
+  >;
+};
 
 /**
  * Every operation in `openapi.json`, grouped by tag:
@@ -37,7 +50,7 @@ type Resource<T> = { readonly [M in keyof T]: Call<T[M]> };
  * Generated in `src/generated/`; this file only changes what a call returns.
  */
 export type RustrakClient = {
-  readonly [R in keyof Rustrak]: Resource<Rustrak[R]>;
+  readonly [R in keyof Rustrak]: Resource<Rustrak[R], R & string>;
 };
 
 /**

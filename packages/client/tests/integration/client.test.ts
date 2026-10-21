@@ -226,7 +226,7 @@ describe('RustrakClient', () => {
         },
       });
 
-      const blob = expectOk(result) as Blob;
+      const blob = expectOk(result);
       expect(new Uint8Array(await blob.arrayBuffer())).toEqual(png);
     });
   });
