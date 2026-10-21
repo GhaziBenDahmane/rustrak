@@ -130,6 +130,56 @@ pub struct Issue {
     pub last_release: String,
 }
 
+/// A user feedback: its issue's state and what the user submitted
+/// (`contexts.feedback`, develop.sentry.dev/sdk/telemetry/feedbacks/).
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FeedbackResponse {
+    /// The feedback's issue.
+    pub id: Uuid,
+    #[cfg_attr(feature = "openapi", schema(value_type = IssueStatus))]
+    pub status: String,
+    pub message: String,
+    pub name: String,
+    pub contact_email: String,
+    /// The page it was sent from.
+    pub url: String,
+    /// The SDK id of the error event it is about.
+    #[cfg_attr(feature = "openapi", schema(required, value_type = Option<String>))]
+    pub associated_event_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    /// Files sent with it, such as a screenshot.
+    pub attachments: Vec<crate::services::attachment::AttachmentInfo>,
+}
+
+impl FeedbackResponse {
+    pub fn new(
+        issue: &Issue,
+        context: Option<&serde_json::Value>,
+        attachments: Vec<crate::services::attachment::AttachmentInfo>,
+    ) -> Self {
+        let text = |key: &str| {
+            context
+                .and_then(|c| c.get(key))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string()
+        };
+        let associated = text("associated_event_id");
+        Self {
+            id: issue.id,
+            status: issue.status.clone(),
+            message: issue.calculated_value.clone(),
+            name: text("name"),
+            contact_email: text("contact_email"),
+            url: text("url"),
+            associated_event_id: (!associated.is_empty()).then_some(associated),
+            created_at: issue.first_seen,
+            attachments,
+        }
+    }
+}
+
 /// Response for API
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

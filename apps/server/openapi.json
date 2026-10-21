@@ -4209,6 +4209,74 @@
         ]
       }
     },
+    "/api/projects/{project_id}/attachments/{attachment_id}": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "GET /api/projects/{project_id}/attachments/{attachment_id}\nDownloads an attachment. Only a real image is served inline; anything\nelse, whatever type it claims, is a download that never runs.",
+        "operationId": "events.downloadAttachment",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "attachment_id",
+            "in": "path",
+            "description": "Attachment ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file: inline when its bytes are a PNG, JPEG, GIF or WebP image, a download otherwise",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentBytes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/projects/{project_id}/events/sentry/{event_id}": {
       "get": {
         "tags": [
@@ -4333,6 +4401,178 @@
           },
           "403": {
             "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/feedback": {
+      "get": {
+        "tags": [
+          "Issues"
+        ],
+        "summary": "GET /api/projects/{project_id}/feedback\nLists user feedback with what each user submitted. Every feedback is an\nissue of category `feedback`; spam is a muted one.",
+        "operationId": "feedback.list",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number (1-indexed, default: 1)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "Items per page (default: 25, max: 100)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "description": "open (the inbox, default), resolved, muted (spam) or all",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/IssueFilter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User feedback, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Offset-based paginated response wrapper",
+                  "required": [
+                    "items",
+                    "total_count",
+                    "page",
+                    "per_page",
+                    "total_pages"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "description": "A user feedback: its issue's state and what the user submitted\n(`contexts.feedback`, develop.sentry.dev/sdk/telemetry/feedbacks/).",
+                        "required": [
+                          "id",
+                          "status",
+                          "message",
+                          "name",
+                          "contact_email",
+                          "url",
+                          "associated_event_id",
+                          "created_at",
+                          "attachments"
+                        ],
+                        "properties": {
+                          "associated_event_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "description": "The SDK id of the error event it is about."
+                          },
+                          "attachments": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/components/schemas/AttachmentInfo"
+                            },
+                            "description": "Files sent with it, such as a screenshot."
+                          },
+                          "contact_email": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "The feedback's issue."
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "$ref": "#/components/schemas/IssueStatus"
+                          },
+                          "url": {
+                            "type": "string",
+                            "description": "The page it was sent from."
+                          }
+                        }
+                      }
+                    },
+                    "page": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "per_page": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "total_count": {
+                      "type": "integer",
+                      "format": "int64"
+                    },
+                    "total_pages": {
+                      "type": "integer",
+                      "format": "int64"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5756,6 +5996,87 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EventDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments": {
+      "get": {
+        "tags": [
+          "Events"
+        ],
+        "summary": "GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments\nLists the files sent with an event, such as a feedback's screenshot.",
+        "operationId": "events.listAttachments",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "description": "Project ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "issue_id",
+            "in": "path",
+            "description": "Issue ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "description": "Event ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The files sent with the event, without their bytes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AttachmentInfo"
+                  }
                 }
               }
             }
@@ -9601,7 +9922,8 @@
                       },
                       "events_bytes": {
                         "type": "integer",
-                        "format": "int64"
+                        "format": "int64",
+                        "description": "Events with their attachments."
                       },
                       "events_count": {
                         "type": "integer",
@@ -11830,6 +12152,48 @@
           }
         }
       },
+      "AttachmentBytes": {
+        "description": "The raw bytes of an attachment. Untyped in the spec: the generated\nclient validates bodies with zod, which has no type for a binary one."
+      },
+      "AttachmentInfo": {
+        "type": "object",
+        "description": "An attachment, without its bytes.",
+        "required": [
+          "id",
+          "event_id",
+          "filename",
+          "content_type",
+          "size",
+          "created_at"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "description": "As the SDK declared it; the download trusts only the bytes."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The event it was sent with (the stored row's id)."
+          },
+          "filename": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Size in bytes."
+          }
+        }
+      },
       "AuthResponse": {
         "type": "object",
         "required": [
@@ -12798,6 +13162,62 @@
           "warning": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "FeedbackResponse": {
+        "type": "object",
+        "description": "A user feedback: its issue's state and what the user submitted\n(`contexts.feedback`, develop.sentry.dev/sdk/telemetry/feedbacks/).",
+        "required": [
+          "id",
+          "status",
+          "message",
+          "name",
+          "contact_email",
+          "url",
+          "associated_event_id",
+          "created_at",
+          "attachments"
+        ],
+        "properties": {
+          "associated_event_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The SDK id of the error event it is about."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttachmentInfo"
+            },
+            "description": "Files sent with it, such as a screenshot."
+          },
+          "contact_email": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The feedback's issue."
+          },
+          "message": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IssueStatus"
+          },
+          "url": {
+            "type": "string",
+            "description": "The page it was sent from."
           }
         }
       },
@@ -14402,7 +14822,8 @@
           },
           "events_bytes": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Events with their attachments."
           },
           "events_count": {
             "type": "integer",

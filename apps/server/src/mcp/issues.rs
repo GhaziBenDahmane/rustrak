@@ -39,9 +39,26 @@ pub struct ListIssuesArgs {
     /// Filter issues by state: open (default), resolved, muted or all
     #[serde(skip_serializing_if = "Option::is_none")]
     filter: Option<String>,
+    /// error (default) or feedback, to list user feedback instead
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
     /// Free-text search across type, value, transaction, culprit
     #[serde(skip_serializing_if = "Option::is_none")]
     q: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct ListFeedbackArgs {
+    /// Project ID
+    project_id: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    page: Option<i64>,
+    /// Items per page (max 100)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    per_page: Option<i64>,
+    /// open (the inbox, default), resolved, muted (spam) or all
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filter: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
@@ -160,6 +177,23 @@ impl RustrakMcp {
     async fn list_issues(&self, Parameters(a): Parameters<ListIssuesArgs>) -> CallToolResult {
         reply(async {
             issues::list_issues(
+                self.pool(),
+                web::Path::from(a.project_id),
+                web::Query(args(&a)?),
+                self.actor(),
+            )
+            .await
+        })
+        .await
+    }
+
+    #[tool(
+        description = "List user feedback for a Rustrak project: each message with the sender's name, email, page, the error event it is about and its attachments (such as a screenshot). Resolve or mute (spam) one with the issue tools, using its id.",
+        annotations(read_only_hint = true)
+    )]
+    async fn list_feedback(&self, Parameters(a): Parameters<ListFeedbackArgs>) -> CallToolResult {
+        reply(async {
+            issues::list_feedback(
                 self.pool(),
                 web::Path::from(a.project_id),
                 web::Query(args(&a)?),

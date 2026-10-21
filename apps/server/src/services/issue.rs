@@ -1349,6 +1349,44 @@ impl IssueService {
         Ok(out)
     }
 
+    /// Each feedback issue's `contexts.feedback`, from its one event.
+    pub async fn feedback_contexts(
+        pool: &DbPool,
+        issue_ids: &[Uuid],
+    ) -> AppResult<HashMap<Uuid, serde_json::Value>> {
+        if issue_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        // Only the context, not the whole event: a feedback event is small,
+        // but this runs once per page of up to 100.
+        #[cfg(feature = "postgres")]
+        let rows: Vec<(Uuid, Option<serde_json::Value>)> = sqlx::query_as(
+            "SELECT issue_id, data -> 'contexts' -> 'feedback' FROM events WHERE issue_id = ANY($1)",
+        )
+        .bind(issue_ids)
+        .fetch_all(pool)
+        .await?;
+
+        #[cfg(not(feature = "postgres"))]
+        let rows: Vec<(Uuid, Option<serde_json::Value>)> = {
+            use sqlx::QueryBuilder;
+            let mut qb = QueryBuilder::new(
+                "SELECT issue_id, json_extract(data, '$.contexts.feedback') FROM events WHERE issue_id IN (",
+            );
+            let mut sep = qb.separated(", ");
+            for id in issue_ids {
+                sep.push_bind(*id);
+            }
+            qb.push(")");
+            qb.build_query_as().fetch_all(pool).await?
+        };
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, context)| Some((id, context?)))
+            .collect())
+    }
+
     /// Bulk-computes [`IssueListStats`] (user_count + 24h trend) for the given
     /// issues in a single time-bounded query (all events across all issues
     /// within the last 24h) — used by the issue list so it can show per-row

@@ -627,6 +627,83 @@ async fn the_user_feedback_endpoint_takes_a_token_and_returns_the_report() {
     assert_eq!(resp.status(), 400);
 }
 
+async fn admin_token(pool: &DbPool) -> String {
+    rustrak::services::AuthTokenService::create(
+        pool,
+        rustrak::models::CreateAuthToken { description: None },
+    )
+    .await
+    .unwrap()
+    .token
+}
+
+async fn get_feedback(
+    app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = actix_web::Error>,
+    s: &Setup,
+    token: &str,
+    query: &str,
+) -> Value {
+    let req = test::TestRequest::get()
+        .uri(&format!("/api/projects/{}/feedback{query}", s.project.id))
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .to_request();
+    let resp = test::call_service(app, req).await;
+    assert_eq!(resp.status(), 200);
+    test::read_body_json(resp).await
+}
+
+#[actix_web::test]
+async fn the_feedback_list_carries_what_the_user_submitted() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    let error_id = new_id();
+    digest(&s, &error_event(&error_id)).await.unwrap();
+    digest(
+        &s,
+        &feedback_event(
+            &new_id(),
+            json!({
+                "message": "Checkout froze",
+                "name": "Jane",
+                "contact_email": "jane@example.com",
+                "url": "https://shop.example/checkout",
+                "associated_event_id": error_id,
+            }),
+        ),
+    )
+    .await
+    .unwrap();
+    digest(
+        &s,
+        &feedback_event(&new_id(), json!({ "message": "Spam spam" })),
+    )
+    .await
+    .unwrap();
+    let spam = issues(&s.db.pool, s.project.id)
+        .await
+        .into_iter()
+        .find(|i| i.calculated_value == "Spam spam")
+        .unwrap();
+    IssueService::set_status(&s.db.pool, spam.id, "ignored", None)
+        .await
+        .unwrap();
+
+    let body = get_feedback(&app, &s, &token, "").await;
+    assert_eq!(body["total_count"], 1, "the inbox holds open feedback only");
+    let item = &body["items"][0];
+    assert_eq!(item["message"], "Checkout froze");
+    assert_eq!(item["name"], "Jane");
+    assert_eq!(item["contact_email"], "jane@example.com");
+    assert_eq!(item["url"], "https://shop.example/checkout");
+    assert_eq!(item["associated_event_id"], error_id);
+    assert_eq!(item["status"], "unresolved");
+
+    let body = get_feedback(&app, &s, &token, "?filter=muted").await;
+    assert_eq!(body["items"][0]["message"], "Spam spam");
+    assert!(body["items"][0]["associated_event_id"].is_null());
+}
+
 // --- Attachments (screenshots) ---------------------------------------------
 
 /// A PNG signature, then bytes a JSON scrub or a text decode would mangle.
@@ -661,6 +738,18 @@ async fn attachment_count(pool: &DbPool, project_id: i32) -> i64 {
         .unwrap()
 }
 
+async fn get_raw(
+    app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = actix_web::Error>,
+    uri: &str,
+    token: &str,
+) -> ServiceResponse {
+    let req = test::TestRequest::get()
+        .uri(uri)
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .to_request();
+    test::call_service(app, req).await
+}
+
 /// Sends a feedback with one attachment and waits for its issue.
 async fn feedback_with_attachment(
     s: &Setup,
@@ -681,6 +770,154 @@ async fn feedback_with_attachment(
     .await;
     assert_eq!(resp.status(), 200);
     wait_for_issues(&s.db.pool, s.project.id, 1).await;
+}
+
+#[actix_web::test]
+async fn the_storage_page_counts_attachment_bytes() {
+    use rustrak::services::StorageService;
+    let s = setup().await;
+    let app = app(&s).await;
+    let screenshot = vec![0u8; 100_000];
+    feedback_with_attachment(&s, &app, "screenshot.png", "image/png", &screenshot).await;
+
+    let projects = StorageService::by_project(&s.db.pool).await.unwrap();
+    let project = projects
+        .iter()
+        .find(|p| p.project_id == s.project.id)
+        .unwrap();
+    assert!(project.events_bytes > screenshot.len() as i64);
+    assert_eq!(
+        project.estimated_bytes,
+        project.events_bytes + project.transactions_bytes + project.logs_bytes
+    );
+}
+
+#[actix_web::test]
+async fn a_feedback_screenshot_is_kept_and_served_byte_for_byte() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    feedback_with_attachment(&s, &app, "screenshot.png", "image/png", SCREENSHOT).await;
+
+    let body = get_feedback(&app, &s, &token, "").await;
+    let attachment = &body["items"][0]["attachments"][0];
+    assert_eq!(attachment["filename"], "screenshot.png");
+    assert_eq!(attachment["content_type"], "image/png");
+    assert_eq!(attachment["size"], SCREENSHOT.len());
+
+    let resp = get_raw(
+        &app,
+        &format!(
+            "/api/projects/{}/attachments/{}",
+            s.project.id,
+            attachment["id"].as_str().unwrap()
+        ),
+        &token,
+    )
+    .await;
+    assert_eq!(resp.status(), 200);
+    assert_eq!(resp.headers().get("content-type").unwrap(), "image/png");
+    assert_eq!(
+        resp.headers().get("x-content-type-options").unwrap(),
+        "nosniff"
+    );
+    assert_eq!(
+        resp.headers().get("content-security-policy").unwrap(),
+        "sandbox"
+    );
+    assert_eq!(test::read_body(resp).await.as_ref(), SCREENSHOT);
+}
+
+#[actix_web::test]
+async fn an_event_lists_its_attachments() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    feedback_with_attachment(&s, &app, "screenshot.png", "image/png", SCREENSHOT).await;
+    let issue = issues(&s.db.pool, s.project.id).await.remove(0);
+    let event_id: Uuid = sqlx::query_scalar("SELECT id FROM events WHERE issue_id = $1")
+        .bind(issue.id)
+        .fetch_one(&s.db.pool)
+        .await
+        .unwrap();
+
+    let resp = get_raw(
+        &app,
+        &format!(
+            "/api/projects/{}/issues/{}/events/{event_id}/attachments",
+            s.project.id, issue.id
+        ),
+        &token,
+    )
+    .await;
+    assert_eq!(resp.status(), 200);
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body[0]["filename"], "screenshot.png");
+}
+
+#[actix_web::test]
+async fn an_attachment_that_is_not_an_image_is_only_ever_downloaded() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    // Claims to be an image; an SVG served inline would run its script.
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>"#;
+    feedback_with_attachment(&s, &app, "shot.svg", "image/svg+xml", svg).await;
+
+    let body = get_feedback(&app, &s, &token, "").await;
+    let id = body["items"][0]["attachments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let resp = get_raw(
+        &app,
+        &format!("/api/projects/{}/attachments/{id}", s.project.id),
+        &token,
+    )
+    .await;
+    assert_eq!(resp.status(), 200);
+    assert_eq!(
+        resp.headers().get("content-type").unwrap(),
+        "application/octet-stream"
+    );
+    assert!(resp
+        .headers()
+        .get("content-disposition")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("attachment"));
+}
+
+#[actix_web::test]
+async fn an_attachment_is_private_to_its_project() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    feedback_with_attachment(&s, &app, "screenshot.png", "image/png", SCREENSHOT).await;
+    let body = get_feedback(&app, &s, &token, "").await;
+    let id = body["items"][0]["attachments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let other = ProjectService::create(
+        &s.db.pool,
+        CreateProject {
+            name: format!("Other {}", Uuid::new_v4()),
+            slug: None,
+            platform: None,
+        },
+    )
+    .await
+    .unwrap();
+    let resp = get_raw(
+        &app,
+        &format!("/api/projects/{}/attachments/{id}", other.id),
+        &token,
+    )
+    .await;
+    assert_eq!(resp.status(), 404);
 }
 
 #[actix_web::test]

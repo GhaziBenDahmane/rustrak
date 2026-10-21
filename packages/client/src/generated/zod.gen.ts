@@ -183,6 +183,24 @@ export const zAssembleResponse = z.object({
 });
 
 /**
+ * The raw bytes of an attachment. Untyped in the spec: the generated
+ * client validates bodies with zod, which has no type for a binary one.
+ */
+export const zAttachmentBytes = z.unknown();
+
+/**
+ * An attachment, without its bytes.
+ */
+export const zAttachmentInfo = z.object({
+    content_type: z.string(),
+    created_at: z.iso.datetime({ offset: true }),
+    event_id: z.uuid(),
+    filename: z.string(),
+    id: z.uuid(),
+    size: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
+});
+
+/**
  * Response that includes the full token (only on creation)
  */
 export const zAuthTokenCreatedResponse = z.object({
@@ -685,6 +703,22 @@ export const zIssueStatus = z.enum([
     'resolved',
     'ignored'
 ]);
+
+/**
+ * A user feedback: its issue's state and what the user submitted
+ * (`contexts.feedback`, develop.sentry.dev/sdk/telemetry/feedbacks/).
+ */
+export const zFeedbackResponse = z.object({
+    associated_event_id: z.string().nullable(),
+    attachments: z.array(zAttachmentInfo),
+    contact_email: z.string(),
+    created_at: z.iso.datetime({ offset: true }),
+    id: z.uuid(),
+    message: z.string(),
+    name: z.string(),
+    status: zIssueStatus,
+    url: z.string()
+});
 
 /**
  * Response for API
@@ -2475,6 +2509,16 @@ export const zAlertRulesUpdatePath = z.object({
  */
 export const zAlertRulesUpdateResponse = zAlertRuleResponse;
 
+export const zEventsDownloadAttachmentPath = z.object({
+    project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
+    attachment_id: z.uuid()
+});
+
+/**
+ * The file: inline when its bytes are a PNG, JPEG, GIF or WebP image, a download otherwise
+ */
+export const zEventsDownloadAttachmentResponse = zAttachmentBytes;
+
 export const zEventsGetBySentryIdPath = z.object({
     project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
     event_id: z.string()
@@ -2498,6 +2542,37 @@ export const zStatsGetEventTimeseriesQuery = z.object({
  * Time-bucketed error-event volume by severity
  */
 export const zStatsGetEventTimeseriesResponse = z.array(zEventTimeseriesPoint);
+
+export const zFeedbackListPath = z.object({
+    project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
+});
+
+export const zFeedbackListQuery = z.object({
+    page: z.int().optional(),
+    per_page: z.int().optional(),
+    filter: zIssueFilter.optional()
+});
+
+/**
+ * Offset-based paginated response wrapper
+ */
+export const zFeedbackListResponse = z.object({
+    items: z.array(z.object({
+        associated_event_id: z.string().nullable(),
+        attachments: z.array(zAttachmentInfo),
+        contact_email: z.string(),
+        created_at: z.iso.datetime({ offset: true }),
+        id: z.uuid(),
+        message: z.string(),
+        name: z.string(),
+        status: zIssueStatus,
+        url: z.string()
+    })),
+    page: z.int(),
+    per_page: z.int(),
+    total_count: z.int(),
+    total_pages: z.int()
+});
 
 export const zGithubDeleteProjectRepositoryPath = z.object({
     project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
@@ -2731,6 +2806,17 @@ export const zEventsGetPath = z.object({
  * Full event detail
  */
 export const zEventsGetResponse = zEventDetailResponse;
+
+export const zEventsListAttachmentsPath = z.object({
+    project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
+    issue_id: z.uuid(),
+    event_id: z.uuid()
+});
+
+/**
+ * The files sent with the event, without their bytes
+ */
+export const zEventsListAttachmentsResponse = z.array(zAttachmentInfo);
 
 export const zGithubIssuePath = z.object({
     project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),

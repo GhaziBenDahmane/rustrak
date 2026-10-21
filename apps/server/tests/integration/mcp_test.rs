@@ -355,7 +355,7 @@ async fn seed_issue(pool: &DbPool, project_id: i32) -> uuid::Uuid {
 
 /// The whole surface the npm package served, so dropping a tool is a test
 /// failure rather than a silent regression for every connected assistant.
-const TOOLS: [&str; 79] = [
+const TOOLS: [&str; 80] = [
     "assign_issue",
     "bookmark_issue",
     "bulk_delete_issues",
@@ -400,6 +400,7 @@ const TOOLS: [&str; 79] = [
     "list_alert_channels",
     "list_alert_rules",
     "list_events",
+    "list_feedback",
     "list_invitations",
     "list_issues",
     "list_logs",
