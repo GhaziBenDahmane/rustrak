@@ -268,7 +268,12 @@ pub async fn download_attachment(
     )
     .await?;
     let (info, data) = AttachmentService::get(pool.get_ref(), project_id, attachment_id).await?;
-    // The sender names the file: keep it to characters a header cannot misread.
+    use actix_web::http::header::{
+        Charset, ContentDisposition, DispositionParam, DispositionType, ExtendedValue,
+    };
+    // The sender names the file: the plain name keeps to characters a header
+    // cannot misread, and `filename*` (RFC 6266) carries the original,
+    // percent-encoded.
     let filename: String = info
         .filename
         .chars()
@@ -278,15 +283,23 @@ pub async fn download_attachment(
         })
         .collect();
     let (content_type, disposition) = match image_type(&data) {
-        Some(image) => (image, "inline"),
-        None => ("application/octet-stream", "attachment"),
+        Some(image) => (image, DispositionType::Inline),
+        None => ("application/octet-stream", DispositionType::Attachment),
     };
+    let mut parameters = vec![DispositionParam::Filename(filename.clone())];
+    if filename != info.filename {
+        parameters.push(DispositionParam::FilenameExt(ExtendedValue {
+            charset: Charset::Ext("UTF-8".to_string()),
+            language_tag: None,
+            value: info.filename.into_bytes(),
+        }));
+    }
     Ok(HttpResponse::Ok()
         .content_type(content_type)
-        .insert_header((
-            "Content-Disposition",
-            format!("{disposition}; filename=\"{filename}\""),
-        ))
+        .insert_header(ContentDisposition {
+            disposition,
+            parameters,
+        })
         .insert_header(("X-Content-Type-Options", "nosniff"))
         .insert_header(("Content-Security-Policy", "sandbox"))
         .insert_header(("Cache-Control", "private, max-age=3600"))

@@ -466,8 +466,9 @@ fn null_to_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::
 }
 
 /// Sentry's `shim_to_feedback`: a legacy user report as a feedback event about
-/// `event_id`. The feedback's own id derives from that event id, so a retried
-/// report digests into the same feedback rather than a second one.
+/// `event_id`. The feedback's own id derives from that event id and the
+/// report, so a retried report digests into the same feedback rather than a
+/// second one, and a different report about the same event is kept.
 /// `source` is Sentry's `FeedbackCreationSource` for where it came from.
 pub(crate) fn user_report_to_feedback(
     payload: &[u8],
@@ -484,7 +485,17 @@ pub(crate) fn user_report_to_feedback(
         .and_then(|id| uuid::Uuid::parse_str(id).ok())
         .ok_or_else(|| AppError::Validation("user report needs a valid event_id".to_string()))?;
 
-    let digest = Sha256::digest(format!("user_report:{}", event_id.simple()).as_bytes());
+    let digest = Sha256::digest(
+        serde_json::json!([
+            "user_report",
+            event_id.simple().to_string(),
+            report.name,
+            report.email,
+            report.comments,
+        ])
+        .to_string()
+        .as_bytes(),
+    );
     let mut bytes = [0; 16];
     bytes.copy_from_slice(&digest[..16]);
     let feedback_id = uuid::Uuid::from_bytes(bytes);
@@ -503,6 +514,9 @@ pub(crate) fn user_report_to_feedback(
             }
         }
     });
+    // The digest's checks, run here so the endpoint can answer 400 instead of
+    // acknowledging a report the digest would drop.
+    crate::digest::processors::Feedback::from_event(&event)?;
     Ok(ShimmedReport {
         payload: event.to_string().into_bytes(),
         report,

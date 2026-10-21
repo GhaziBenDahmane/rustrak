@@ -8,7 +8,7 @@ pub mod transaction;
 
 pub(crate) use event::is_retryable_write_contention;
 pub use event::{Digested, ErrorProcessor};
-pub(crate) use feedback::ATTACHMENTS_KEY;
+pub(crate) use feedback::{Feedback, ATTACHMENTS_KEY};
 pub use logs::LogsProcessor;
 pub use session::{SessionItem, SessionProcessor};
 pub use span::SpanProcessor;

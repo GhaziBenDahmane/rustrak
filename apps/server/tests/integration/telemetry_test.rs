@@ -845,17 +845,23 @@ mod alerts {
             .await
             .expect("trigger");
 
+        // The counters are process-wide: a webhook failing in another test
+        // counts too, so wait for this delivery before trusting the count.
         let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut failed = 0;
         loop {
-            let failed = Counters::global()
+            failed += Counters::global()
                 .snapshot_and_reset()
-                .alerts_failed_by_provider;
-            if failed.get("webhook").is_some_and(|n| *n >= 1) {
+                .alerts_failed_by_provider
+                .get("webhook")
+                .copied()
+                .unwrap_or(0);
+            if failed >= 1 && !collector.received().is_empty() {
                 break;
             }
             assert!(
                 tokio::time::Instant::now() < deadline,
-                "no failure counted: {failed:?}"
+                "no failure counted: {failed}"
             );
             tokio::time::sleep(Duration::from_millis(50)).await;
         }

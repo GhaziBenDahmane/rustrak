@@ -1112,9 +1112,6 @@ pub async fn list_organizations(_actor: ApiActor) -> AppResult<HttpResponse> {
     Ok(HttpResponse::Ok().json([organization()]))
 }
 
-/// The aliases Sentry also serves (`/groups/`, organization-scoped issue
-/// paths) and the browser redirect are left out of the spec: they add no
-/// method a client needs.
 /// Body of a user report (`UserReportSerializer` in Sentry's
 /// `api/serializers/models/userreport.py`), as the report was received.
 #[derive(Debug, Serialize)]
@@ -1158,6 +1155,7 @@ pub struct SentryUserReportRequest {
         (status = 200, description = "The report, or an empty body under DSN auth", body = SentryUserReport),
         (status = 400, description = "Invalid report", body = crate::error::ErrorResponse),
         (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
         (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
@@ -1242,6 +1240,9 @@ fn dsn_public_key(dsn: &str) -> Option<Uuid> {
     Uuid::parse_str(key).ok()
 }
 
+/// The aliases Sentry also serves (`/groups/`, organization-scoped issue
+/// paths) and the browser redirect are left out of the spec: they add no
+/// method a client needs.
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.route("/api/0/projects/", web::get().to(list_projects))
         .route("/api/0/organizations/", web::get().to(list_organizations))

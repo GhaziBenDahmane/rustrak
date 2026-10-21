@@ -1059,6 +1059,16 @@
               }
             }
           },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Project not found",
             "content": {
@@ -15663,7 +15673,7 @@
       },
       "SentryUserReport": {
         "type": "object",
-        "description": "The aliases Sentry also serves (`/groups/`, organization-scoped issue\npaths) and the browser redirect are left out of the spec: they add no\nmethod a client needs.\nBody of a user report (`UserReportSerializer` in Sentry's\n`api/serializers/models/userreport.py`), as the report was received.",
+        "description": "Body of a user report (`UserReportSerializer` in Sentry's\n`api/serializers/models/userreport.py`), as the report was received.",
         "required": [
           "id",
           "eventID",
