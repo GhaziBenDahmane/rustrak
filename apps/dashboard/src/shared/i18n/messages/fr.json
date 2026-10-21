@@ -1632,7 +1632,9 @@
         "email": "E-mail",
         "page": "Page",
         "viewError": "Voir l'erreur concernée",
-        "errorNotFound": "Cet événement d'erreur n'est pas encore arrivé ou a été supprimé."
+        "errorNotFound": "Cet événement d'erreur n'est pas encore arrivé ou a été supprimé.",
+        "showOlder": "Afficher les plus anciens ({count})",
+        "showOlderFailed": "Impossible de charger les retours plus anciens."
       }
     },
     "feedback": {

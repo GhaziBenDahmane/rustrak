@@ -32,7 +32,7 @@ impl LogService {
         // can't produce a negative SQL OFFSET (the HTTP route already guards it).
         let page = page.max(1);
         let per_page = per_page.clamp(1, 100);
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         let total_count: (i64,) = sqlx::query_as(
             r#"

@@ -1632,7 +1632,9 @@
         "email": "Email",
         "page": "Page",
         "viewError": "View the error it is about",
-        "errorNotFound": "That error event has not arrived, or it has been deleted."
+        "errorNotFound": "That error event has not arrived, or it has been deleted.",
+        "showOlder": "Show older ({count})",
+        "showOlderFailed": "Could not load older feedback."
       }
     },
     "feedback": {

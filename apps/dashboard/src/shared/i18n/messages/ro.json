@@ -1632,7 +1632,9 @@
         "email": "E-mail",
         "page": "Pagină",
         "viewError": "Vezi eroarea la care se referă",
-        "errorNotFound": "Acest eveniment de eroare nu a sosit încă sau a fost șters."
+        "errorNotFound": "Acest eveniment de eroare nu a sosit încă sau a fost șters.",
+        "showOlder": "Afișează mai vechi ({count})",
+        "showOlderFailed": "Nu s-a putut încărca feedbackul mai vechi."
       }
     },
     "feedback": {

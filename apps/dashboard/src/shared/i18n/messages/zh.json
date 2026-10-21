@@ -1632,7 +1632,9 @@
         "email": "邮箱",
         "page": "页面",
         "viewError": "查看相关错误",
-        "errorNotFound": "该错误事件尚未到达，或已被删除。"
+        "errorNotFound": "该错误事件尚未到达，或已被删除。",
+        "showOlder": "显示更早的反馈（{count}）",
+        "showOlderFailed": "无法加载更早的反馈。"
       }
     },
     "feedback": {

@@ -1,7 +1,7 @@
 import type {
   AttachmentInfo,
   EventDetailResponse,
-  UserReport,
+  IssuesListUserReportsResponse,
 } from '@rustrak/client';
 import { useTranslations } from 'use-intl';
 import type { readEventPayload } from '@/features/event/lib/event-payload';
@@ -33,6 +33,7 @@ type EventPayload = ReturnType<typeof readEventPayload>;
  */
 export function EventSections({
   projectId,
+  issueId,
   userReports,
   attachments,
   event,
@@ -41,8 +42,10 @@ export function EventSections({
   sourceUrl,
 }: {
   projectId: number;
-  /** Feedback users sent about the issue, shown on an error issue. */
-  userReports: UserReport[];
+  issueId: string;
+  /** The newest page of feedback users sent about the issue, shown on an
+   * error issue; `null` when it could not be loaded. */
+  userReports: IssuesListUserReportsResponse | null;
   /** Files sent with the event, shown with a feedback. */
   attachments: AttachmentInfo[];
   event: EventDetailResponse;
@@ -82,9 +85,14 @@ export function EventSections({
         </Section>
       )}
 
-      {userReports.length > 0 && (
+      {userReports && userReports.items.length > 0 && (
         <Section id="user-feedback" title={t('event.sectionUserFeedback')}>
-          <UserFeedback reports={userReports} />
+          <UserFeedback
+            key={issueId}
+            projectId={projectId}
+            issueId={issueId}
+            firstPage={userReports}
+          />
         </Section>
       )}
 

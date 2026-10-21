@@ -116,18 +116,21 @@ export async function getIssueActivity(
 }
 
 /**
- * The newest page of feedback users sent about an issue.
+ * A page of the feedback users sent about an issue, newest first.
  *
  * @param projectId - The project ID
  * @param issueId - The issue UUID
+ * @param page - 1-indexed page, the newest by default
  */
 export async function listUserReports(
   projectId: number,
   issueId: string,
+  page?: number,
 ): Promise<Result<IssuesListUserReportsResponse, RustrakError>> {
   const client = await createClient();
   return client.issues.listUserReports({
     path: { project_id: projectId, issue_id: issueId },
+    query: { page },
   });
 }
 

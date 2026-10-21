@@ -6,8 +6,8 @@ import type {
   IssueGitHub,
   IssueResponse,
   IssueStatsResponse,
+  IssuesListUserReportsResponse,
   ProjectRepository,
-  UserReport,
 } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
 import { useTranslations } from 'use-intl';
@@ -187,9 +187,7 @@ function EventPage() {
       activity={activityResult.success ? activityResult.data : []}
       repository={repositoryResult.success ? repositoryResult.data : undefined}
       code={codeResult.success ? codeResult.data : null}
-      userReports={
-        userReportsResult.success ? userReportsResult.data.items : []
-      }
+      userReports={userReportsResult.success ? userReportsResult.data : null}
       attachments={attachmentsResult.success ? attachmentsResult.data : []}
     />
   );
@@ -221,8 +219,8 @@ function EventView({
    * it could not be loaded. */
   repository: ProjectRepository | null | undefined;
   code: IssueGitHub | null;
-  /** Feedback users sent about this issue. */
-  userReports: UserReport[];
+  /** The newest page of feedback users sent about this issue. */
+  userReports: IssuesListUserReportsResponse | null;
   /** Files sent with the event. */
   attachments: AttachmentInfo[];
 }) {
@@ -303,6 +301,7 @@ function EventView({
 
             <EventSections
               projectId={projectId}
+              issueId={issueId}
               userReports={userReports}
               attachments={attachments}
               event={event}

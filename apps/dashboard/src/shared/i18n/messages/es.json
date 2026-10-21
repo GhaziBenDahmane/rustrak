@@ -1632,7 +1632,9 @@
         "email": "Correo",
         "page": "Página",
         "viewError": "Ver el error al que se refiere",
-        "errorNotFound": "Ese evento de error no ha llegado o se ha eliminado."
+        "errorNotFound": "Ese evento de error no ha llegado o se ha eliminado.",
+        "showOlder": "Mostrar anteriores ({count})",
+        "showOlderFailed": "No se pudieron cargar los comentarios anteriores."
       }
     },
     "feedback": {

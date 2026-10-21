@@ -814,6 +814,17 @@ async fn the_reports_of_an_issue_come_a_page_at_a_time() {
     let body: Value =
         test::read_body_json(get_raw(&app, &uri("?per_page=2&page=2"), &token).await).await;
     assert_eq!(body["items"].as_array().unwrap().len(), 1);
+
+    // A page past any offset is an empty page, not an overflow.
+    let resp = get_raw(
+        &app,
+        &uri(&format!("?per_page=100&page={}", i64::MAX)),
+        &token,
+    )
+    .await;
+    assert_eq!(resp.status(), 200);
+    let body: Value = test::read_body_json(resp).await;
+    assert!(body["items"].as_array().unwrap().is_empty());
 }
 
 async fn get_raw(
