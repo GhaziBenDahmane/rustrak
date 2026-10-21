@@ -139,6 +139,17 @@ pub struct ListFeedbackQuery {
     pub filter: crate::pagination::IssueFilter,
 }
 
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
+pub struct ListUserReportsQuery {
+    /// Page number (1-indexed, default: 1)
+    #[serde(default = "default_page")]
+    pub page: i64,
+    /// Items per page (default: 25, max: 100)
+    #[serde(default = "default_feedback_per_page")]
+    pub per_page: i64,
+}
+
 fn default_page() -> i64 {
     1
 }
@@ -946,9 +957,10 @@ pub async fn mark_issue_seen(
     params(
         ("project_id" = i32, Path, description = "Project ID"),
         ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
+        ListUserReportsQuery,
     ),
     responses(
-        (status = 200, description = "User feedback reports for the issue", body = Vec<crate::services::issue_social::UserReport>),
+        (status = 200, description = "User feedback reports for the issue, newest first", body = inline(crate::pagination::OffsetPaginatedResponse<crate::services::issue_social::UserReport>)),
         (status = 404, description = "Not found", body = crate::error::ErrorResponse),
     ),
     security(("bearer_auth" = [])),
@@ -957,6 +969,7 @@ pub async fn mark_issue_seen(
 pub async fn list_issue_user_reports(
     pool: web::Data<DbPool>,
     path: web::Path<(i32, Uuid)>,
+    query: web::Query<ListUserReportsQuery>,
     actor: ApiActor,
 ) -> AppResult<HttpResponse> {
     let (project_id, issue_id) = path.into_inner();
@@ -969,8 +982,18 @@ pub async fn list_issue_user_reports(
     )
     .await?;
     require_issue_in_project(pool.get_ref(), project_id, issue_id).await?;
-    let reports = IssueSocialService::list_user_reports(pool.get_ref(), issue_id).await?;
-    Ok(HttpResponse::Ok().json(reports))
+    let page = query.page.max(1);
+    let per_page = query.per_page.clamp(1, 100);
+    let reports =
+        IssueSocialService::list_user_reports_page(pool.get_ref(), issue_id, page, per_page)
+            .await?;
+    let total_count = IssueSocialService::user_report_count(pool.get_ref(), issue_id).await?;
+    Ok(HttpResponse::Ok().json(OffsetPaginatedResponse::new(
+        reports,
+        total_count,
+        page,
+        per_page,
+    )))
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(

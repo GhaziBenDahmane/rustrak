@@ -295,6 +295,30 @@ impl IssueSocialService {
         Ok(rows)
     }
 
+    /// One page of an issue's user reports, newest first.
+    pub async fn list_user_reports_page(
+        pool: &DbPool,
+        issue_id: Uuid,
+        page: i64,
+        per_page: i64,
+    ) -> AppResult<Vec<UserReport>> {
+        let rows = sqlx::query_as::<_, UserReport>(
+            r#"
+            SELECT id, project_id, issue_id, event_id, name, email, comments, created_at
+            FROM user_reports
+            WHERE issue_id = $1
+            ORDER BY created_at DESC, id
+            LIMIT $2 OFFSET $3
+            "#,
+        )
+        .bind(issue_id)
+        .bind(per_page)
+        .bind((page - 1) * per_page)
+        .fetch_all(pool)
+        .await?;
+        Ok(rows)
+    }
+
     /// Counts user reports for an issue.
     pub async fn user_report_count(pool: &DbPool, issue_id: Uuid) -> AppResult<i64> {
         let (count,): (i64,) =

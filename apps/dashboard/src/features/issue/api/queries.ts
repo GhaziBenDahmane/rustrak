@@ -15,9 +15,9 @@ import type {
   IssuesGetStatsData,
   IssuesListData,
   IssuesListResponse,
+  IssuesListUserReportsResponse,
   Result,
   RustrakError,
-  UserReport,
 } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
@@ -116,7 +116,7 @@ export async function getIssueActivity(
 }
 
 /**
- * List the feedback users sent about an issue.
+ * The newest page of feedback users sent about an issue.
  *
  * @param projectId - The project ID
  * @param issueId - The issue UUID
@@ -124,7 +124,7 @@ export async function getIssueActivity(
 export async function listUserReports(
   projectId: number,
   issueId: string,
-): Promise<Result<UserReport[], RustrakError>> {
+): Promise<Result<IssuesListUserReportsResponse, RustrakError>> {
   const client = await createClient();
   return client.issues.listUserReports({
     path: { project_id: projectId, issue_id: issueId },

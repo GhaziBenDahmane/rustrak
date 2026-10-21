@@ -187,7 +187,9 @@ function EventPage() {
       activity={activityResult.success ? activityResult.data : []}
       repository={repositoryResult.success ? repositoryResult.data : undefined}
       code={codeResult.success ? codeResult.data : null}
-      userReports={userReportsResult.success ? userReportsResult.data : []}
+      userReports={
+        userReportsResult.success ? userReportsResult.data.items : []
+      }
       attachments={attachmentsResult.success ? attachmentsResult.data : []}
     />
   );
