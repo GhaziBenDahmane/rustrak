@@ -408,6 +408,23 @@ async fn a_retried_user_report_is_one_feedback() {
 }
 
 #[actix_web::test]
+async fn two_reports_about_one_event_are_two_feedbacks() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let error_id = new_id();
+    for comments in ["First", "Second"] {
+        let report = json!({ "event_id": error_id, "comments": comments });
+        let resp = test::call_service(
+            &app,
+            post_envelope(&s, envelope(&error_id, "user_report", &report)),
+        )
+        .await;
+        assert_eq!(resp.status(), 200);
+    }
+    assert_eq!(wait_for_issues(&s.db.pool, s.project.id, 2).await.len(), 2);
+}
+
+#[actix_web::test]
 async fn the_issue_list_shows_one_category_at_a_time() {
     let s = setup().await;
     digest(&s, &error_event(&new_id())).await.unwrap();
@@ -437,7 +454,7 @@ async fn the_issue_list_shows_one_category_at_a_time() {
     assert_eq!(feedback[0].issue_category, "feedback");
 }
 
-async fn rule(s: &Setup, alert_type: AlertType) {
+async fn rule(s: &Setup, alert_type: AlertType, conditions: Value) {
     let channel = AlertService::create_channel(
         &s.db.pool,
         CreateNotificationChannel {
@@ -455,7 +472,7 @@ async fn rule(s: &Setup, alert_type: AlertType) {
         CreateAlertRule {
             name: alert_type.to_string(),
             alert_type,
-            conditions: json!({}),
+            conditions,
             cooldown_minutes: 0,
             channels: vec![AlertRuleChannelInput {
                 integration_id: channel.id,
@@ -480,8 +497,8 @@ async fn fired(pool: &DbPool, project_id: i32) -> Vec<String> {
 #[actix_web::test]
 async fn feedback_fires_new_feedback_rules_and_errors_fire_new_issue_rules() {
     let s = setup().await;
-    rule(&s, AlertType::NewIssue).await;
-    rule(&s, AlertType::NewFeedback).await;
+    rule(&s, AlertType::NewIssue, json!({})).await;
+    rule(&s, AlertType::NewFeedback, json!({})).await;
 
     digest(&s, &feedback_event(&new_id(), json!({ "message": "Hi" })))
         .await
@@ -493,6 +510,23 @@ async fn feedback_fires_new_feedback_rules_and_errors_fire_new_issue_rules() {
         fired(&s.db.pool, s.project.id).await,
         ["new_feedback", "new_issue"]
     );
+}
+
+#[actix_web::test]
+async fn a_feedback_without_a_level_is_info_everywhere() {
+    let s = setup().await;
+    rule(&s, AlertType::NewFeedback, json!({ "min_level": "error" })).await;
+
+    digest(&s, &feedback_event(&new_id(), json!({ "message": "Hi" })))
+        .await
+        .unwrap();
+    assert!(fired(&s.db.pool, s.project.id).await.is_empty());
+    let level: String = sqlx::query_scalar("SELECT level FROM events WHERE project_id = $1")
+        .bind(s.project.id)
+        .fetch_one(&s.db.pool)
+        .await
+        .unwrap();
+    assert_eq!(level, "info");
 }
 
 #[actix_web::test]
@@ -618,13 +652,18 @@ async fn the_user_feedback_endpoint_takes_a_token_and_returns_the_report() {
     assert_eq!(body["comments"], "Blank page");
 
     // An invalid report is a 400, not a silent drop: nothing else tells the caller.
-    let bad = json!({ "comments": "no event" });
-    let resp = test::call_service(
-        &app,
-        post_user_feedback(&s, format!("Bearer {token}"), &bad),
-    )
-    .await;
-    assert_eq!(resp.status(), 400);
+    for bad in [
+        json!({ "comments": "no event" }),
+        json!({ "event_id": new_id(), "comments": "   " }),
+        json!({ "event_id": new_id(), "comments": "x".repeat(4097) }),
+    ] {
+        let resp = test::call_service(
+            &app,
+            post_user_feedback(&s, format!("Bearer {token}"), &bad),
+        )
+        .await;
+        assert_eq!(resp.status(), 400);
+    }
 }
 
 async fn admin_token(pool: &DbPool) -> String {
