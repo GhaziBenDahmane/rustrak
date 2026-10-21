@@ -2422,7 +2422,7 @@
                           },
                           "sentry_key": {
                             "type": "string",
-                            "description": "The DSN's public key: 32 hex digits, not necessarily an RFC 4122 UUID."
+                            "description": "The DSN's public key: its 32 hex digits in hyphenated UUID form\n(8-4-4-4-12), not necessarily an RFC 4122 UUID. The DSN carries the\nsame key without hyphens."
                           },
                           "slug": {
                             "type": "string"
@@ -14168,7 +14168,7 @@
           },
           "sentry_key": {
             "type": "string",
-            "description": "The DSN's public key: 32 hex digits, not necessarily an RFC 4122 UUID."
+            "description": "The DSN's public key: its 32 hex digits in hyphenated UUID form\n(8-4-4-4-12), not necessarily an RFC 4122 UUID. The DSN carries the\nsame key without hyphens."
           },
           "slug": {
             "type": "string"

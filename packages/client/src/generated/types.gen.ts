@@ -1290,7 +1290,9 @@ export type ProjectResponse = {
      */
     rate_limited_event_count: number;
     /**
-     * The DSN's public key: 32 hex digits, not necessarily an RFC 4122 UUID.
+     * The DSN's public key: its 32 hex digits in hyphenated UUID form
+     * (8-4-4-4-12), not necessarily an RFC 4122 UUID. The DSN carries the
+     * same key without hyphens.
      */
     sentry_key: string;
     slug: string;
@@ -3537,7 +3539,9 @@ export type ProjectsListResponses = {
              */
             rate_limited_event_count: number;
             /**
-             * The DSN's public key: 32 hex digits, not necessarily an RFC 4122 UUID.
+             * The DSN's public key: its 32 hex digits in hyphenated UUID form
+             * (8-4-4-4-12), not necessarily an RFC 4122 UUID. The DSN carries the
+             * same key without hyphens.
              */
             sentry_key: string;
             slug: string;
