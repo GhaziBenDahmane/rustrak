@@ -231,7 +231,9 @@
       "removeBookmark": "取消收藏",
       "subscribe": "订阅",
       "unsubscribe": "取消订阅",
-      "deleteIssue": "删除问题"
+      "deleteIssue": "删除问题",
+      "markSpam": "标记为垃圾",
+      "moveToInbox": "移回收件箱"
     },
     "toasts": {
       "updateFailed": "更新问题失败",
@@ -512,7 +514,8 @@
       "agents": "智能体",
       "logs": "日志",
       "settings": "设置",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "用户反馈"
     },
     "collapse": {
       "expand": "展开",
@@ -1620,7 +1623,35 @@
       "formatPlainText": "纯文本",
       "formatJson": "JSON",
       "noEventsYet": "暂无事件",
-      "noEventsDescription": "此问题已创建，但尚未记录任何事件。一旦您的应用发送事件，它们就会显示在这里。"
+      "noEventsDescription": "此问题已创建，但尚未记录任何事件。一旦您的应用发送事件，它们就会显示在这里。",
+      "sectionFeedback": "反馈",
+      "sectionUserFeedback": "用户反馈",
+      "feedback": {
+        "from": "来自",
+        "anonymous": "匿名",
+        "email": "邮箱",
+        "page": "页面",
+        "viewError": "查看相关错误",
+        "errorNotFound": "该错误事件尚未到达，或已被删除。"
+      }
+    },
+    "feedback": {
+      "title": "用户反馈",
+      "subtitle": "{project} 的用户告诉你的内容",
+      "meta": {
+        "description": "{project} 的用户反馈"
+      },
+      "loadFailed": "无法加载反馈",
+      "mailbox": {
+        "inbox": "收件箱",
+        "resolved": "已解决",
+        "spam": "垃圾"
+      },
+      "empty": {
+        "title": "这里没有反馈",
+        "description": "通过 SDK 的反馈组件或 captureFeedback 发送的反馈会显示在这里"
+      },
+      "anonymous": "匿名"
     }
   },
   "settings": {

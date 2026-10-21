@@ -231,7 +231,9 @@
       "removeBookmark": "Elimină din favorite",
       "subscribe": "Abonează-te",
       "unsubscribe": "Dezabonează-te",
-      "deleteIssue": "Șterge problema"
+      "deleteIssue": "Șterge problema",
+      "markSpam": "Marchează ca spam",
+      "moveToInbox": "Mută în inbox"
     },
     "toasts": {
       "updateFailed": "Actualizarea problemelor a eșuat",
@@ -512,7 +514,8 @@
       "agents": "Agenți",
       "logs": "Jurnale",
       "settings": "Setări",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "Feedback utilizatori"
     },
     "collapse": {
       "expand": "Extinde",
@@ -1620,7 +1623,35 @@
       "formatPlainText": "Text simplu",
       "formatJson": "JSON",
       "noEventsYet": "Niciun eveniment încă",
-      "noEventsDescription": "Această problemă a fost creată, dar încă nu s-a înregistrat niciun eveniment. Evenimentele vor apărea aici imediat ce aplicația ta le trimite."
+      "noEventsDescription": "Această problemă a fost creată, dar încă nu s-a înregistrat niciun eveniment. Evenimentele vor apărea aici imediat ce aplicația ta le trimite.",
+      "sectionFeedback": "Feedback",
+      "sectionUserFeedback": "Feedback utilizatori",
+      "feedback": {
+        "from": "De la",
+        "anonymous": "Anonim",
+        "email": "E-mail",
+        "page": "Pagină",
+        "viewError": "Vezi eroarea la care se referă",
+        "errorNotFound": "Acest eveniment de eroare nu a sosit încă sau a fost șters."
+      }
+    },
+    "feedback": {
+      "title": "Feedback utilizatori",
+      "subtitle": "Ce ți-au spus utilizatorii {project}",
+      "meta": {
+        "description": "Feedback de la utilizatorii {project}"
+      },
+      "loadFailed": "Feedbackul nu a putut fi încărcat",
+      "mailbox": {
+        "inbox": "Inbox",
+        "resolved": "Rezolvate",
+        "spam": "Spam"
+      },
+      "empty": {
+        "title": "Niciun feedback aici",
+        "description": "Aici apare feedbackul trimis cu widgetul de feedback al SDK-ului sau cu captureFeedback"
+      },
+      "anonymous": "Anonim"
     }
   },
   "settings": {

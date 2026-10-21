@@ -6,6 +6,7 @@ import {
   ChevronsLeft,
   ChevronsUpDown,
   LayoutDashboard,
+  MessageSquare,
   Rocket,
   ScrollText,
   Settings,
@@ -178,6 +179,11 @@ export function ProjectSidebar({ projectId, projects }: ProjectSidebarProps) {
       href: `/projects/${projectId}/issues`,
       label: t('nav.issues'),
       icon: AlertCircle,
+    },
+    {
+      href: `/projects/${projectId}/feedback`,
+      label: t('nav.feedback'),
+      icon: MessageSquare,
     },
     {
       href: `/projects/${projectId}/releases`,

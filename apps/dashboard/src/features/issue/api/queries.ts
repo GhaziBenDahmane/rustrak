@@ -7,6 +7,8 @@
  */
 import type {
   ActivityEntry,
+  FeedbackListData,
+  FeedbackListResponse,
   IssueAggregates,
   IssueResponse,
   IssueStatsResponse,
@@ -15,6 +17,7 @@ import type {
   IssuesListResponse,
   Result,
   RustrakError,
+  UserReport,
 } from '@rustrak/client';
 import { createClient } from '@/shared/api/rustrak';
 
@@ -109,5 +112,38 @@ export async function getIssueActivity(
   const client = await createClient();
   return client.issues.getActivity({
     path: { project_id: projectId, issue_id: issueId },
+  });
+}
+
+/**
+ * List the feedback users sent about an issue.
+ *
+ * @param projectId - The project ID
+ * @param issueId - The issue UUID
+ */
+export async function listUserReports(
+  projectId: number,
+  issueId: string,
+): Promise<Result<UserReport[], RustrakError>> {
+  const client = await createClient();
+  return client.issues.listUserReports({
+    path: { project_id: projectId, issue_id: issueId },
+  });
+}
+
+/**
+ * List a project's user feedback, with what each user submitted.
+ *
+ * @param projectId - The project ID
+ * @param options - Mailbox filter and pagination
+ */
+export async function listFeedback(
+  projectId: number,
+  options?: FeedbackListData['query'],
+): Promise<Result<FeedbackListResponse, RustrakError>> {
+  const client = await createClient();
+  return client.feedback.list({
+    path: { project_id: projectId },
+    query: options,
   });
 }
