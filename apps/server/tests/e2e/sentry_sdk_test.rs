@@ -1011,6 +1011,7 @@ async fn test_sdk_issue_is_searchable_by_frame_filename_and_module() {
             IssueSort::DigestOrder,
             SortOrder::Desc,
             IssueFilter::All,
+            rustrak::pagination::IssueCategory::Error,
             1,
             20,
             Some(term),

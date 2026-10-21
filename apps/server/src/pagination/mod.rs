@@ -140,6 +140,10 @@ pub struct ListIssuesQuery {
     #[serde(default)]
     pub filter: IssueFilter,
 
+    /// Issue category: error (default) or feedback
+    #[serde(default)]
+    pub category: IssueCategory,
+
     /// Free-text search across type, value, transaction, and culprit.
     #[serde(default)]
     pub q: Option<String>,
@@ -167,6 +171,29 @@ pub enum IssueFilter {
     Muted,
     /// All issues
     All,
+}
+
+/// Which kind of issue a list shows. Feedback is kept out of the default
+/// list, as Sentry's `FeedbackGroup` is (`in_default_search=False`).
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum IssueCategory {
+    /// Issues grouped from error events
+    #[default]
+    Error,
+    /// User feedback, one issue per submission
+    Feedback,
+}
+
+impl IssueCategory {
+    /// The `issues.issue_category` value; also trusted SQL.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Feedback => "feedback",
+        }
+    }
 }
 
 /// Query parameters for listing transactions (offset-based)

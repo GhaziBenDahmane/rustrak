@@ -1,3 +1,4 @@
+use super::feedback::{self, Feedback, NewAttachment};
 use super::{clamp, is_stale, relay_level, InFlightDigests, Processor, ProcessorCtx};
 use crate::config::RateLimitConfig;
 use crate::db::DbPool;
@@ -151,6 +152,26 @@ impl ErrorProcessor {
             ));
         }
         drop_stale_breadcrumbs(&mut event_data);
+        // Taken out of every event so they are never stored in its data, and
+        // kept only for a feedback: ingest attaches them to no other event.
+        let attachments = feedback::take_attachments(&mut event_data);
+        // A feedback Sentry would filter is dropped here, like an invalid event.
+        let feedback = Feedback::from_event(&event_data)?;
+        // A feedback occurrence defaults to `info`, and the event, its issue
+        // and its alert rules all read that level from here.
+        if feedback.is_some()
+            && event_data
+                .get("level")
+                .and_then(|v| v.as_str())
+                .and_then(relay_level)
+                .is_none()
+        {
+            event_data["level"] = serde_json::json!("info");
+        }
+        let attachments = match feedback {
+            Some(_) => attachments,
+            None => Vec::new(),
+        };
 
         // 2b. Rewrite stack frames using source maps (non-fatal)
         if let Err(e) = crate::services::sourcemap::rewrite_frames(
@@ -199,7 +220,11 @@ impl ErrorProcessor {
                 let types = match existing.issue_event_count {
                     Some(count) => {
                         issue.digested_event_count = count;
-                        event_alert_types(existing.alert_type, issue.is_muted())
+                        event_alert_types(
+                            existing.alert_type,
+                            issue.is_muted(),
+                            issue.issue_category == feedback::CATEGORY,
+                        )
                     }
                     None => {
                         if existing.alert_type == Some(AlertType::NewIssue) {
@@ -259,14 +284,27 @@ impl ErrorProcessor {
                 .await;
         }
 
-        // 5. Calculate grouping key and hash
-        let grouping_key = calculate_grouping_key(&event_data);
+        // 5. Calculate grouping key and hash. Every feedback is its own issue:
+        // Sentry gives each one a random fingerprint.
+        let grouping_key = match &feedback {
+            Some(_) => format!("feedback:{}", event_id.simple()),
+            None => calculate_grouping_key(&event_data),
+        };
         let grouping_key_hash = hash_grouping_key(&grouping_key);
-        let legacy_grouping_key_hash =
-            hash_grouping_key(&crate::services::calculate_grouping_key_v1(&event_data));
+        let legacy_grouping_key_hash = match &feedback {
+            Some(_) => grouping_key_hash.clone(),
+            None => hash_grouping_key(&crate::services::calculate_grouping_key_v1(&event_data)),
+        };
 
         // 6. Extract denormalized fields
-        let denormalized = get_denormalized_fields(&event_data);
+        let mut denormalized = get_denormalized_fields(&event_data);
+        if let Some(feedback) = &feedback {
+            // Sentry's occurrence: title "User Feedback", the message as its
+            // subtitle, culprit "user".
+            denormalized.calculated_type = "User Feedback".to_string();
+            denormalized.calculated_value = feedback.message.clone();
+            denormalized.culprit = "user".to_string();
+        }
         // Cut to the VARCHAR(20) and VARCHAR(64) columns, which Postgres enforces.
         let str_field = |key: &str, max_chars: usize| {
             event_data
@@ -304,6 +342,8 @@ impl ErrorProcessor {
                 remote_addr: metadata.remote_addr.as_deref(),
                 rate_limit_config: &self.rate_limit_config,
                 project: &project,
+                feedback: feedback.as_ref(),
+                attachments: &attachments,
             },
         )
         .await?;
@@ -342,8 +382,8 @@ impl ErrorProcessor {
         }
 
         // 10. Persist alert history before deleting the only durable source.
-        let lifecycle = alert_type_for_lifecycle(issue_created, regressed);
-        let types = event_alert_types(lifecycle, issue.is_muted());
+        let lifecycle = alert_type_for_lifecycle(issue_created, regressed, feedback.is_some());
+        let types = event_alert_types(lifecycle, issue.is_muted(), feedback.is_some());
         for &alert_type in &types {
             AlertService::trigger_event_alert(
                 pool,
@@ -689,6 +729,10 @@ struct DigestWrite<'a> {
     rate_limit_config: &'a RateLimitConfig,
     /// The row loaded at the start of the digest, for its own quota limits.
     project: &'a crate::models::Project,
+    /// Set when the event is a user feedback.
+    feedback: Option<&'a Feedback>,
+    /// The feedback's attachments, stored with the event.
+    attachments: &'a [NewAttachment],
 }
 
 /// How an accepted event left the digest.
@@ -809,6 +853,10 @@ async fn write_digest_rows(
         write.denormalized,
         write.level,
         write.platform,
+        match write.feedback {
+            Some(_) => feedback::CATEGORY,
+            None => "error",
+        },
     )
     .await?;
 
@@ -826,7 +874,7 @@ async fn write_digest_rows(
     // No digest_order to compute: events order within an issue by
     // (timestamp, id) (see idx_events_issue_timestamp), which needs no
     // per-issue counter to derive or keep in sync.
-    EventService::create(
+    let event_row_id = EventService::create(
         &mut **tx,
         write.event_id,
         write.project_id,
@@ -836,12 +884,30 @@ async fn write_digest_rows(
         write.timestamp,
         write.denormalized,
         write.remote_addr,
-        alert_type_for_lifecycle(created, regressed),
+        alert_type_for_lifecycle(created, regressed, write.feedback.is_some()),
         // Kept only when the event could fire new-issue rules: a muted one
         // replays its lifecycle alert alone, whatever the issue is by then.
         (!issue.is_muted()).then_some(issue.digested_event_count),
     )
     .await?;
+
+    link_user_report(tx, write, issue.id).await?;
+    for attachment in write.attachments {
+        sqlx::query(
+            "INSERT INTO event_attachments (id, project_id, event_id, filename, content_type, size, data, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(write.project_id)
+        .bind(event_row_id)
+        .bind(&attachment.filename)
+        .bind(&attachment.content_type)
+        .bind(attachment.data.len() as i32)
+        .bind(&attachment.data)
+        .bind(write.timestamp)
+        .execute(&mut **tx)
+        .await?;
+    }
 
     // Last, so the installation row every digest shares is locked only from
     // here to the commit, as its counter bump always was. A full quota rolls
@@ -855,6 +921,57 @@ async fn write_digest_rows(
     RateLimitService::increment_event_counters(tx, write.project_id).await?;
 
     Ok(DigestOutcome::Written(Box::new(issue), created, regressed))
+}
+
+/// Keeps `user_reports` (what an error issue shows as its feedback) in step
+/// with the digest, as Sentry's `save_event_feedback` and post-process
+/// `link_event_to_user_report` do: a feedback about an event records itself
+/// against that event's issue, and an event claims the feedback that
+/// arrived before it.
+async fn link_user_report(
+    tx: &mut sqlx::Transaction<'_, DbBackend>,
+    write: &DigestWrite<'_>,
+    issue_id: Uuid,
+) -> AppResult<()> {
+    let Some(feedback) = write.feedback else {
+        sqlx::query(
+            "UPDATE user_reports SET issue_id = $1 \
+             WHERE project_id = $2 AND event_id = $3 AND issue_id IS NULL",
+        )
+        .bind(issue_id)
+        .bind(write.project_id)
+        .bind(write.event_id)
+        .execute(&mut **tx)
+        .await?;
+        return Ok(());
+    };
+    let Some(event_id) = feedback.associated_event_id else {
+        return Ok(());
+    };
+    let error_issue: Option<Option<Uuid>> =
+        sqlx::query_scalar("SELECT issue_id FROM events WHERE project_id = $1 AND event_id = $2")
+            .bind(write.project_id)
+            .bind(event_id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    sqlx::query(
+        "INSERT INTO user_reports (id, project_id, issue_id, feedback_issue_id, event_id, name, email, comments, created_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(write.project_id)
+    .bind(error_issue.flatten())
+    // Deleting the feedback deletes this copy of it.
+    .bind(issue_id)
+    .bind(event_id)
+    // Cut to the VARCHAR(255) columns, which Postgres enforces.
+    .bind(clamp(&feedback.name, 255))
+    .bind(clamp(&feedback.contact_email, 255))
+    .bind(&feedback.message)
+    .bind(write.timestamp)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 /// Inner function that performs the actual find-or-create logic within a transaction
@@ -874,6 +991,7 @@ async fn find_or_create_issue_and_grouping_inner(
     denormalized: &DenormalizedFields,
     level: Option<&str>,
     platform: Option<&str>,
+    category: &str,
 ) -> AppResult<(Issue, Grouping, bool, bool)> {
     // The grouping and the issue columns the update path reads, in one round
     // trip: on SQLite every statement is a hand-off to the connection's
@@ -1076,11 +1194,11 @@ async fn find_or_create_issue_and_grouping_inner(
             calculated_type, calculated_value, "transaction",
             last_frame_filename, last_frame_module, last_frame_function,
             level, platform, status, substatus, priority, culprit, logger,
-            first_release, last_release, numeric_id
+            first_release, last_release, issue_type, issue_category, numeric_id
         )
         VALUES (
             $1, $2, $3, $4, $4, 1, 1, $5, $6, $7, $8, $9, $10, $11, $12,
-            'unresolved', 'new', $13, $14, $15, $16, $16, {}
+            'unresolved', 'new', $13, $14, $15, $16, $16, $17, $17, {}
         )
         RETURNING *
         "#,
@@ -1102,6 +1220,7 @@ async fn find_or_create_issue_and_grouping_inner(
     .bind(&denormalized.culprit)
     .bind(&denormalized.logger)
     .bind(&denormalized.release)
+    .bind(category)
     .fetch_one(&mut **tx)
     .await?;
 
@@ -1125,17 +1244,20 @@ async fn find_or_create_issue_and_grouping_inner(
 
 /// The alerts an event fires: its lifecycle's, and a new-issue rule's, since
 /// any unmuted event, a regression too, can be the one that brings the issue
-/// to the rule's `min_events`; the rule decides.
-fn event_alert_types(lifecycle: Option<AlertType>, muted: bool) -> Vec<AlertType> {
+/// to the rule's `min_events`; the rule decides. A feedback fires only its
+/// own `new_feedback` rule.
+fn event_alert_types(lifecycle: Option<AlertType>, muted: bool, feedback: bool) -> Vec<AlertType> {
     let mut types: Vec<AlertType> = lifecycle.into_iter().collect();
-    if lifecycle != Some(AlertType::NewIssue) && !muted {
+    if !feedback && lifecycle != Some(AlertType::NewIssue) && !muted {
         types.push(AlertType::NewIssue);
     }
     types
 }
 
-fn alert_type_for_lifecycle(created: bool, regressed: bool) -> Option<AlertType> {
-    if created {
+fn alert_type_for_lifecycle(created: bool, regressed: bool, feedback: bool) -> Option<AlertType> {
+    if created && feedback {
+        Some(AlertType::NewFeedback)
+    } else if created {
         Some(AlertType::NewIssue)
     } else if regressed {
         Some(AlertType::Regression)
@@ -1229,14 +1351,30 @@ mod tests {
     #[test]
     fn persists_only_alerting_lifecycles() {
         assert_eq!(
-            alert_type_for_lifecycle(true, false),
+            alert_type_for_lifecycle(true, false, false),
             Some(AlertType::NewIssue)
         );
         assert_eq!(
-            alert_type_for_lifecycle(false, true),
+            alert_type_for_lifecycle(false, true, false),
             Some(AlertType::Regression)
         );
-        assert_eq!(alert_type_for_lifecycle(false, false), None);
+        assert_eq!(alert_type_for_lifecycle(false, false, false), None);
+        assert_eq!(
+            alert_type_for_lifecycle(true, false, true),
+            Some(AlertType::NewFeedback)
+        );
+    }
+
+    #[test]
+    fn feedback_fires_only_its_own_rule() {
+        assert_eq!(
+            event_alert_types(Some(AlertType::NewFeedback), false, true),
+            [AlertType::NewFeedback]
+        );
+        assert_eq!(
+            event_alert_types(Some(AlertType::Regression), false, false),
+            [AlertType::Regression, AlertType::NewIssue]
+        );
     }
 
     #[test]

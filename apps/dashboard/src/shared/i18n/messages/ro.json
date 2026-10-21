@@ -864,6 +864,10 @@
     "unmute": {
       "name": "Reactivează",
       "description": "O problemă amuțită este reactivată"
+    },
+    "newFeedback": {
+      "name": "Feedback nou",
+      "description": "Un utilizator trimite feedback"
     }
   },
   "events": {

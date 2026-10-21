@@ -990,6 +990,103 @@
         ]
       }
     },
+    "/api/0/projects/{org_slug}/{project_slug}/user-feedback/": {
+      "post": {
+        "tags": [
+          "Sentry API"
+        ],
+        "summary": "POST /api/0/projects/{org_slug}/{project_slug}/user-feedback/",
+        "description": "Submit a user report about an error event (Sentry's\n`ProjectUserReportsEndpoint`, `feedback/endpoints/project_user_reports.py`).\nAccepts `Authorization: DSN <dsn>` as well as a token; the report becomes a\nfeedback, as the `user_report` envelope item does.",
+        "operationId": "sentry.submitUserFeedback",
+        "parameters": [
+          {
+            "name": "org_slug",
+            "in": "path",
+            "description": "Organization slug (ignored)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project_slug",
+            "in": "path",
+            "description": "Project slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SentryUserReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The report, or an empty body under DSN auth",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentryUserReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/github": {
       "get": {
         "tags": [
@@ -4609,6 +4706,15 @@
             "required": false,
             "schema": {
               "$ref": "#/components/schemas/IssueFilter"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Issue category: error (default) or feedback",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/IssueCategory"
             }
           },
           {
@@ -11681,7 +11787,8 @@
         "enum": [
           "new_issue",
           "regression",
-          "unmute"
+          "unmute",
+          "new_feedback"
         ]
       },
       "AssembleBody": {
@@ -13024,6 +13131,14 @@
             "format": "int64"
           }
         }
+      },
+      "IssueCategory": {
+        "type": "string",
+        "description": "Which kind of issue a list shows. Feedback is kept out of the default\nlist, as Sentry's `FeedbackGroup` is (`in_default_search=False`).",
+        "enum": [
+          "error",
+          "feedback"
+        ]
       },
       "IssueFilter": {
         "type": "string",
@@ -15132,6 +15247,72 @@
           },
           "value": {
             "type": "string"
+          }
+        }
+      },
+      "SentryUserReport": {
+        "type": "object",
+        "description": "Body of a user report (`UserReportSerializer` in Sentry's\n`api/serializers/models/userreport.py`), as the report was received.",
+        "required": [
+          "id",
+          "eventID",
+          "name",
+          "email",
+          "comments",
+          "dateCreated"
+        ],
+        "properties": {
+          "comments": {
+            "type": "string"
+          },
+          "dateCreated": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email": {
+            "type": "string"
+          },
+          "eventID": {
+            "type": "string",
+            "description": "The error event the report is about."
+          },
+          "id": {
+            "type": "string",
+            "description": "The feedback the report became."
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "SentryUserReportRequest": {
+        "type": "object",
+        "description": "Request body of a user report.",
+        "required": [
+          "event_id"
+        ],
+        "properties": {
+          "comments": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event_id": {
+            "type": "string",
+            "description": "The error event the report is about."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

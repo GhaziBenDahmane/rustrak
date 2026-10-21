@@ -91,6 +91,7 @@ pub async fn list_issues(
         query.sort,
         query.order,
         query.filter,
+        query.category,
         query.page,
         query.per_page,
         query.q.as_deref(),

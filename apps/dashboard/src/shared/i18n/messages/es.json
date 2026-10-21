@@ -864,6 +864,10 @@
     "unmute": {
       "name": "Reactivación",
       "description": "Se reactiva un problema silenciado"
+    },
+    "newFeedback": {
+      "name": "Feedback nuevo",
+      "description": "Un usuario envía feedback"
     }
   },
   "events": {

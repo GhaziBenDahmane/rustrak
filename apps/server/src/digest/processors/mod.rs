@@ -1,4 +1,5 @@
 pub mod event;
+mod feedback;
 pub mod logs;
 pub mod session;
 pub mod span;
@@ -7,6 +8,7 @@ pub mod transaction;
 
 pub(crate) use event::is_retryable_write_contention;
 pub use event::{Digested, ErrorProcessor};
+pub(crate) use feedback::{Feedback, ATTACHMENTS_KEY};
 pub use logs::LogsProcessor;
 pub use session::{SessionItem, SessionProcessor};
 pub use span::SpanProcessor;
@@ -278,7 +280,11 @@ pub enum Route {
 /// without a route arm is a build error, never a silent drop.
 pub fn route(item: &EnvelopeItemKind) -> Route {
     match item {
-        EnvelopeItemKind::Event(_) => Route::Error,
+        // Feedback is an event; a legacy user report is shimmed into one.
+        EnvelopeItemKind::Event(_)
+        | EnvelopeItemKind::Feedback(_)
+        | EnvelopeItemKind::UserReport(_)
+        | EnvelopeItemKind::Attachment(_) => Route::Error,
         EnvelopeItemKind::Transaction(_) => Route::Transaction,
         EnvelopeItemKind::Session(_) | EnvelopeItemKind::Sessions(_) => Route::Session,
         EnvelopeItemKind::Log(_) => Route::Log,

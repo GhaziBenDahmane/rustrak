@@ -1,4 +1,4 @@
-import { Bell, BellOff, RefreshCw, Zap } from 'lucide-react';
+import { Bell, BellOff, MessageSquare, RefreshCw, Zap } from 'lucide-react';
 
 /**
  * The mark for an alert trigger.
@@ -20,6 +20,8 @@ export function AlertTypeIcon({
       return <RefreshCw className={className} />;
     case 'unmute':
       return <BellOff className={className} />;
+    case 'new_feedback':
+      return <MessageSquare className={className} />;
     default:
       return <Bell className={className} />;
   }

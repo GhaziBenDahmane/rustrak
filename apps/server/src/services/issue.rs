@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::db::{Db, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::models::{Grouping, Issue};
-use crate::pagination::{IssueCursor, IssueFilter, IssueSort, SortOrder};
+use crate::pagination::{IssueCategory, IssueCursor, IssueFilter, IssueSort, SortOrder};
 use crate::services::grouping::DenormalizedFields;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -497,7 +497,7 @@ impl IssueService {
         let issues = sqlx::query_as::<_, Issue>(
             r#"
             SELECT * FROM issues
-            WHERE project_id = $1 AND first_release = $2
+            WHERE project_id = $1 AND first_release = $2 AND issue_category = 'error'
             ORDER BY first_seen DESC
             LIMIT $3
             "#,
@@ -521,6 +521,7 @@ impl IssueService {
         sort: IssueSort,
         order: SortOrder,
         filter: IssueFilter,
+        category: IssueCategory,
         page: i64,
         per_page: i64,
         search: Option<&str>,
@@ -554,6 +555,7 @@ impl IssueService {
             project_id,
             order_clause,
             filter,
+            category,
             offset,
             per_page,
             search,
@@ -561,20 +563,22 @@ impl IssueService {
         .await
     }
 
-    /// One window of a project's issues: `filter` and `search` as in
-    /// [`Self::list_offset`], ordered by a trusted `order_clause`.
+    /// One window of a project's issues: `filter`, `category` and `search` as
+    /// in [`Self::list_offset`], ordered by a trusted `order_clause`.
     ///
     /// Returns (issues, total_count) where total_count is the total matching issues.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn list_window(
         pool: &DbPool,
         project_id: i32,
         order_clause: &str,
         filter: IssueFilter,
+        category: IssueCategory,
         offset: i64,
         per_page: i64,
         search: Option<&str>,
     ) -> AppResult<(Vec<Issue>, i64)> {
-        let status_clause = filter_clause(filter);
+        let status_clause = filter_clause(filter, category);
 
         // Normalize the search term into a case-insensitive LIKE pattern (works
         // on both Postgres and SQLite, unlike Postgres-only ILIKE). Literal
@@ -1110,7 +1114,8 @@ impl IssueService {
         filter: IssueFilter,
     ) -> AppResult<u64> {
         // `filter_clause` returns fixed SQL; only the project id is user input.
-        let clause = filter_clause(filter);
+        // Bulk deletes act on the error list, never on feedback.
+        let clause = filter_clause(filter, IssueCategory::Error);
 
         #[cfg(feature = "postgres")]
         let deleted = {
@@ -1559,13 +1564,17 @@ impl IssueService {
 }
 
 /// WHERE clause for an issue filter; `$1` is the project id.
-fn filter_clause(filter: IssueFilter) -> &'static str {
-    match filter {
-        IssueFilter::Open => "project_id = $1 AND status = 'unresolved'",
-        IssueFilter::Resolved => "project_id = $1 AND status = 'resolved'",
-        IssueFilter::Muted => "project_id = $1 AND status = 'ignored'",
-        IssueFilter::All => "project_id = $1",
-    }
+fn filter_clause(filter: IssueFilter, category: IssueCategory) -> String {
+    let status = match filter {
+        IssueFilter::Open => " AND status = 'unresolved'",
+        IssueFilter::Resolved => " AND status = 'resolved'",
+        IssueFilter::Muted => " AND status = 'ignored'",
+        IssueFilter::All => "",
+    };
+    format!(
+        "project_id = $1{status} AND issue_category = '{}'",
+        category.as_str()
+    )
 }
 
 #[cfg(test)]

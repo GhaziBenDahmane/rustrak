@@ -426,6 +426,38 @@ async fn issues_query_filters_by_status_and_text() {
 }
 
 #[actix_web::test]
+async fn issues_list_feedback_only_under_its_category() {
+    let db = TestDb::new().await;
+    let token = admin_token(&db.pool).await;
+    let p = project(&db.pool, "Demo App").await;
+    ingest(&db.pool, p.id, "ValueError", "boom", Utc::now()).await;
+    let feedback = json!({"type": "feedback", "contexts": {"feedback": {"message": "Love it"}}});
+    ingest_with(&db.pool, p.id, "", "", Utc::now(), feedback).await;
+    let app = app!(db.pool);
+    let base = "/api/0/projects/rustrak/demo-app/issues/";
+    let titles = |body: &Value| -> Vec<String> {
+        body.as_array()
+            .unwrap()
+            .iter()
+            .map(|i| i["title"].as_str().unwrap().to_string())
+            .collect()
+    };
+
+    // Sentry keeps feedback out of the default search (`in_default_search`).
+    let (_, body) = get_json(&app, base, &token).await;
+    assert_eq!(titles(&body), ["ValueError: boom"]);
+    // Its own feedback UI asks with `issue.category:feedback`.
+    let (_, body) = get_json(
+        &app,
+        &format!("{base}?query=is:unresolved%20issue.category:feedback"),
+        &token,
+    )
+    .await;
+    assert_eq!(titles(&body), ["User Feedback: Love it"]);
+    assert_eq!(body[0]["issueCategory"], "feedback");
+}
+
+#[actix_web::test]
 async fn issues_sort_follows_sentry_sort_keys() {
     let db = TestDb::new().await;
     let token = admin_token(&db.pool).await;
