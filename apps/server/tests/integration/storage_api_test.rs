@@ -1174,6 +1174,52 @@ async fn a_cleanup_gives_the_space_it_freed_back_to_the_filesystem() {
 
 #[cfg(feature = "sqlite")]
 #[actix_web::test]
+async fn a_reader_blocking_the_checkpoint_means_nothing_has_left_the_file_yet() {
+    use sqlx::Connection;
+    let dir = tempfile::tempdir().unwrap();
+    // Incremental and WAL like the shipped pool, but a short busy timeout so
+    // the blocked checkpoint gives up quickly.
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(dir.path().join("rustrak.db"))
+        .create_if_missing(true)
+        .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_millis(200));
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.clone())
+        .await
+        .unwrap();
+    rustrak::db::run_migrations(&pool).await.unwrap();
+    let project = create_project(&pool, "busy").await;
+    seed_old_logs(&pool, project, 10, 500, 4_096).await;
+
+    // A reader on the snapshot before the delete, open across the reclaim.
+    let mut reader = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .unwrap();
+    let mut read = reader.begin().await.unwrap();
+    let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs")
+        .fetch_one(&mut *read)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM logs")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let released = rustrak::services::StorageService::reclaim_free_space(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(released, 0, "the checkpoint could not shrink the file yet");
+    let (_, free) = pages(&pool).await;
+    assert_eq!(free, 0, "the pages were freed all the same");
+    read.rollback().await.unwrap();
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
 async fn a_database_created_before_incremental_mode_keeps_its_freed_pages() {
     // TestDb's file is created without auto_vacuum, like a database a server
     // created before this mode existed: freed pages stay on the freelist for

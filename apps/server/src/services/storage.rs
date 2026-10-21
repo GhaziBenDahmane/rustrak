@@ -399,7 +399,8 @@ pub(crate) fn validate_retention(older_than_days: i64) -> AppResult<()> {
 
 impl StorageService {
     /// Hands the pages a cleanup freed back to the filesystem, returning the
-    /// bytes released.
+    /// bytes the database file gave up: 0 when there was nothing to release,
+    /// or when a reader kept the closing checkpoint from shrinking the file.
     ///
     /// SQLite keeps a deleted row's pages on its freelist and reuses them, so
     /// after a cleanup the database stops growing but its file never shrinks.
@@ -438,10 +439,17 @@ impl StorageService {
             pause_between_batches().await;
         }
         // Under WAL the shrink is recorded in the log; the checkpoint applies
-        // it to the database file and empties the log.
-        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(pool)
+        // it to the database file and empties the log. A reader still on an
+        // older snapshot keeps the checkpoint from completing, which SQLite
+        // reports in the row's `busy` column rather than as an error. The
+        // pages are freed all the same and a later checkpoint shrinks the
+        // file, so this stays best effort, but nothing has left the file yet.
+        let (busy, _, _): (i64, i64, i64) = sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+            .fetch_one(pool)
             .await?;
+        if busy != 0 {
+            return Ok(0);
+        }
         Ok(released * page_size)
     }
 
