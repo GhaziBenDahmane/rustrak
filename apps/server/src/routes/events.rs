@@ -8,7 +8,8 @@ use crate::error::{AppError, AppResult};
 use crate::models::{EventDetailResponse, EventResponse};
 use crate::pagination::{EventCursor, ListEventsQuery, PaginatedResponse, PAGE_SIZE};
 use crate::services::access::{self, Action};
-use crate::services::{EventService, IssueService};
+use crate::services::attachment::image_type;
+use crate::services::{AttachmentService, EventService, IssueService};
 
 #[cfg(feature = "openapi")]
 use utoipa::OpenApi;
@@ -184,15 +185,144 @@ pub async fn get_event_by_sentry_id(
 )]
 pub struct EventsApi;
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments",
+    operation_id = "events.listAttachments",
+    tag = "Events",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("issue_id" = uuid::Uuid, Path, description = "Issue ID"),
+        ("event_id" = uuid::Uuid, Path, description = "Event ID"),
+    ),
+    responses(
+        (status = 200, description = "The files sent with the event, without their bytes", body = Vec<crate::services::attachment::AttachmentInfo>),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments
+/// Lists the files sent with an event, such as a feedback's screenshot.
+pub async fn list_event_attachments(
+    pool: web::Data<DbPool>,
+    path: web::Path<(i32, Uuid, Uuid)>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let (project_id, issue_id, event_id) = path.into_inner();
+    access::require(
+        pool.get_ref(),
+        actor.is_admin(),
+        actor.user_id(),
+        project_id,
+        Action::ViewProject,
+    )
+    .await?;
+    let event = EventService::get_by_id(pool.get_ref(), event_id).await?;
+    if event.project_id != project_id || event.issue_id != Some(issue_id) {
+        return Err(AppError::NotFound(format!("Event {} not found", event_id)));
+    }
+    let attachments =
+        AttachmentService::list_for_event(pool.get_ref(), project_id, event_id).await?;
+    Ok(HttpResponse::Ok().json(attachments))
+}
+
+/// The raw bytes of an attachment. Untyped in the spec: the generated
+/// client validates bodies with zod, which has no type for a binary one.
+#[cfg(feature = "openapi")]
+#[derive(utoipa::ToSchema)]
+#[schema(value_type = Value)]
+pub struct AttachmentBytes(#[allow(dead_code)] Vec<u8>);
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/attachments/{attachment_id}",
+    operation_id = "events.downloadAttachment",
+    tag = "Events",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ("attachment_id" = uuid::Uuid, Path, description = "Attachment ID"),
+    ),
+    responses(
+        (status = 200, description = "The file: inline when its bytes are a PNG, JPEG, GIF or WebP image, a download otherwise", body = AttachmentBytes, content_type = "application/octet-stream"),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/projects/{project_id}/attachments/{attachment_id}
+/// Downloads an attachment. Only a real image is served inline; anything
+/// else, whatever type it claims, is a download that never runs.
+pub async fn download_attachment(
+    pool: web::Data<DbPool>,
+    path: web::Path<(i32, Uuid)>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let (project_id, attachment_id) = path.into_inner();
+    access::require(
+        pool.get_ref(),
+        actor.is_admin(),
+        actor.user_id(),
+        project_id,
+        Action::ViewProject,
+    )
+    .await?;
+    let (info, data) = AttachmentService::get(pool.get_ref(), project_id, attachment_id).await?;
+    use actix_web::http::header::{
+        Charset, ContentDisposition, DispositionParam, DispositionType, ExtendedValue,
+    };
+    // The sender names the file: the plain name keeps to characters a header
+    // cannot misread, and `filename*` (RFC 6266) carries the original,
+    // percent-encoded.
+    let filename: String = info
+        .filename
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => c,
+            _ => '_',
+        })
+        .collect();
+    let (content_type, disposition) = match image_type(&data) {
+        Some(image) => (image, DispositionType::Inline),
+        None => ("application/octet-stream", DispositionType::Attachment),
+    };
+    let mut parameters = vec![DispositionParam::Filename(filename.clone())];
+    if filename != info.filename {
+        parameters.push(DispositionParam::FilenameExt(ExtendedValue {
+            charset: Charset::Ext("UTF-8".to_string()),
+            language_tag: None,
+            value: info.filename.into_bytes(),
+        }));
+    }
+    Ok(HttpResponse::Ok()
+        .content_type(content_type)
+        .insert_header(ContentDisposition {
+            disposition,
+            parameters,
+        })
+        .insert_header(("X-Content-Type-Options", "nosniff"))
+        .insert_header(("Content-Security-Policy", "sandbox"))
+        .insert_header(("Cache-Control", "private, max-age=3600"))
+        .body(data))
+}
+
 /// Configure event routes
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.route(
         "/api/projects/{project_id}/events/sentry/{event_id}",
         web::get().to(get_event_by_sentry_id),
     );
+    cfg.route(
+        "/api/projects/{project_id}/attachments/{attachment_id}",
+        web::get().to(download_attachment),
+    );
     cfg.service(
         web::scope("/api/projects/{project_id}/issues/{issue_id}/events")
             .route("", web::get().to(list_events))
-            .route("/{event_id}", web::get().to(get_event)),
+            .route("/{event_id}", web::get().to(get_event))
+            .route(
+                "/{event_id}/attachments",
+                web::get().to(list_event_attachments),
+            ),
     );
 }

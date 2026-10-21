@@ -124,6 +124,100 @@ pub async fn list_issues(
     )))
 }
 
+/// Query of the feedback list.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::IntoParams))]
+pub struct ListFeedbackQuery {
+    /// Page number (1-indexed, default: 1)
+    #[serde(default = "default_page")]
+    pub page: i64,
+    /// Items per page (default: 25, max: 100)
+    #[serde(default = "default_feedback_per_page")]
+    pub per_page: i64,
+    /// open (the inbox, default), resolved, muted (spam) or all
+    #[serde(default)]
+    pub filter: crate::pagination::IssueFilter,
+}
+
+fn default_page() -> i64 {
+    1
+}
+
+fn default_feedback_per_page() -> i64 {
+    25
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/projects/{project_id}/feedback",
+    operation_id = "feedback.list",
+    tag = "Issues",
+    params(
+        ("project_id" = i32, Path, description = "Project ID"),
+        ListFeedbackQuery,
+    ),
+    responses(
+        (status = 200, description = "User feedback, newest first", body = inline(crate::pagination::OffsetPaginatedResponse<crate::models::FeedbackResponse>)),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/projects/{project_id}/feedback
+/// Lists user feedback with what each user submitted. Every feedback is an
+/// issue of category `feedback`; spam is a muted one.
+pub async fn list_feedback(
+    pool: web::Data<DbPool>,
+    path: web::Path<i32>,
+    query: web::Query<ListFeedbackQuery>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    let project_id = path.into_inner();
+    access::require(
+        pool.get_ref(),
+        actor.is_admin(),
+        actor.user_id(),
+        project_id,
+        Action::ViewProject,
+    )
+    .await?;
+    ProjectService::get_by_id(pool.get_ref(), project_id).await?;
+
+    let (issues, total_count) = IssueService::list_offset(
+        pool.get_ref(),
+        project_id,
+        crate::pagination::IssueSort::LastSeen,
+        crate::pagination::SortOrder::Desc,
+        query.filter,
+        crate::pagination::IssueCategory::Feedback,
+        query.page,
+        query.per_page,
+        None,
+    )
+    .await?;
+    let ids: Vec<Uuid> = issues.iter().map(|i| i.id).collect();
+    let contexts = IssueService::feedback_contexts(pool.get_ref(), &ids).await?;
+    let mut attachments =
+        crate::services::AttachmentService::list_for_issues(pool.get_ref(), &ids).await?;
+    let items: Vec<_> = issues
+        .iter()
+        .map(|i| {
+            crate::models::FeedbackResponse::new(
+                i,
+                contexts.get(&i.id),
+                attachments.remove(&i.id).unwrap_or_default(),
+            )
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(OffsetPaginatedResponse::new(
+        items,
+        total_count,
+        query.page,
+        query.per_page,
+    )))
+}
+
 #[cfg_attr(feature = "openapi", utoipa::path(
     get,
     path = "/api/projects/{project_id}/issues/{issue_id}",
@@ -1020,6 +1114,10 @@ pub struct IssuesApi;
 
 /// Configure issue routes
 pub fn configure(cfg: &mut web::ServiceConfig) {
+    cfg.route(
+        "/api/projects/{project_id}/feedback",
+        web::get().to(list_feedback),
+    );
     cfg.service(
         web::scope("/api/projects/{project_id}/issues")
             .route("", web::get().to(list_issues))

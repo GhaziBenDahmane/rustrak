@@ -126,8 +126,8 @@ pub use invitation::{
     AcceptInvitation, CreateInvitation, Invitation, InvitationResponse, InvitationStatus,
 };
 pub use issue::{
-    substatus_valid_for_status, BulkDeleteIssues, BulkUpdateIssues, Issue, IssueResponse,
-    UpdateIssueState, STATUS_IGNORED, STATUS_RESOLVED, STATUS_UNRESOLVED,
+    substatus_valid_for_status, BulkDeleteIssues, BulkUpdateIssues, FeedbackResponse, Issue,
+    IssueResponse, UpdateIssueState, STATUS_IGNORED, STATUS_RESOLVED, STATUS_UNRESOLVED,
 };
 pub use log::LogResponse;
 pub use project::{

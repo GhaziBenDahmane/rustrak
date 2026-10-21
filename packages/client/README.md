@@ -286,9 +286,11 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `events.downloadAttachment({ path })` | `GET /api/projects/{project_id}/attachments/{attachment_id}` | Downloads an attachment. |
 | `events.get({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}` | Gets a single event with full data |
 | `events.getBySentryId({ path })` | `GET /api/projects/{project_id}/events/sentry/{event_id}` | Resolve the ID returned by a Sentry SDK without already knowing the issue. |
 | `events.list({ path, query? })` | `GET /api/projects/{project_id}/issues/{issue_id}/events` | Lists events for an issue with cursor-based pagination |
+| `events.listAttachments({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments` | Lists the files sent with an event, such as a feedback's screenshot. |
 
 ### GitHub
 
@@ -332,6 +334,7 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `feedback.list({ path, query? })` | `GET /api/projects/{project_id}/feedback` | Lists user feedback with what each user submitted. |
 | `issues.bulkDelete({ path, body })` | `DELETE /api/projects/{project_id}/issues` | Bulk delete by ids or filter |
 | `issues.bulkUpdate({ path, body })` | `PUT /api/projects/{project_id}/issues` | Bulk mutate |
 | `issues.createComment({ path, body })` | `POST /api/projects/{project_id}/issues/{issue_id}/comments` | Add a note. |

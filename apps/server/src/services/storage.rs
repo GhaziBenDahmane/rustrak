@@ -950,6 +950,12 @@ impl StorageService {
         )
         .fetch_all(pool)
         .await?;
+        // Exact: each attachment row carries its size.
+        let attachments: Vec<(i32, i64)> = sqlx::query_as(
+            "SELECT project_id, CAST(SUM(size) AS BIGINT) FROM event_attachments GROUP BY project_id",
+        )
+        .fetch_all(pool)
+        .await?;
 
         let mut breakdown = Vec::with_capacity(rows.len());
         for (project_id, project_name, source_maps_count) in rows {
@@ -975,8 +981,13 @@ impl StorageService {
                     transactions_count,
                 )
                 .await?;
-            let events_bytes =
-                Self::estimate_bytes(pool, EVENTS_SAMPLE, project_id, events_count).await?;
+            let attachment_bytes = attachments
+                .iter()
+                .find(|(id, _)| *id == project_id)
+                .map_or(0, |(_, n)| *n);
+            let events_bytes = Self::estimate_bytes(pool, EVENTS_SAMPLE, project_id, events_count)
+                .await?
+                + attachment_bytes;
             let transactions_bytes =
                 Self::estimate_bytes(pool, TRANSACTIONS_SAMPLE, project_id, transactions_count)
                     .await?
