@@ -157,6 +157,17 @@ impl ErrorProcessor {
         let attachments = feedback::take_attachments(&mut event_data);
         // A feedback Sentry would filter is dropped here, like an invalid event.
         let feedback = Feedback::from_event(&event_data)?;
+        // A feedback occurrence defaults to `info`, and the event, its issue
+        // and its alert rules all read that level from here.
+        if feedback.is_some()
+            && event_data
+                .get("level")
+                .and_then(|v| v.as_str())
+                .and_then(relay_level)
+                .is_none()
+        {
+            event_data["level"] = serde_json::json!("info");
+        }
         let attachments = match feedback {
             Some(_) => attachments,
             None => Vec::new(),
@@ -305,9 +316,7 @@ impl ErrorProcessor {
         let level = event_data
             .get("level")
             .and_then(|v| v.as_str())
-            .and_then(relay_level)
-            // A feedback occurrence defaults to `info`.
-            .or(feedback.as_ref().map(|_| "info"));
+            .and_then(relay_level);
         let platform = str_field("platform", 64);
 
         // 7+8. Write the digest: grouping, issue, the event itself and the

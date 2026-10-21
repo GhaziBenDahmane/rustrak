@@ -1662,9 +1662,6 @@ export type SentryTag = {
 };
 
 /**
- * The aliases Sentry also serves (`/groups/`, organization-scoped issue
- * paths) and the browser redirect are left out of the spec: they add no
- * method a client needs.
  * Body of a user report (`UserReportSerializer` in Sentry's
  * `api/serializers/models/userreport.py`), as the report was received.
  */
@@ -2811,6 +2808,10 @@ export type SentrySubmitUserFeedbackErrors = {
      * Unauthorized
      */
     401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
     /**
      * Project not found
      */
