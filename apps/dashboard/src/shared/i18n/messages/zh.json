@@ -864,6 +864,10 @@
     "unmute": {
       "name": "取消静音",
       "description": "被静音的问题解除静音"
+    },
+    "newFeedback": {
+      "name": "新反馈",
+      "description": "用户提交了反馈"
     }
   },
   "events": {

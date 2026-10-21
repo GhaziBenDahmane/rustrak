@@ -6,14 +6,16 @@ use sha2::{Digest as _, Sha256};
 use crate::auth::SentryAuth;
 use crate::config::Config;
 use crate::db::DbPool;
+use crate::digest::processors::ATTACHMENTS_KEY;
 use crate::digest::processors::{
     is_retryable_write_contention, Digested, Processor, ProcessorCtx, Processors, SessionItem,
 };
 use crate::error::{AppError, AppResult};
+use crate::ingest::envelope::Attachment;
 use crate::ingest::storage::{is_missing_event_file, list_pending_event_metadata_except};
 use crate::ingest::{
     decompress_body, detach_payload_if_needed, get_content_encoding, store_event_with_metadata,
-    EnvelopeItemKind, EnvelopeParser, EventMetadata, MAX_COMPRESSED_SIZE,
+    EnvelopeItemKind, EnvelopeParser, EventMetadata, MAX_ATTACHMENT_SIZE, MAX_COMPRESSED_SIZE,
 };
 use crate::models::monitor::{CheckIn, CheckInStatus, MonitorFailure};
 use crate::services::monitor::MonitorService;
@@ -104,6 +106,9 @@ pub async fn ingest_envelope(
     //    event_id validation is deferred until after the loop — session-only envelopes never need
     //    one (Relay: Item::requires_event() returns false for Session/Sessions).
     let mut event_item: Option<Bytes> = None;
+    let mut user_reports: Vec<Bytes> = Vec::new();
+    let mut feedback_item: Option<Bytes> = None;
+    let mut attachments: Vec<Attachment> = Vec::new();
     let mut transaction_item: Option<Bytes> = None;
     let mut span_items: Vec<Bytes> = Vec::new();
     let mut span_v2_items: Vec<Bytes> = Vec::new();
@@ -205,12 +210,30 @@ pub async fn ingest_envelope(
                 };
                 drop_malformed_item(result, "check_in")?;
             }
+            EnvelopeItemKind::Feedback(p) => {
+                // Built after the loop: its attachments may come after it.
+                feedback_item.get_or_insert(p);
+            }
+            EnvelopeItemKind::UserReport(p) => user_reports.push(p),
+            EnvelopeItemKind::Attachment(a) => attachments.push(a),
             EnvelopeItemKind::Other(t, _) => {
                 log::debug!("envelope item '{}' ignored", t);
             }
         }
     }
     drop(parser);
+
+    // Relay builds the event from the item type, whatever the payload's own
+    // `type` says (`UserReportV2` expansion), with the envelope's attachments
+    // (`send_individual_attachments`). An error event's attachments are not
+    // kept.
+    if let (None, Some(feedback)) = (&event_item, feedback_item) {
+        match feedback_payload(&feedback, &attachments) {
+            Ok(payload) => event_item = Some(payload),
+            Err(e) => drop_malformed_item(Err(e), "feedback")?,
+        }
+    }
+    drop(attachments);
 
     // 5. Resolve event_id — only required for event-bearing item types.
     //    If the SDK omitted it, derive it from the durable delivery identity.
@@ -278,6 +301,28 @@ pub async fn ingest_envelope(
         }
     }
 
+    // Legacy user reports become feedback events, digested like any other.
+    for report in user_reports {
+        let shimmed = user_report_to_feedback(&report, event_id.as_deref(), "user_report_envelope");
+        match shimmed {
+            Ok(shim) => {
+                enqueue_digest(
+                    &processors,
+                    pool.get_ref(),
+                    EventMetadata {
+                        event_id: shim.feedback_id.simple().to_string(),
+                        project_id: auth.project.id,
+                        ingested_at,
+                        remote_addr: remote_addr.clone(),
+                    },
+                    &shim.payload,
+                )
+                .await?;
+            }
+            Err(e) => drop_malformed_item(Err(e), "user_report")?,
+        }
+    }
+
     // Return for session-only and other non-event envelopes.
     let event_item = match event_item {
         Some(item) => item,
@@ -288,7 +333,7 @@ pub async fn ingest_envelope(
     };
 
     let event_id = event_id.expect("event_id is Some when event_item is Some");
-    let event_uuid = uuid::Uuid::parse_str(&event_id)
+    uuid::Uuid::parse_str(&event_id)
         .map_err(|_| AppError::Validation("event_id must be a valid UUID".to_string()))?;
 
     // 6. Validate that the payload is valid JSON without building a Value tree;
@@ -302,24 +347,38 @@ pub async fn ingest_envelope(
         ingested_at,
         remote_addr,
     };
+    enqueue_digest(&processors, pool.get_ref(), metadata, &event_item).await?;
+
+    Ok(HttpResponse::Ok().json(IngestResponse { id: Some(event_id) }))
+}
+
+/// Stores an event durably and spawns its digest.
+pub(crate) async fn enqueue_digest(
+    processors: &web::Data<Processors>,
+    pool: &DbPool,
+    metadata: EventMetadata,
+    payload: &[u8],
+) -> AppResult<()> {
+    let event_uuid = uuid::Uuid::parse_str(&metadata.event_id)
+        .map_err(|_| AppError::Validation("event_id must be a valid UUID".to_string()))?;
     // Claimed before the file exists so the recovery worker never sees a
     // pending file that no task owns. Released when the spawned digest ends,
     // or here if the store fails and there is nothing to recover.
     let in_flight = processors
         .errors
         .in_flight()
-        .register(auth.project.id, event_uuid);
+        .register(metadata.project_id, event_uuid);
     store_event_with_metadata(
         processors.errors.ingest_dir(),
-        &event_id,
-        &event_item,
+        &metadata.event_id,
+        payload,
         &metadata,
     )
     .await?;
 
     // The digest worker owns grouping, issue creation, and its durable retry path.
     let processors = processors.clone();
-    let pool_clone = pool.get_ref().clone();
+    let pool_clone = pool.clone();
     tokio::spawn(async move {
         // The permit gates the whole digest: the file read, JSON parse and
         // grouping working set stay bounded to the concurrent cap, not the
@@ -332,8 +391,124 @@ pub async fn ingest_envelope(
         Box::pin(digest_stored_event(&processors, &pool_clone, &metadata)).await;
         drop(in_flight);
     });
+    Ok(())
+}
 
-    Ok(HttpResponse::Ok().json(IngestResponse { id: Some(event_id) }))
+/// A feedback item's payload with `type` forced to `feedback`, carrying its
+/// attachments to the digest under [`ATTACHMENTS_KEY`], base64-encoded: the
+/// stored event file is the only durable copy until the digest commits.
+fn feedback_payload(payload: &[u8], attachments: &[Attachment]) -> AppResult<Bytes> {
+    use base64::Engine as _;
+    let mut event: serde_json::Value = serde_json::from_slice(payload)
+        .map_err(|e| AppError::Validation(format!("Invalid event JSON: {e}")))?;
+    let object = event
+        .as_object_mut()
+        .ok_or_else(|| AppError::Validation("feedback must be a JSON object".to_string()))?;
+    object.insert("type".to_string(), "feedback".into());
+
+    let kept: Vec<serde_json::Value> = attachments
+        .iter()
+        // Plain attachments only: a minidump or a view hierarchy is not a
+        // screenshot.
+        .filter(|a| {
+            matches!(
+                a.attachment_type.as_deref(),
+                None | Some("event.attachment")
+            )
+        })
+        .filter(|a| {
+            let fits = a.payload.len() <= MAX_ATTACHMENT_SIZE;
+            if !fits {
+                log::warn!("dropping a {} byte feedback attachment", a.payload.len());
+            }
+            fits
+        })
+        .map(|a| {
+            serde_json::json!({
+                "filename": a.filename.as_deref().unwrap_or("attachment"),
+                "content_type": a.content_type.as_deref().unwrap_or("application/octet-stream"),
+                "data": base64::engine::general_purpose::STANDARD.encode(&a.payload),
+            })
+        })
+        .collect();
+    if kept.is_empty() {
+        object.remove(ATTACHMENTS_KEY);
+    } else {
+        object.insert(ATTACHMENTS_KEY.to_string(), kept.into());
+    }
+    Ok(Bytes::from(event.to_string()))
+}
+
+/// Relay's `UserReport` (relay-event-schema/src/protocol/user_report.rs):
+/// a missing or null string is empty.
+#[derive(serde::Deserialize)]
+pub(crate) struct UserReport {
+    event_id: Option<String>,
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub name: String,
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub email: String,
+    #[serde(default, deserialize_with = "null_to_default")]
+    pub comments: String,
+}
+
+/// A user report and the feedback event it became.
+pub(crate) struct ShimmedReport {
+    pub report: UserReport,
+    /// The error event the report is about.
+    pub event_id: uuid::Uuid,
+    pub feedback_id: uuid::Uuid,
+    pub payload: Vec<u8>,
+}
+
+fn null_to_default<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(<Option<String> as serde::Deserialize>::deserialize(d)?.unwrap_or_default())
+}
+
+/// Sentry's `shim_to_feedback`: a legacy user report as a feedback event about
+/// `event_id`. The feedback's own id derives from that event id, so a retried
+/// report digests into the same feedback rather than a second one.
+/// `source` is Sentry's `FeedbackCreationSource` for where it came from.
+pub(crate) fn user_report_to_feedback(
+    payload: &[u8],
+    envelope_event_id: Option<&str>,
+    source: &str,
+) -> AppResult<ShimmedReport> {
+    // Relay trims surrounding whitespace first: an SDK sends a trailing `\n`.
+    let report: UserReport = serde_json::from_slice(payload.trim_ascii())
+        .map_err(|e| AppError::Validation(format!("Invalid user report JSON: {e}")))?;
+    let event_id = report
+        .event_id
+        .as_deref()
+        .or(envelope_event_id)
+        .and_then(|id| uuid::Uuid::parse_str(id).ok())
+        .ok_or_else(|| AppError::Validation("user report needs a valid event_id".to_string()))?;
+
+    let digest = Sha256::digest(format!("user_report:{}", event_id.simple()).as_bytes());
+    let mut bytes = [0; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    let feedback_id = uuid::Uuid::from_bytes(bytes);
+
+    let event = serde_json::json!({
+        "type": "feedback",
+        "event_id": feedback_id.simple().to_string(),
+        "timestamp": Utc::now().timestamp_millis() as f64 / 1000.0,
+        "contexts": {
+            "feedback": {
+                "message": report.comments,
+                "contact_email": report.email,
+                "name": report.name,
+                "associated_event_id": event_id.simple().to_string(),
+                "source": source,
+            }
+        }
+    });
+    Ok(ShimmedReport {
+        payload: event.to_string().into_bytes(),
+        report,
+        event_id,
+        feedback_id,
+    })
 }
 
 /// Digests one stored event, retrying transient write contention. Failures

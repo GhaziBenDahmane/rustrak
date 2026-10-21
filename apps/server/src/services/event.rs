@@ -189,6 +189,13 @@ impl EventService {
         let sdk_name = field(sdk.and_then(|s| s.get("name")), "", 255);
         let sdk_version = field(sdk.and_then(|s| s.get("version")), "", 255);
 
+        // A feedback is stored apart from errors so the event counts and
+        // charts, which read `event_type = 'error'`, leave it out.
+        let event_type = match event_data.get("type").and_then(|v| v.as_str()) {
+            Some("feedback") => "feedback",
+            _ => "error",
+        };
+
         // Store remote_addr as string
         let remote_addr_str: Option<String> = remote_addr.map(|s| s.to_string());
 
@@ -203,9 +210,9 @@ impl EventService {
                 calculated_type, calculated_value, "transaction",
                 last_frame_filename, last_frame_module, last_frame_function,
                 level, platform, release, environment, server_name,
-                sdk_name, sdk_version, remote_addr, alert_type, issue_event_count
+                sdk_name, sdk_version, remote_addr, alert_type, issue_event_count, event_type
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
             "#,
         )
         .bind(id)
@@ -232,6 +239,7 @@ impl EventService {
         .bind(remote_addr_str)
         .bind(alert_type)
         .bind(issue_event_count)
+        .bind(event_type)
         .execute(executor)
         .await?;
 

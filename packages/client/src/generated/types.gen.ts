@@ -210,7 +210,7 @@ export type AlertStatus = 'pending' | 'sent' | 'failed' | 'skipped';
 /**
  * Type of alert trigger
  */
-export type AlertType = 'new_issue' | 'regression' | 'unmute';
+export type AlertType = 'new_issue' | 'regression' | 'unmute' | 'new_feedback';
 
 export type AssembleBody = {
     checksum: string;
@@ -805,6 +805,12 @@ export type IssueAggregates = {
     tags: Array<TagSummary>;
     user_count: number;
 };
+
+/**
+ * Which kind of issue a list shows. Feedback is kept out of the default
+ * list, as Sentry's `FeedbackGroup` is (`in_default_search=False`).
+ */
+export type IssueCategory = 'error' | 'feedback';
 
 /**
  * Filter for issues listing
@@ -1653,6 +1659,41 @@ export type SentryStatus = {
 export type SentryTag = {
     key: string;
     value: string;
+};
+
+/**
+ * The aliases Sentry also serves (`/groups/`, organization-scoped issue
+ * paths) and the browser redirect are left out of the spec: they add no
+ * method a client needs.
+ * Body of a user report (`UserReportSerializer` in Sentry's
+ * `api/serializers/models/userreport.py`), as the report was received.
+ */
+export type SentryUserReport = {
+    comments: string;
+    dateCreated: string;
+    email: string;
+    /**
+     * The error event the report is about.
+     */
+    eventID: string;
+    /**
+     * The feedback the report became.
+     */
+    id: string;
+    name: string;
+};
+
+/**
+ * Request body of a user report.
+ */
+export type SentryUserReportRequest = {
+    comments?: string | null;
+    email?: string | null;
+    /**
+     * The error event the report is about.
+     */
+    event_id: string;
+    name?: string | null;
 };
 
 /**
@@ -2744,6 +2785,48 @@ export type ReleasesFinalizeResponses = {
 };
 
 export type ReleasesFinalizeResponse = ReleasesFinalizeResponses[keyof ReleasesFinalizeResponses];
+
+export type SentrySubmitUserFeedbackData = {
+    body: SentryUserReportRequest;
+    path: {
+        /**
+         * Organization slug (ignored)
+         */
+        org_slug: string;
+        /**
+         * Project slug
+         */
+        project_slug: string;
+    };
+    query?: never;
+    url: '/api/0/projects/{org_slug}/{project_slug}/user-feedback/';
+};
+
+export type SentrySubmitUserFeedbackErrors = {
+    /**
+     * Invalid report
+     */
+    400: ErrorResponse;
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Project not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentrySubmitUserFeedbackError = SentrySubmitUserFeedbackErrors[keyof SentrySubmitUserFeedbackErrors];
+
+export type SentrySubmitUserFeedbackResponses = {
+    /**
+     * The report, or an empty body under DSN auth
+     */
+    200: SentryUserReport;
+};
+
+export type SentrySubmitUserFeedbackResponse = SentrySubmitUserFeedbackResponses[keyof SentrySubmitUserFeedbackResponses];
 
 export type GithubDisconnectData = {
     body?: never;
@@ -4682,6 +4765,10 @@ export type IssuesListData = {
          * Filter: open (not resolved, not muted), resolved, muted, all
          */
         filter?: IssueFilter;
+        /**
+         * Issue category: error (default) or feedback
+         */
+        category?: IssueCategory;
         /**
          * Free-text search across type, value, transaction, and culprit.
          */

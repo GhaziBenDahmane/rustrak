@@ -293,7 +293,7 @@ async fn query_list_issue_counts(
                           AND first_seen < to_timestamp({current_start})
                          THEN 1 ELSE 0 END)::bigint AS new_previous
             FROM issues
-            WHERE project_id IN ({ids})
+            WHERE project_id IN ({ids}) AND issue_category = 'error'
             GROUP BY 1
             "#,
         );
@@ -318,7 +318,7 @@ async fn query_list_issue_counts(
                           AND CAST(strftime('%s', first_seen) AS INTEGER) < {current_start}
                          THEN 1 ELSE 0 END) AS new_previous
             FROM issues
-            WHERE project_id IN ({ids})
+            WHERE project_id IN ({ids}) AND issue_category = 'error'
             GROUP BY 1
             "#,
         );
@@ -566,16 +566,18 @@ async fn count_new_issues(
     let Some((previous_start, current_start)) = bounds else {
         #[cfg(feature = "postgres")]
         let (total,): (i64,) =
-            sqlx::query_as("SELECT COUNT(*)::bigint FROM issues WHERE project_id = $1")
+            sqlx::query_as("SELECT COUNT(*)::bigint FROM issues WHERE project_id = $1 AND issue_category = 'error'")
                 .bind(project_id)
                 .fetch_one(pool)
                 .await?;
 
         #[cfg(not(feature = "postgres"))]
-        let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM issues WHERE project_id = ?1")
-            .bind(project_id)
-            .fetch_one(pool)
-            .await?;
+        let (total,): (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM issues WHERE project_id = ?1 AND issue_category = 'error'",
+        )
+        .bind(project_id)
+        .fetch_one(pool)
+        .await?;
 
         return Ok(MetricDelta::new(total, None));
     };
@@ -588,6 +590,7 @@ async fn count_new_issues(
             COALESCE(SUM(CASE WHEN first_seen <  $2 THEN 1 ELSE 0 END), 0)::bigint
         FROM issues
         WHERE project_id = $1
+          AND issue_category = 'error'
           AND first_seen >= $3
         "#,
     )
@@ -605,6 +608,7 @@ async fn count_new_issues(
             COALESCE(SUM(CASE WHEN datetime(first_seen) <  datetime(?2) THEN 1 ELSE 0 END), 0)
         FROM issues
         WHERE project_id = ?1
+          AND issue_category = 'error'
           AND datetime(first_seen) >= datetime(?3)
         "#,
     )
@@ -622,7 +626,7 @@ async fn count_new_issues(
 async fn count_open_issues(pool: &DbPool, project_id: i32) -> AppResult<i64> {
     #[cfg(feature = "postgres")]
     let (total,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*)::bigint FROM issues WHERE project_id = $1 AND status = 'unresolved'",
+        "SELECT COUNT(*)::bigint FROM issues WHERE project_id = $1 AND status = 'unresolved' AND issue_category = 'error'",
     )
     .bind(project_id)
     .fetch_one(pool)
@@ -630,7 +634,7 @@ async fn count_open_issues(pool: &DbPool, project_id: i32) -> AppResult<i64> {
 
     #[cfg(not(feature = "postgres"))]
     let (total,): (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM issues WHERE project_id = ?1 AND status = 'unresolved'",
+        "SELECT COUNT(*) FROM issues WHERE project_id = ?1 AND status = 'unresolved' AND issue_category = 'error'",
     )
     .bind(project_id)
     .fetch_one(pool)

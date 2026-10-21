@@ -57,6 +57,8 @@ pub enum AlertType {
     NewIssue,
     Regression,
     Unmute,
+    /// A user feedback was submitted (each feedback is its own issue).
+    NewFeedback,
 }
 
 impl std::fmt::Display for AlertType {
@@ -65,6 +67,7 @@ impl std::fmt::Display for AlertType {
             AlertType::NewIssue => write!(f, "new_issue"),
             AlertType::Regression => write!(f, "regression"),
             AlertType::Unmute => write!(f, "unmute"),
+            AlertType::NewFeedback => write!(f, "new_feedback"),
         }
     }
 }

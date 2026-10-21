@@ -55,6 +55,7 @@ impl SlackNotifier {
             "new_issue" => ":new:",
             "regression" => ":repeat:",
             "unmute" => ":loud_sound:",
+            "new_feedback" => ":speech_balloon:",
             _ => ":bell:",
         };
 

@@ -136,10 +136,14 @@ impl EnvelopeParser {
             .map_err(|e| AppError::Validation(format!("Invalid item headers JSON: {}", e)))?;
 
         // "event" items get the relaxed abuse ceiling — see MAX_RAW_EVENT_SIZE.
-        let max_size = if headers.item_type == "event" {
-            MAX_RAW_EVENT_SIZE
-        } else {
-            MAX_ITEM_SIZE
+        // An attachment is bounded by the envelope alone, as Relay's limit
+        // for one is far above its event limit: an oversized one is dropped
+        // later on its own, not with the envelope (see MAX_ATTACHMENT_SIZE).
+        let is_attachment = headers.item_type == "attachment";
+        let max_size = match headers.item_type.as_str() {
+            "event" => MAX_RAW_EVENT_SIZE,
+            "attachment" => crate::ingest::decompression::MAX_DECOMPRESSED_SIZE,
+            _ => MAX_ITEM_SIZE,
         };
 
         // Read payload
@@ -161,10 +165,13 @@ impl EnvelopeParser {
             // Read until newline
             self.read_line(max_size)?
         };
-        // Every item type is JSON except attachments, which are ignored.
-        let payload = match strip_nul_escapes(&payload) {
-            std::borrow::Cow::Borrowed(_) => payload,
-            std::borrow::Cow::Owned(clean) => Bytes::from(clean),
+        // Every item type is JSON except attachments, which are raw bytes.
+        let payload = match is_attachment {
+            true => payload,
+            false => match strip_nul_escapes(&payload) {
+                std::borrow::Cow::Borrowed(_) => payload,
+                std::borrow::Cow::Owned(clean) => Bytes::from(clean),
+            },
         };
 
         Ok(Some(EnvelopeItemKind::from((headers, payload))))

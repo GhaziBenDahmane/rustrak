@@ -864,6 +864,10 @@
     "unmute": {
       "name": "Unmute",
       "description": "A muted issue is unmuted"
+    },
+    "newFeedback": {
+      "name": "New feedback",
+      "description": "A user submits feedback"
     }
   },
   "events": {

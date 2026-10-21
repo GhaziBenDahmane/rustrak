@@ -22,7 +22,7 @@ use crate::config::Config;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::models::{Event, Issue, Project, UpdateIssueState};
-use crate::pagination::{IssueFilter, SortOrder};
+use crate::pagination::{IssueCategory, IssueFilter, SortOrder};
 use crate::services::access::{self, Action};
 use crate::services::grouping::exception_values;
 
@@ -344,15 +344,29 @@ pub struct IssueListQuery {
 /// Splits a search query into a status filter and free text. Only `is:`
 /// filters on a status are understood; every other token is free text,
 /// matched against the issue's title, culprit and location.
-fn parse_search(query: Option<&str>) -> AppResult<(IssueFilter, Option<String>)> {
+fn parse_search(query: Option<&str>) -> AppResult<(IssueFilter, IssueCategory, Option<String>)> {
     // No `query` means `is:unresolved`; an empty one means every issue
     // (`index.py`, `DEFAULT_QUERY`).
     let Some(query) = query else {
-        return Ok((IssueFilter::Open, None));
+        return Ok((IssueFilter::Open, IssueCategory::Error, None));
     };
     let mut filter = IssueFilter::All;
+    // Feedback is out of the default search unless asked for by category.
+    let mut category = IssueCategory::Error;
     let mut text = Vec::new();
     for token in query.split_whitespace() {
+        if let Some(value) = token.strip_prefix("issue.category:") {
+            category = match value {
+                "error" => IssueCategory::Error,
+                "feedback" => IssueCategory::Feedback,
+                other => {
+                    return Err(AppError::Validation(format!(
+                        "Error parsing search query: unsupported issue.category:{other}"
+                    )))
+                }
+            };
+            continue;
+        }
         match token.strip_prefix("is:") {
             Some("unresolved") => filter = IssueFilter::Open,
             Some("resolved") => filter = IssueFilter::Resolved,
@@ -365,7 +379,11 @@ fn parse_search(query: Option<&str>) -> AppResult<(IssueFilter, Option<String>)>
             None => text.push(token),
         }
     }
-    Ok((filter, Some(text.join(" ")).filter(|t| !t.is_empty())))
+    Ok((
+        filter,
+        category,
+        Some(text.join(" ")).filter(|t| !t.is_empty()),
+    ))
 }
 
 /// `ORDER BY` for Sentry's issue sorts (`search/snuba/executors.py`).
@@ -514,7 +532,7 @@ pub async fn list_issues(
     )
     .await?;
 
-    let (filter, text) = parse_search(query.query.as_deref())?;
+    let (filter, category, text) = parse_search(query.query.as_deref())?;
     let order = order_clause(query.sort.as_deref())?;
     let limit = match query.limit.as_deref() {
         Some(raw) => raw
@@ -531,6 +549,7 @@ pub async fn list_issues(
         project.id,
         order,
         filter,
+        category,
         page.start,
         page.size,
         text.as_deref(),
@@ -1096,6 +1115,133 @@ pub async fn list_organizations(_actor: ApiActor) -> AppResult<HttpResponse> {
 /// The aliases Sentry also serves (`/groups/`, organization-scoped issue
 /// paths) and the browser redirect are left out of the spec: they add no
 /// method a client needs.
+/// Body of a user report (`UserReportSerializer` in Sentry's
+/// `api/serializers/models/userreport.py`), as the report was received.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct SentryUserReport {
+    /// The feedback the report became.
+    pub id: String,
+    /// The error event the report is about.
+    #[serde(rename = "eventID")]
+    pub event_id: String,
+    pub name: String,
+    pub email: String,
+    pub comments: String,
+    #[serde(rename = "dateCreated")]
+    pub date_created: DateTime<Utc>,
+}
+
+/// Request body of a user report.
+#[cfg(feature = "openapi")]
+#[derive(utoipa::ToSchema)]
+#[allow(dead_code)]
+pub struct SentryUserReportRequest {
+    /// The error event the report is about.
+    event_id: String,
+    name: Option<String>,
+    email: Option<String>,
+    comments: Option<String>,
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/0/projects/{org_slug}/{project_slug}/user-feedback/",
+    operation_id = "sentry.submitUserFeedback",
+    tag = "Sentry API",
+    params(
+        ("org_slug" = String, Path, description = "Organization slug (ignored)"),
+        ("project_slug" = String, Path, description = "Project slug"),
+    ),
+    request_body = SentryUserReportRequest,
+    responses(
+        (status = 200, description = "The report, or an empty body under DSN auth", body = SentryUserReport),
+        (status = 400, description = "Invalid report", body = crate::error::ErrorResponse),
+        (status = 401, description = "Unauthorized", body = crate::error::ErrorResponse),
+        (status = 404, description = "Project not found", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST /api/0/projects/{org_slug}/{project_slug}/user-feedback/
+///
+/// Submit a user report about an error event (Sentry's
+/// `ProjectUserReportsEndpoint`, `feedback/endpoints/project_user_reports.py`).
+/// Accepts `Authorization: DSN <dsn>` as well as a token; the report becomes a
+/// feedback, as the `user_report` envelope item does.
+pub async fn submit_user_feedback(
+    pool: web::Data<DbPool>,
+    processors: web::Data<crate::digest::processors::Processors>,
+    path: web::Path<(String, String)>,
+    req: HttpRequest,
+    body: web::Bytes,
+) -> AppResult<HttpResponse> {
+    use actix_web::FromRequest as _;
+    let (_org_slug, project_slug) = path.into_inner();
+    let project = project_by_slug(pool.get_ref(), &project_slug).await?;
+
+    let dsn = req
+        .headers()
+        .get(actix_web::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("DSN "));
+    if let Some(dsn) = dsn {
+        // Sentry's `DSNAuthentication`: the DSN's public key must be this
+        // project's.
+        if dsn_public_key(dsn) != Some(project.sentry_key) {
+            return Err(AppError::Unauthorized("invalid DSN".to_string()));
+        }
+    } else {
+        let actor = ApiActor::extract(&req).await?;
+        access::require(
+            pool.get_ref(),
+            actor.is_admin(),
+            actor.user_id(),
+            project.id,
+            Action::MutateIssue,
+        )
+        .await?;
+    }
+
+    let shim = crate::routes::ingest::user_report_to_feedback(
+        &body,
+        None,
+        "user_report_sentry_django_endpoint",
+    )?;
+    crate::routes::ingest::enqueue_digest(
+        &processors,
+        pool.get_ref(),
+        crate::ingest::EventMetadata {
+            event_id: shim.feedback_id.simple().to_string(),
+            project_id: project.id,
+            ingested_at: Utc::now(),
+            remote_addr: None,
+        },
+        &shim.payload,
+    )
+    .await?;
+
+    // Sentry answers a DSN-authenticated report with an empty body.
+    if dsn.is_some() {
+        return Ok(HttpResponse::Ok().finish());
+    }
+    Ok(HttpResponse::Ok().json(SentryUserReport {
+        id: shim.feedback_id.simple().to_string(),
+        event_id: shim.event_id.simple().to_string(),
+        name: shim.report.name,
+        email: shim.report.email,
+        comments: shim.report.comments,
+        date_created: Utc::now(),
+    }))
+}
+
+/// The public key of a DSN, `<scheme>://<key>[:<secret>]@<host>/<project>`.
+fn dsn_public_key(dsn: &str) -> Option<Uuid> {
+    let (_, rest) = dsn.trim().split_once("://")?;
+    let (userinfo, _) = rest.split_once('@')?;
+    let key = userinfo.split(':').next()?;
+    Uuid::parse_str(key).ok()
+}
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.route("/api/0/projects/", web::get().to(list_projects))
         .route("/api/0/organizations/", web::get().to(list_organizations))
@@ -1111,6 +1257,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             "/api/0/projects/{org_slug}/{project_slug}/groups/",
             web::get().to(list_issues),
         );
+    // `user-reports` is Sentry's older name for the same endpoint.
+    for name in ["user-feedback", "user-reports"] {
+        cfg.route(
+            &format!("/api/0/projects/{{org_slug}}/{{project_slug}}/{name}/"),
+            web::post().to(submit_user_feedback),
+        );
+    }
     for prefix in ["/api/0/issues", "/api/0/groups"] {
         cfg.route(&format!("{prefix}/{{issue_id}}/"), web::get().to(get_issue))
             .route(

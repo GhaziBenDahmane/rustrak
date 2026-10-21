@@ -20,6 +20,8 @@ fn test_enum_dispatch_span_with_v2_content_type_maps_to_span_v2_batch() {
         item_type: "span".into(),
         length: None,
         content_type: Some("application/vnd.sentry.items.span.v2+json".into()),
+        filename: None,
+        attachment_type: None,
     };
     let kind = EnvelopeItemKind::from((headers, bytes::Bytes::from(b"{}".to_vec())));
     assert!(matches!(kind, EnvelopeItemKind::SpanV2Batch(_)));
@@ -31,6 +33,8 @@ fn test_enum_dispatch_span_without_v2_content_type_stays_legacy() {
         item_type: "span".into(),
         length: None,
         content_type: None,
+        filename: None,
+        attachment_type: None,
     };
     let kind = EnvelopeItemKind::from((headers, bytes::Bytes::from(b"{}".to_vec())));
     assert!(matches!(kind, EnvelopeItemKind::Span(_)));

@@ -864,6 +864,10 @@
     "unmute": {
       "name": "Réactivation",
       "description": "Un problème en sourdine est réactivé"
+    },
+    "newFeedback": {
+      "name": "Nouveau retour",
+      "description": "Un utilisateur envoie un retour"
     }
   },
   "events": {

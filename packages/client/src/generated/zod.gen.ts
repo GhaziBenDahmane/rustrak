@@ -148,7 +148,8 @@ export const zAlertHistory = z.object({
 export const zAlertType = z.enum([
     'new_issue',
     'regression',
-    'unmute'
+    'unmute',
+    'new_feedback'
 ]);
 
 /**
@@ -607,6 +608,12 @@ export const zIntervalUnit = z.enum([
     'month',
     'year'
 ]);
+
+/**
+ * Which kind of issue a list shows. Feedback is kept out of the default
+ * list, as Sentry's `FeedbackGroup` is (`in_default_search=False`).
+ */
+export const zIssueCategory = z.enum(['error', 'feedback']);
 
 /**
  * Filter for issues listing
@@ -1364,6 +1371,32 @@ export const zSentryEvent = z.object({
 });
 
 /**
+ * The aliases Sentry also serves (`/groups/`, organization-scoped issue
+ * paths) and the browser redirect are left out of the spec: they add no
+ * method a client needs.
+ * Body of a user report (`UserReportSerializer` in Sentry's
+ * `api/serializers/models/userreport.py`), as the report was received.
+ */
+export const zSentryUserReport = z.object({
+    comments: z.string(),
+    dateCreated: z.iso.datetime({ offset: true }),
+    email: z.string(),
+    eventID: z.string(),
+    id: z.string(),
+    name: z.string()
+});
+
+/**
+ * Request body of a user report.
+ */
+export const zSentryUserReportRequest = z.object({
+    comments: z.string().nullish(),
+    email: z.string().nullish(),
+    event_id: z.string(),
+    name: z.string().nullish()
+});
+
+/**
  * Project-wide session health summary, aggregated across all releases and environments.
  */
 export const zSessionSummary = z.object({
@@ -1966,6 +1999,18 @@ export const zReleasesFinalizePath = z.object({
  */
 export const zReleasesFinalizeResponse = zReleaseResponse;
 
+export const zSentrySubmitUserFeedbackBody = zSentryUserReportRequest;
+
+export const zSentrySubmitUserFeedbackPath = z.object({
+    org_slug: z.string(),
+    project_slug: z.string()
+});
+
+/**
+ * The report, or an empty body under DSN auth
+ */
+export const zSentrySubmitUserFeedbackResponse = zSentryUserReport;
+
 /**
  * GitHub App removed
  */
@@ -2513,6 +2558,7 @@ export const zIssuesListQuery = z.object({
     sort: zIssueSort.optional(),
     order: zSortOrder.optional(),
     filter: zIssueFilter.optional(),
+    category: zIssueCategory.optional(),
     q: z.string().nullish()
 });
 
