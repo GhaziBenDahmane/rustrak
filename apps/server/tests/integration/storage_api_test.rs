@@ -1046,3 +1046,155 @@ async fn keeping_everything_forever_previews_no_source_maps_since_no_cleanup_run
 
     assert_eq!(body["source_maps"], 0);
 }
+
+// =============================================================================
+// SQLite: a cleanup gives the space it freed back to the filesystem
+// =============================================================================
+
+/// A database built the way the server builds one (`db::create_pool`), so it
+/// has the `auto_vacuum` mode a new deployment gets.
+#[cfg(feature = "sqlite")]
+async fn production_sqlite(path: &std::path::Path) -> DbPool {
+    let pool = rustrak::db::create_pool(&DatabaseConfig {
+        url: format!("sqlite://{}?mode=rwc", path.display()),
+        max_connections: 1,
+        min_connections: 1,
+        acquire_timeout: Duration::from_secs(5),
+        idle_timeout: Duration::from_secs(60),
+        max_lifetime: Duration::from_secs(300),
+    })
+    .await
+    .expect("create the SQLite pool");
+    rustrak::db::run_migrations(&pool)
+        .await
+        .expect("run migrations");
+    pool
+}
+
+/// `count` logs ingested `days_ago` days back, each with a `body_bytes` body.
+#[cfg(feature = "sqlite")]
+async fn seed_old_logs(
+    pool: &DbPool,
+    project_id: i32,
+    days_ago: i64,
+    count: usize,
+    body_bytes: usize,
+) {
+    let old = Utc::now() - chrono::Duration::days(days_ago);
+    let body = "x".repeat(body_bytes);
+    let mut tx = pool.begin().await.unwrap();
+    for _ in 0..count {
+        sqlx::query(
+            "INSERT INTO logs (id, project_id, trace_id, span_id, level, severity_number, \
+             body, attributes, timestamp, ingested_at) \
+             VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(project_id)
+        .bind("trace")
+        .bind("info")
+        .bind(9_i16)
+        .bind(&body)
+        .bind(json!({}))
+        .bind(old)
+        .bind(old)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    tx.commit().await.unwrap();
+}
+
+/// `(page_count, freelist_count)`.
+#[cfg(feature = "sqlite")]
+async fn pages(pool: &DbPool) -> (i64, i64) {
+    let total: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let free: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    (total, free)
+}
+
+#[cfg(feature = "sqlite")]
+fn logs_retention(days: i64) -> rustrak::models::RetentionSettings {
+    serde_json::from_value(json!({"defaults": {"logs_days": days}})).unwrap()
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_new_sqlite_database_can_give_space_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = production_sqlite(&dir.path().join("rustrak.db")).await;
+
+    let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        auto_vacuum, 2,
+        "new databases are created with auto_vacuum = INCREMENTAL"
+    );
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_cleanup_gives_the_space_it_freed_back_to_the_filesystem() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("rustrak.db");
+    let pool = production_sqlite(&path).await;
+    let project = create_project(&pool, "reclaim").await;
+    // About 8 MiB of logs, all older than the window.
+    seed_old_logs(&pool, project, 10, 2_000, 4_096).await;
+    let (before, _) = pages(&pool).await;
+    let file_before = std::fs::metadata(&path).unwrap().len();
+
+    let cleanup = CleanupJob::default();
+    cleanup
+        .run_retention(pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+
+    assert_eq!(log_count(&pool).await, 0);
+    let (after, free) = pages(&pool).await;
+    assert_eq!(free, 0, "every freed page went back to the filesystem");
+    assert!(
+        after * 4 < before,
+        "the database shrank: {before} pages before, {after} after"
+    );
+    let file_after = std::fs::metadata(&path).unwrap().len();
+    assert!(
+        file_after * 4 < file_before,
+        "the file shrank: {file_before} bytes before, {file_after} after"
+    );
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_database_created_before_incremental_mode_keeps_its_freed_pages() {
+    // TestDb's file is created without auto_vacuum, like a database a server
+    // created before this mode existed: freed pages stay on the freelist for
+    // reuse, and releasing them needs a one-off VACUUM.
+    let db = TestDb::new().await;
+    let project = create_project(&db.pool, "legacy").await;
+    seed_old_logs(&db.pool, project, 10, 500, 4_096).await;
+
+    let cleanup = CleanupJob::default();
+    cleanup
+        .run_retention(db.pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+
+    assert_eq!(log_count(&db.pool).await, 0);
+    assert_eq!(
+        rustrak::services::StorageService::reclaim_free_space(&db.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let (_, free) = pages(&db.pool).await;
+    assert!(free > 0, "the freed pages stay on the freelist");
+}

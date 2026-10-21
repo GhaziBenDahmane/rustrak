@@ -91,6 +91,28 @@ cost than making every write wait on the disk.
 
 If your deployment cannot accept it, use PostgreSQL.
 
+### Reclaiming disk space
+
+Deleting data, by [retention or a cleanup](/usage/storage), frees pages inside
+the database file. Rustrak creates SQLite databases with
+`auto_vacuum = INCREMENTAL`, and after each cleanup it hands the freed pages
+back to the filesystem a few megabytes at a time, so the file shrinks.
+
+A database created by an earlier version has SQLite's default,
+`auto_vacuum = NONE`. Its freed pages are reused for new data, so with retention
+on the file stops growing, but it never shrinks. To convert it, stop Rustrak and
+run once:
+
+```bash
+sqlite3 /path/to/rustrak.db "PRAGMA auto_vacuum = INCREMENTAL; VACUUM;"
+```
+
+`VACUUM` rewrites the whole file, so it needs free disk space about the size of
+the database and can take a while on a large one. If the disk is short of that,
+copy the file to a disk with room, run it there and copy the result back. Check
+the result with `sqlite3 /path/to/rustrak.db "PRAGMA auto_vacuum;"`, which
+answers `2`.
+
 ### Limitations
 
 - Single writer: not suitable for multi-instance deployments

@@ -11,7 +11,8 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 
 #[cfg(feature = "sqlite")]
 use sqlx::sqlite::{
-    SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
+    SqliteAutoVacuum, SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
+    SqliteSynchronous,
 };
 #[cfg(feature = "sqlite")]
 use std::str::FromStr;
@@ -69,6 +70,13 @@ pub async fn create_pool(config: &DatabaseConfig) -> Result<DbPool, sqlx::Error>
         let opts = SqliteConnectOptions::from_str(&config.url)
             .map_err(|e| sqlx::Error::Configuration(e.into()))?
             .create_if_missing(true)
+            // INCREMENTAL lets a storage cleanup hand the pages it freed back
+            // to the filesystem (`StorageService::reclaim_free_space`); with
+            // SQLite's default, NONE, the file never shrinks. It only takes
+            // effect on a database created with it: an existing file keeps
+            // its mode until a one-off `VACUUM`, see
+            // apps/docs/content/usage/storage.mdx.
+            .auto_vacuum(SqliteAutoVacuum::Incremental)
             // WAL + NORMAL is SQLite's own recommended pairing: the per-commit
             // WAL fsync is dropped, so write-lock holds get shorter. Commits
             // stay atomic and survive an application crash; only an OS crash

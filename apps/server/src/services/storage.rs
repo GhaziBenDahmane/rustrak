@@ -48,6 +48,13 @@ const SNAPSHOT_TTL_MINUTES: i64 = 5;
 /// blocking. Revisit if cleanups of tens of millions of rows become routine.
 const CLEANUP_BATCH_SIZE: i64 = 10_000;
 
+/// One step of handing freed pages back to the filesystem: 2,000 pages, 8 MiB
+/// at SQLite's default 4 KiB page. Each step is its own write transaction, so
+/// like a cleanup batch it holds the write lock briefly and ingestion gets a
+/// turn between steps.
+#[cfg(feature = "sqlite")]
+const INCREMENTAL_VACUUM_STEP: &str = "PRAGMA incremental_vacuum(2000)";
+
 /// Rows per project and table the storage page's size estimate reads.
 const SIZE_SAMPLE_ROWS: i64 = 200;
 
@@ -290,7 +297,7 @@ impl CleanupJob {
         // instead of leaving the job `running` forever.
         let outcome = tokio::spawn(async move {
             let on_batch = |counts: &CleanupCounts| lock(&progress).removed = counts.clone();
-            match plan {
+            let removed = match plan {
                 CleanupPlan::Window {
                     older_than_days,
                     project_id,
@@ -320,7 +327,22 @@ impl CleanupJob {
                     lock(&progress).removed = counts.clone();
                     Ok(counts)
                 }
+            };
+            // The rows are gone either way; giving their space back is best
+            // effort, so a failure here is logged rather than failing the run.
+            if removed.is_ok() {
+                match StorageService::reclaim_free_space(&pool).await {
+                    Ok(0) => {}
+                    Ok(bytes) => log::info!(
+                        "Storage cleanup released {} MiB back to the filesystem",
+                        bytes / (1024 * 1024)
+                    ),
+                    Err(error) => {
+                        log::warn!("Storage cleanup could not release free space: {error}")
+                    }
+                }
             }
+            removed
         })
         .await;
 
@@ -376,6 +398,59 @@ pub(crate) fn validate_retention(older_than_days: i64) -> AppResult<()> {
 }
 
 impl StorageService {
+    /// Hands the pages a cleanup freed back to the filesystem, returning the
+    /// bytes released.
+    ///
+    /// SQLite keeps a deleted row's pages on its freelist and reuses them, so
+    /// after a cleanup the database stops growing but its file never shrinks.
+    /// A database created with `auto_vacuum = INCREMENTAL` (every database
+    /// `db::create_pool` creates) releases them with `incremental_vacuum`, a
+    /// bounded step at a time. A database created before keeps `NONE`, which
+    /// only a one-off `VACUUM` changes, and is left alone.
+    #[cfg(feature = "sqlite")]
+    pub async fn reclaim_free_space(pool: &DbPool) -> AppResult<i64> {
+        let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+            .fetch_one(pool)
+            .await?;
+        // 0 = NONE, 1 = FULL (already shrinks on every commit), 2 = INCREMENTAL.
+        if auto_vacuum != 2 {
+            return Ok(0);
+        }
+        let page_size: i64 = sqlx::query_scalar("PRAGMA page_size")
+            .fetch_one(pool)
+            .await?;
+        let mut released = 0;
+        loop {
+            let free: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+                .fetch_one(pool)
+                .await?;
+            if free == 0 {
+                break;
+            }
+            sqlx::query(INCREMENTAL_VACUUM_STEP).execute(pool).await?;
+            let left: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+                .fetch_one(pool)
+                .await?;
+            if left >= free {
+                break;
+            }
+            released += free - left;
+            pause_between_batches().await;
+        }
+        // Under WAL the shrink is recorded in the log; the checkpoint applies
+        // it to the database file and empties the log.
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(pool)
+            .await?;
+        Ok(released * page_size)
+    }
+
+    /// Postgres reclaims a deleted row's space with its own autovacuum.
+    #[cfg(feature = "postgres")]
+    pub async fn reclaim_free_space(_pool: &DbPool) -> AppResult<i64> {
+        Ok(0)
+    }
+
     /// Dry-run for [`Self::gc_source_maps`]: counts the orphaned `source_file`
     /// rows and the bytes a GC would reclaim. Mutates nothing.
     pub async fn preview_source_map_gc(pool: &DbPool) -> AppResult<SourceMapGcResult> {
