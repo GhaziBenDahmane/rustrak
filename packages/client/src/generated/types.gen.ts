@@ -1289,6 +1289,9 @@ export type ProjectResponse = {
      * Events the quota dropped after ingest had accepted them.
      */
     rate_limited_event_count: number;
+    /**
+     * The DSN's public key: 32 hex digits, not necessarily an RFC 4122 UUID.
+     */
     sentry_key: string;
     slug: string;
     stats?: ProjectListStats | null;
@@ -3533,6 +3536,9 @@ export type ProjectsListResponses = {
              * Events the quota dropped after ingest had accepted them.
              */
             rate_limited_event_count: number;
+            /**
+             * The DSN's public key: 32 hex digits, not necessarily an RFC 4122 UUID.
+             */
             sentry_key: string;
             slug: string;
             stats?: ProjectListStats | null;
