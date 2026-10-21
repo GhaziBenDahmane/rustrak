@@ -202,6 +202,35 @@ describe('RustrakClient', () => {
     });
   });
 
+  describe('Binary responses', () => {
+    it('downloads an attachment as bytes', async () => {
+      const png = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      server.use(
+        http.get(
+          'http://localhost:8080/api/projects/1/attachments/:id',
+          () =>
+            new HttpResponse(png, { headers: { 'Content-Type': 'image/png' } }),
+        ),
+      );
+      const client = new RustrakClient({
+        baseUrl: 'http://localhost:8080',
+        token: 'test-token',
+      });
+
+      const result = await client.events.downloadAttachment({
+        path: {
+          project_id: 1,
+          attachment_id: '00000000-0000-4000-8000-000000000000',
+        },
+      });
+
+      const blob = expectOk(result) as Blob;
+      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(png);
+    });
+  });
+
   describe('Multiple Instances', () => {
     it('should support multiple client instances', async () => {
       const client1 = new RustrakClient({

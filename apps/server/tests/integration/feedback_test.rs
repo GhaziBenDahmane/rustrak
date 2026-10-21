@@ -929,6 +929,30 @@ async fn an_attachment_that_is_not_an_image_is_only_ever_downloaded() {
 }
 
 #[actix_web::test]
+async fn an_attachment_keeps_its_unicode_filename() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    feedback_with_attachment(&s, &app, "café.png", "image/png", SCREENSHOT).await;
+
+    let body = get_feedback(&app, &s, &token, "").await;
+    let id = body["items"][0]["attachments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let resp = get_raw(
+        &app,
+        &format!("/api/projects/{}/attachments/{id}", s.project.id),
+        &token,
+    )
+    .await;
+    assert_eq!(
+        resp.headers().get("content-disposition").unwrap(),
+        "inline; filename=\"caf_.png\"; filename*=UTF-8''caf%C3%A9.png"
+    );
+}
+
+#[actix_web::test]
 async fn an_attachment_is_private_to_its_project() {
     let s = setup().await;
     let app = app(&s).await;

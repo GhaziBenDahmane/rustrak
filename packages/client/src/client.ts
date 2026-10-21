@@ -10,6 +10,9 @@ import {
   transformHttpError,
 } from './utils/http.js';
 
+/** Operations whose 2xx is a file, not JSON: read as a `Blob`. */
+const BINARY = new Set(['events.downloadAttachment']);
+
 /** What a caller may pass: the request's own parts, never client plumbing. */
 type RequestKeys = 'path' | 'query' | 'body' | 'headers' | 'signal';
 
@@ -68,8 +71,9 @@ function createApi(config: ClientConfig): RustrakClient {
         baseUrl: config.baseUrl,
         credentials: 'include',
         fetch: createFetch(config),
-        // Every 2xx in the spec is JSON or empty. `auto` would hand back an
-        // HTML page or a stream as a success without validating it.
+        // Every 2xx in the spec is JSON or empty, except the files in
+        // `BINARY`. `auto` would hand back an HTML page or a stream as a
+        // success without validating it.
         parseAs: 'json',
         headers: {
           // Without it a content-negotiating hop can answer with HTML.
@@ -104,6 +108,7 @@ function createApi(config: ClientConfig): RustrakClient {
               Array.isArray(options.headers)
                 ? Object.fromEntries(new Headers(options.headers))
                 : options.headers,
+            ...(BINARY.has(`${name}.${method}`) && { parseAs: 'blob' }),
             throwOnError: false,
           }),
         );
