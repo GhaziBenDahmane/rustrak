@@ -111,7 +111,8 @@ async fn app(
                 None,
             )))
             // Before ingest, as in `main.rs`: its `/api/{project_id}` scope
-            // would otherwise claim `/api/0/...`.
+            // would otherwise claim `/api/settings/mcp` and `/api/0/...`.
+            .configure(routes::mcp::configure)
             .configure(routes::sentry_api::configure)
             // Events before issues, as in `main.rs`: the issues scope would
             // claim `/issues/{id}/events/...`.
@@ -1154,4 +1155,62 @@ async fn deleting_an_error_deletes_the_reports_about_it() {
     IssueService::delete(&s.db.pool, error_issue).await.unwrap();
     // Not left behind with no issue, where nothing would ever show or clean it.
     assert_eq!(user_report_count(&s.db.pool, s.project.id).await, 0);
+}
+
+// --- Attachments over MCP ---------------------------------------------------
+
+/// The first attachment of the project's newest feedback, read over MCP.
+async fn get_attachment_over_mcp(
+    s: &Setup,
+    app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = actix_web::Error>,
+    token: &str,
+) -> Value {
+    use crate::integration::mcp_test::{call_tool, set_mcp};
+    test::call_service(app, set_mcp(token, true).to_request()).await;
+    let body = get_feedback(app, s, token, "").await;
+    let id = body["items"][0]["attachments"][0]["id"].clone();
+    test::call_and_read_body_json(
+        app,
+        call_tool(
+            Some(token),
+            "get_attachment",
+            json!({ "project_id": s.project.id, "attachment_id": id }),
+        )
+        .to_request(),
+    )
+    .await
+}
+
+#[actix_web::test]
+async fn an_image_attachment_is_an_image_over_mcp() {
+    use base64::Engine as _;
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    let png = b"\x89PNG\r\n\x1a\nnot really the rest of a png";
+    feedback_with_attachment(&s, &app, "screenshot.png", "image/png", png).await;
+
+    let body = get_attachment_over_mcp(&s, &app, &token).await;
+    let content = &body["result"]["content"][0];
+    assert_eq!(content["type"], "image", "{body}");
+    assert_eq!(content["mimeType"], "image/png");
+    assert_eq!(
+        content["data"],
+        base64::engine::general_purpose::STANDARD.encode(png)
+    );
+}
+
+#[actix_web::test]
+async fn an_attachment_that_is_not_an_image_is_described_over_mcp() {
+    let s = setup().await;
+    let app = app(&s).await;
+    let token = admin_token(&s.db.pool).await;
+    // Claims to be an image; its bytes are not one.
+    feedback_with_attachment(&s, &app, "shot.svg", "image/svg+xml", b"<svg/>").await;
+
+    let body = get_attachment_over_mcp(&s, &app, &token).await;
+    let content = &body["result"]["content"][0];
+    assert_eq!(content["type"], "text", "{body}");
+    assert!(content["text"].as_str().unwrap().contains("not an image"));
+    assert_eq!(body["result"]["isError"], false);
 }

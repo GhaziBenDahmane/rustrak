@@ -110,14 +110,14 @@ async fn seed_project(pool: &DbPool, name: &str) -> i32 {
     .id
 }
 
-fn set_mcp(token: &str, enabled: bool) -> test::TestRequest {
+pub(crate) fn set_mcp(token: &str, enabled: bool) -> test::TestRequest {
     test::TestRequest::put()
         .uri("/api/settings/mcp")
         .insert_header(("Authorization", format!("Bearer {token}")))
         .set_json(json!({ "enabled": enabled }))
 }
 
-fn call_tool(token: Option<&str>, name: &str, arguments: Value) -> test::TestRequest {
+pub(crate) fn call_tool(token: Option<&str>, name: &str, arguments: Value) -> test::TestRequest {
     let mut req = test::TestRequest::post()
         .uri("/mcp")
         .insert_header(("Content-Type", "application/json"))
@@ -355,7 +355,7 @@ async fn seed_issue(pool: &DbPool, project_id: i32) -> uuid::Uuid {
 
 /// The whole surface the npm package served, so dropping a tool is a test
 /// failure rather than a silent regression for every connected assistant.
-const TOOLS: [&str; 80] = [
+const TOOLS: [&str; 81] = [
     "assign_issue",
     "bookmark_issue",
     "bulk_delete_issues",
@@ -375,6 +375,7 @@ const TOOLS: [&str; 80] = [
     "get_agent_models_by_tokens",
     "get_agent_runs",
     "get_agent_tools",
+    "get_attachment",
     "get_error_volume",
     "get_event",
     "get_issue",
