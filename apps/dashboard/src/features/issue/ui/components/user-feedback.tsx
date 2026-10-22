@@ -19,9 +19,11 @@ export function UserFeedback({
 }) {
   const t = useTranslations('projectPages.event.feedback');
   const format = useFormatter();
-  const [pages, setPages] = useState([firstPage]);
+  // The first page stays the loader's, so a re-run shows new reports.
+  const [older, setOlder] = useState<IssuesListUserReportsResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const pages = [firstPage, ...older];
   const last = pages[pages.length - 1]!;
   // A report sent while paging shifts the offsets; keep each one once.
   const reports = [
@@ -33,7 +35,7 @@ export function UserFeedback({
     setFailed(false);
     try {
       const next = await listUserReports(projectId, issueId, last.page + 1);
-      if (next.success) setPages([...pages, next.data]);
+      if (next.success) setOlder([...older, next.data]);
       else setFailed(true);
     } finally {
       setLoading(false);
