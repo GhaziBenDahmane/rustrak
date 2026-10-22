@@ -131,7 +131,7 @@ async fn query_release_health(
     // under overflow-checks, a negative offset (which Postgres rejects)
     // without them. Saturating keeps it an in-range offset past the last row,
     // which is just an empty page.
-    let offset = page.max(1).saturating_sub(1).saturating_mul(per_page);
+    let offset = crate::pagination::offset(page, per_page);
 
     #[cfg(feature = "postgres")]
     {

@@ -231,7 +231,9 @@
       "removeBookmark": "Quitar de marcadores",
       "subscribe": "Suscribirse",
       "unsubscribe": "Cancelar suscripción",
-      "deleteIssue": "Eliminar problema"
+      "deleteIssue": "Eliminar problema",
+      "markSpam": "Marcar como spam",
+      "moveToInbox": "Mover a la bandeja de entrada"
     },
     "toasts": {
       "updateFailed": "No se pudieron actualizar los problemas",
@@ -512,7 +514,8 @@
       "agents": "Agentes",
       "logs": "Logs",
       "settings": "Configuración",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "Feedback de usuarios"
     },
     "collapse": {
       "expand": "Expandir",
@@ -1620,7 +1623,37 @@
       "formatPlainText": "Texto sin formato",
       "formatJson": "JSON",
       "noEventsYet": "Aún no hay eventos",
-      "noEventsDescription": "Este problema se creó pero aún no se ha registrado ningún evento. Los eventos aparecerán aquí en cuanto tu aplicación los envíe."
+      "noEventsDescription": "Este problema se creó pero aún no se ha registrado ningún evento. Los eventos aparecerán aquí en cuanto tu aplicación los envíe.",
+      "sectionFeedback": "Feedback",
+      "sectionUserFeedback": "Feedback de usuarios",
+      "feedback": {
+        "from": "De",
+        "anonymous": "Anónimo",
+        "email": "Correo",
+        "page": "Página",
+        "viewError": "Ver el error al que se refiere",
+        "errorNotFound": "Ese evento de error no ha llegado o se ha eliminado.",
+        "showOlder": "Mostrar anteriores ({count})",
+        "showOlderFailed": "No se pudieron cargar los comentarios anteriores."
+      }
+    },
+    "feedback": {
+      "title": "Feedback de usuarios",
+      "subtitle": "Lo que te han dicho los usuarios de {project}",
+      "meta": {
+        "description": "Feedback de usuarios de {project}"
+      },
+      "loadFailed": "No se pudo cargar el feedback",
+      "mailbox": {
+        "inbox": "Bandeja de entrada",
+        "resolved": "Resueltos",
+        "spam": "Spam"
+      },
+      "empty": {
+        "title": "No hay feedback aquí",
+        "description": "Aquí aparece el feedback enviado con el widget de feedback del SDK o con captureFeedback"
+      },
+      "anonymous": "Anónimo"
     }
   },
   "settings": {

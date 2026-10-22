@@ -2922,10 +2922,30 @@ export const zIssuesListUserReportsPath = z.object({
     issue_id: z.uuid()
 });
 
+export const zIssuesListUserReportsQuery = z.object({
+    page: z.int().optional(),
+    per_page: z.int().optional()
+});
+
 /**
- * User feedback reports for the issue
+ * Offset-based paginated response wrapper
  */
-export const zIssuesListUserReportsResponse = z.array(zUserReport);
+export const zIssuesListUserReportsResponse = z.object({
+    items: z.array(z.object({
+        comments: z.string(),
+        created_at: z.iso.datetime({ offset: true }),
+        email: z.string(),
+        event_id: z.uuid().nullable(),
+        id: z.uuid(),
+        issue_id: z.uuid().nullable(),
+        name: z.string(),
+        project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
+    })),
+    page: z.int(),
+    per_page: z.int(),
+    total_count: z.int(),
+    total_pages: z.int()
+});
 
 export const zIssuesCreateUserReportBody = zUserReportRequest;
 

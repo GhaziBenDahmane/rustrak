@@ -1,10 +1,12 @@
 import type {
   ActivityEntry,
+  AttachmentInfo,
   EventDetailResponse,
   IssueAggregates,
   IssueGitHub,
   IssueResponse,
   IssueStatsResponse,
+  IssuesListUserReportsResponse,
   ProjectRepository,
 } from '@rustrak/client';
 import { createFileRoute } from '@tanstack/react-router';
@@ -13,6 +15,7 @@ import {
   type EventNavigation,
   getEventDetail,
   getEventNavigation,
+  listEventAttachments,
 } from '@/features/event/api/queries';
 import {
   type EventJumpTarget,
@@ -32,6 +35,7 @@ import {
   getIssueActivity,
   getIssueAggregates,
   getIssueStats,
+  listUserReports,
 } from '@/features/issue/api/queries';
 import { getProject } from '@/features/project/api/queries';
 import { translator } from '@/shared/i18n/intl';
@@ -61,6 +65,8 @@ export const Route = createFileRoute(
       activity,
       repository,
       code,
+      userReports,
+      attachments,
     ] = await Promise.all([
       getProject(projectId),
       getIssue(projectId, issueId),
@@ -71,6 +77,8 @@ export const Route = createFileRoute(
       getIssueActivity(projectId, issueId),
       getProjectRepository(projectId),
       getIssueGitHub(projectId, issueId),
+      listUserReports(projectId, issueId),
+      listEventAttachments(projectId, issueId, eventId),
     ]);
 
     return {
@@ -83,6 +91,8 @@ export const Route = createFileRoute(
       activity,
       repository,
       code,
+      userReports,
+      attachments,
     };
   },
   head: ({ loaderData }) => {
@@ -130,6 +140,8 @@ function EventPage() {
     activity: activityResult,
     repository: repositoryResult,
     code: codeResult,
+    userReports: userReportsResult,
+    attachments: attachmentsResult,
   } = Route.useLoaderData();
   const projectId = Number.parseInt(id, 10);
 
@@ -175,6 +187,8 @@ function EventPage() {
       activity={activityResult.success ? activityResult.data : []}
       repository={repositoryResult.success ? repositoryResult.data : undefined}
       code={codeResult.success ? codeResult.data : null}
+      userReports={userReportsResult.success ? userReportsResult.data : null}
+      attachments={attachmentsResult.success ? attachmentsResult.data : []}
     />
   );
 }
@@ -190,6 +204,8 @@ function EventView({
   activity,
   repository,
   code,
+  userReports,
+  attachments,
 }: {
   projectId: number;
   issueId: string;
@@ -203,6 +219,10 @@ function EventView({
    * it could not be loaded. */
   repository: ProjectRepository | null | undefined;
   code: IssueGitHub | null;
+  /** The newest page of feedback users sent about this issue. */
+  userReports: IssuesListUserReportsResponse | null;
+  /** Files sent with the event. */
+  attachments: AttachmentInfo[];
 }) {
   const t = useTranslations('projectPages');
   const eventData = event.data as Record<string, unknown>;
@@ -280,6 +300,10 @@ function EventView({
             />
 
             <EventSections
+              projectId={projectId}
+              issueId={issueId}
+              userReports={userReports}
+              attachments={attachments}
               event={event}
               payload={payload}
               eventData={eventData}

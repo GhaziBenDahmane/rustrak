@@ -38,7 +38,7 @@ impl TransactionService {
         filters: &TransactionFilters,
     ) -> AppResult<(Vec<TransactionResponse>, i64)> {
         let per_page = per_page.clamp(1, 100);
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         let total_count: (i64,) = sqlx::query_as(
             r#"
@@ -265,7 +265,7 @@ impl TransactionService {
         per_page: i64,
     ) -> AppResult<(Vec<TransactionStatsResponse>, i64)> {
         let per_page = per_page.clamp(1, 100);
-        let offset = (page.max(1) - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         let total = Self::group_count(pool, project_id).await?;
 
@@ -309,7 +309,7 @@ impl TransactionService {
         per_page: i64,
     ) -> AppResult<(Vec<TransactionStatsResponse>, i64)> {
         let per_page = per_page.clamp(1, 100);
-        let offset = (page.max(1) - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         let total = Self::group_count(pool, project_id).await?;
 

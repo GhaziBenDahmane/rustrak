@@ -7,12 +7,15 @@
  */
 import type {
   ActivityEntry,
+  FeedbackListData,
+  FeedbackListResponse,
   IssueAggregates,
   IssueResponse,
   IssueStatsResponse,
   IssuesGetStatsData,
   IssuesListData,
   IssuesListResponse,
+  IssuesListUserReportsResponse,
   Result,
   RustrakError,
 } from '@rustrak/client';
@@ -109,5 +112,41 @@ export async function getIssueActivity(
   const client = await createClient();
   return client.issues.getActivity({
     path: { project_id: projectId, issue_id: issueId },
+  });
+}
+
+/**
+ * A page of the feedback users sent about an issue, newest first.
+ *
+ * @param projectId - The project ID
+ * @param issueId - The issue UUID
+ * @param page - 1-indexed page, the newest by default
+ */
+export async function listUserReports(
+  projectId: number,
+  issueId: string,
+  page?: number,
+): Promise<Result<IssuesListUserReportsResponse, RustrakError>> {
+  const client = await createClient();
+  return client.issues.listUserReports({
+    path: { project_id: projectId, issue_id: issueId },
+    query: { page },
+  });
+}
+
+/**
+ * List a project's user feedback, with what each user submitted.
+ *
+ * @param projectId - The project ID
+ * @param options - Mailbox filter and pagination
+ */
+export async function listFeedback(
+  projectId: number,
+  options?: FeedbackListData['query'],
+): Promise<Result<FeedbackListResponse, RustrakError>> {
+  const client = await createClient();
+  return client.feedback.list({
+    path: { project_id: projectId },
+    query: options,
   });
 }

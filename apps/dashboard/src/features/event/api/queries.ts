@@ -6,6 +6,7 @@
  * a browser bundle that holds the session cookie.
  */
 import type {
+  AttachmentInfo,
   EventDetailResponse,
   EventResponse,
   Result,
@@ -162,5 +163,39 @@ export async function getEventNavigation(
       currentIndex < totalCount - 1
         ? (events[currentIndex + 1]?.id ?? null)
         : null,
+  });
+}
+
+/**
+ * Resolve the event id a Sentry SDK reported, without knowing its issue.
+ *
+ * @param projectId - The project ID
+ * @param eventId - The SDK's 32-hex event id
+ */
+export async function getEventBySentryId(
+  projectId: number,
+  eventId: string,
+): Promise<Result<EventDetailResponse, RustrakError>> {
+  const client = await createClient();
+  return client.events.getBySentryId({
+    path: { project_id: projectId, event_id: eventId },
+  });
+}
+
+/**
+ * List the files sent with an event, such as a feedback's screenshot.
+ *
+ * @param projectId - The project ID
+ * @param issueId - The issue UUID
+ * @param eventId - The event UUID
+ */
+export async function listEventAttachments(
+  projectId: number,
+  issueId: string,
+  eventId: string,
+): Promise<Result<AttachmentInfo[], RustrakError>> {
+  const client = await createClient();
+  return client.events.listAttachments({
+    path: { project_id: projectId, issue_id: issueId, event_id: eventId },
   });
 }

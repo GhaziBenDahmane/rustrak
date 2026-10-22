@@ -5827,7 +5827,16 @@ export type IssuesListUserReportsData = {
          */
         issue_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Page number (1-indexed, default: 1)
+         */
+        page?: number;
+        /**
+         * Items per page (default: 25, max: 100)
+         */
+        per_page?: number;
+    };
     url: '/api/projects/{project_id}/issues/{issue_id}/user-reports';
 };
 
@@ -5842,9 +5851,24 @@ export type IssuesListUserReportsError = IssuesListUserReportsErrors[keyof Issue
 
 export type IssuesListUserReportsResponses = {
     /**
-     * User feedback reports for the issue
+     * Offset-based paginated response wrapper
      */
-    200: Array<UserReport>;
+    200: {
+        items: Array<{
+            comments: string;
+            created_at: string;
+            email: string;
+            event_id: string | null;
+            id: string;
+            issue_id: string | null;
+            name: string;
+            project_id: number;
+        }>;
+        page: number;
+        per_page: number;
+        total_count: number;
+        total_pages: number;
+    };
 };
 
 export type IssuesListUserReportsResponse = IssuesListUserReportsResponses[keyof IssuesListUserReportsResponses];

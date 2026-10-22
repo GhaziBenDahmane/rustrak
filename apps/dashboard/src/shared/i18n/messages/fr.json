@@ -231,7 +231,9 @@
       "removeBookmark": "Retirer des signets",
       "subscribe": "S’abonner",
       "unsubscribe": "Se désabonner",
-      "deleteIssue": "Supprimer le problème"
+      "deleteIssue": "Supprimer le problème",
+      "markSpam": "Marquer comme spam",
+      "moveToInbox": "Remettre dans la boîte de réception"
     },
     "toasts": {
       "updateFailed": "Échec de la mise à jour des problèmes",
@@ -512,7 +514,8 @@
       "agents": "Agents",
       "logs": "Logs",
       "settings": "Paramètres",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "Retours utilisateurs"
     },
     "collapse": {
       "expand": "Développer",
@@ -1620,7 +1623,37 @@
       "formatPlainText": "Texte brut",
       "formatJson": "JSON",
       "noEventsYet": "Aucun événement pour le moment",
-      "noEventsDescription": "Ce problème a été créé mais aucun événement n’a encore été enregistré. Les événements apparaîtront ici dès que votre application en enverra."
+      "noEventsDescription": "Ce problème a été créé mais aucun événement n’a encore été enregistré. Les événements apparaîtront ici dès que votre application en enverra.",
+      "sectionFeedback": "Retour",
+      "sectionUserFeedback": "Retours utilisateurs",
+      "feedback": {
+        "from": "De",
+        "anonymous": "Anonyme",
+        "email": "E-mail",
+        "page": "Page",
+        "viewError": "Voir l'erreur concernée",
+        "errorNotFound": "Cet événement d'erreur n'est pas encore arrivé ou a été supprimé.",
+        "showOlder": "Afficher les plus anciens ({count})",
+        "showOlderFailed": "Impossible de charger les retours plus anciens."
+      }
+    },
+    "feedback": {
+      "title": "Retours utilisateurs",
+      "subtitle": "Ce que les utilisateurs de {project} vous ont dit",
+      "meta": {
+        "description": "Retours utilisateurs de {project}"
+      },
+      "loadFailed": "Impossible de charger les retours",
+      "mailbox": {
+        "inbox": "Boîte de réception",
+        "resolved": "Résolus",
+        "spam": "Spam"
+      },
+      "empty": {
+        "title": "Aucun retour ici",
+        "description": "Les retours envoyés avec le widget de retour du SDK ou captureFeedback apparaissent ici"
+      },
+      "anonymous": "Anonyme"
     }
   },
   "settings": {

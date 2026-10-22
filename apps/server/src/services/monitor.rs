@@ -348,7 +348,7 @@ impl MonitorService {
         .bind(environment)
         .bind(environment)
         .bind(per_page)
-        .bind((page - 1) * per_page)
+        .bind(crate::pagination::offset(page, per_page))
         .fetch_all(pool)
         .await?;
 
