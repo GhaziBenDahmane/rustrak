@@ -87,8 +87,9 @@ export function EventSections({
 
       {userReports && userReports.items.length > 0 && (
         <Section id="user-feedback" title={t('event.sectionUserFeedback')}>
+          {/* A new report shifts the page offsets, so it drops older pages. */}
           <UserFeedback
-            key={issueId}
+            key={`${issueId}:${userReports.total_count}`}
             projectId={projectId}
             issueId={issueId}
             firstPage={userReports}
