@@ -47,7 +47,7 @@ impl ProjectService {
         page: i64,
         per_page: i64,
     ) -> AppResult<(Vec<Project>, i64)> {
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         // Get total count
         let total_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM projects")
@@ -99,7 +99,7 @@ impl ProjectService {
             return Ok((Vec::new(), 0));
         }
 
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         // Build a parameterized IN list ($1, $2, ...). Bind params start at $1
         // for the ids; LIMIT/OFFSET come after.

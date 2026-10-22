@@ -231,7 +231,9 @@
       "removeBookmark": "Remove bookmark",
       "subscribe": "Subscribe",
       "unsubscribe": "Unsubscribe",
-      "deleteIssue": "Delete issue"
+      "deleteIssue": "Delete issue",
+      "markSpam": "Mark as spam",
+      "moveToInbox": "Move to inbox"
     },
     "toasts": {
       "updateFailed": "Failed to update issues",
@@ -512,7 +514,8 @@
       "agents": "Agents",
       "logs": "Logs",
       "settings": "Settings",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "User Feedback"
     },
     "collapse": {
       "expand": "Expand",
@@ -1620,7 +1623,37 @@
       "formatPlainText": "Plain Text",
       "formatJson": "JSON",
       "noEventsYet": "No Events Yet",
-      "noEventsDescription": "This issue has been created but no events have been recorded yet. Events will appear here once your application sends them."
+      "noEventsDescription": "This issue has been created but no events have been recorded yet. Events will appear here once your application sends them.",
+      "sectionFeedback": "Feedback",
+      "sectionUserFeedback": "User Feedback",
+      "feedback": {
+        "from": "From",
+        "anonymous": "Anonymous",
+        "email": "Email",
+        "page": "Page",
+        "viewError": "View the error it is about",
+        "errorNotFound": "That error event has not arrived, or it has been deleted.",
+        "showOlder": "Show older ({count})",
+        "showOlderFailed": "Could not load older feedback."
+      }
+    },
+    "feedback": {
+      "title": "User Feedback",
+      "subtitle": "What users of {project} told you",
+      "meta": {
+        "description": "User feedback for {project}"
+      },
+      "loadFailed": "Could not load the feedback",
+      "mailbox": {
+        "inbox": "Inbox",
+        "resolved": "Resolved",
+        "spam": "Spam"
+      },
+      "empty": {
+        "title": "No feedback here",
+        "description": "Feedback sent with the SDK's feedback widget or captureFeedback shows up here"
+      },
+      "anonymous": "Anonymous"
     }
   },
   "settings": {

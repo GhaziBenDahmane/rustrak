@@ -7,6 +7,15 @@ use serde::{Deserialize, Serialize};
 /// Default page size for pagination
 pub const PAGE_SIZE: i64 = 20;
 
+/// The rows before a 1-indexed `page`. `page` comes from the query string, so
+/// a page below 1 is the first and one past any offset saturates: an empty
+/// page rather than an overflow or a negative `OFFSET`.
+pub fn offset(page: i64, per_page: i64) -> i64 {
+    page.max(1)
+        .saturating_sub(1)
+        .saturating_mul(per_page.max(0))
+}
+
 /// Paginated response wrapper (cursor-based)
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -43,7 +52,7 @@ pub struct OffsetPaginatedResponse<T> {
 impl<T> OffsetPaginatedResponse<T> {
     pub fn new(items: Vec<T>, total_count: i64, page: i64, per_page: i64) -> Self {
         let per_page = per_page.max(1);
-        let total_pages = (total_count + per_page - 1) / per_page;
+        let total_pages = total_count.saturating_add(per_page - 1) / per_page;
         Self {
             items,
             total_count,
@@ -421,4 +430,22 @@ pub struct ListProjectsQuery {
     /// way.
     #[serde(default)]
     pub stats_period: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::offset;
+
+    #[test]
+    fn offset_skips_the_pages_before() {
+        assert_eq!(offset(1, 25), 0);
+        assert_eq!(offset(3, 25), 50);
+    }
+
+    #[test]
+    fn offset_never_goes_negative_or_overflows() {
+        assert_eq!(offset(0, 25), 0);
+        assert_eq!(offset(-5, 25), 0);
+        assert_eq!(offset(i64::MAX, 100), i64::MAX);
+    }
 }

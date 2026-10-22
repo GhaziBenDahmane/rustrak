@@ -62,6 +62,17 @@ pub struct ListFeedbackArgs {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
+pub struct ListUserReportsArgs {
+    #[serde(flatten)]
+    issue: IssueArgs,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    page: Option<i64>,
+    /// Items per page (max 100)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    per_page: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
 pub struct UpdateStatusArgs {
     #[serde(flatten)]
     issue: IssueArgs,
@@ -465,9 +476,20 @@ impl RustrakMcp {
         description = "List user feedback reports attached to an issue.",
         annotations(read_only_hint = true)
     )]
-    async fn list_user_reports(&self, Parameters(a): Parameters<IssueArgs>) -> CallToolResult {
-        reply(async { issues::list_issue_user_reports(self.pool(), a.path()?, self.actor()).await })
+    async fn list_user_reports(
+        &self,
+        Parameters(a): Parameters<ListUserReportsArgs>,
+    ) -> CallToolResult {
+        reply(async {
+            issues::list_issue_user_reports(
+                self.pool(),
+                a.issue.path()?,
+                web::Query(args(&a)?),
+                self.actor(),
+            )
             .await
+        })
+        .await
     }
 
     #[tool(

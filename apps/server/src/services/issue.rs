@@ -538,7 +538,7 @@ impl IssueService {
                 per_page
             )));
         }
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         // Build ORDER BY clause
         let order_clause = match (sort, order) {
