@@ -10,6 +10,7 @@ import type { Translate } from '@/shared/lib/error-copy';
 import {
   bucketGoes,
   deletesAnything,
+  elapsed,
   estimateBytes,
   nextReadIn,
   presetsWith,
@@ -275,5 +276,24 @@ describe('nextReadIn', () => {
     expect(
       nextReadIn(state({ settings: keepAll, next_run_at: null }), now),
     ).toBeNull();
+  });
+});
+
+describe('elapsed', () => {
+  const start = '2026-10-23T10:00:00Z';
+  const at = (seconds: number) => Date.parse(start) + seconds * 1000;
+
+  it('reads as minutes and padded seconds', () => {
+    expect(elapsed(start, at(0))).toBe('0:00');
+    expect(elapsed(start, at(7))).toBe('0:07');
+    expect(elapsed(start, at(125))).toBe('2:05');
+  });
+
+  it('never goes below zero when the clocks disagree', () => {
+    expect(elapsed(start, at(-3))).toBe('0:00');
+  });
+
+  it('starts from zero without a start', () => {
+    expect(elapsed(null, at(42))).toBe('0:00');
   });
 });

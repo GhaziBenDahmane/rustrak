@@ -1204,7 +1204,8 @@
       "starting": "démarrage…",
       "off": "Rien n’est supprimé : toutes les données sont conservées toujours. Configurez la rétention pour libérer de l’espace automatiquement.",
       "next": "Prochain nettoyage {when} · libérera ≈ {size}",
-      "scheduling": "Planification du prochain nettoyage…"
+      "scheduling": "Planification du prochain nettoyage…",
+      "compacting": "Compactage de la base de données…"
     },
     "status": {
       "lastRunRunning": "Dernier nettoyage en cours depuis {when}",
@@ -1287,7 +1288,10 @@
       "cleanupFailed": "Le nettoyage a échoué",
       "removed": "{parts} supprimés",
       "nothingRemoved": "Rien à supprimer",
-      "gcFailed": "Impossible de supprimer les source maps inutilisées"
+      "gcFailed": "Impossible de supprimer les source maps inutilisées",
+      "compacting": "Compactage de la base de données… {elapsed}",
+      "compacted": "Base de données compactée",
+      "compactionFailed": "Le compactage a échoué"
     },
     "unit": {
       "errors": "{count, plural, =1 {# erreur} other {# erreurs}}",
@@ -1317,6 +1321,18 @@
       "actionIdle": "Supprimer",
       "sourceMaps": "Source maps inutilisées",
       "sourceMapsHint": "Fichiers qu’aucun envoi ne référence plus ; ceux qui sont référencés ne sont jamais touchés"
+    },
+    "compaction": {
+      "title": "Cette base de données a été créée par une version antérieure de Rustrak",
+      "description": "Les bases des versions antérieures ne rendent jamais au disque l'espace des données supprimées : ce que la rétention supprime est réutilisé, mais le fichier ne rétrécit jamais. La compacter une fois règle le problème pour de bon ; celles créées par cette version n'en ont pas besoin. {size} seraient libérés maintenant.",
+      "action": "Compacter la base de données",
+      "dialogTitle": "Compacter la base de données ?",
+      "dialogDescription": "Rustrak réécrit le fichier une fois, comme le sont déjà les bases créées par cette version, et libère {size}. Ensuite, chaque nettoyage rend son espace au disque et cet avis disparaît.",
+      "disk": "Nécessite {required} libres sur le disque · {free} disponibles",
+      "diskUnknown": "Nécessite {required} libres sur le disque",
+      "pause": "Pendant l'opération, la base n'accepte aucune écriture : les erreurs sont conservées et traitées ensuite, mais les logs, traces et sessions reçus entre-temps sont perdus.",
+      "duration": "Compter quelques secondes par Go de données. Lancez-la à un moment calme.",
+      "confirm": "Compacter"
     }
   },
   "errors": {

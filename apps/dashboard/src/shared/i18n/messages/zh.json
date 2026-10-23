@@ -1204,7 +1204,8 @@
       "starting": "正在开始…",
       "off": "不会删除任何数据：所有数据均永久保留。配置保留期即可自动释放空间。",
       "next": "下次清理 {when} · 将释放约 {size}",
-      "scheduling": "正在安排下次清理…"
+      "scheduling": "正在安排下次清理…",
+      "compacting": "正在压缩数据库…"
     },
     "status": {
       "lastRunRunning": "上次清理自 {when} 起运行中",
@@ -1287,7 +1288,10 @@
       "cleanupFailed": "清理失败",
       "removed": "已删除 {parts}",
       "nothingRemoved": "没有可删除的内容",
-      "gcFailed": "无法删除未使用的 source map"
+      "gcFailed": "无法删除未使用的 source map",
+      "compacting": "正在压缩数据库… {elapsed}",
+      "compacted": "数据库已压缩",
+      "compactionFailed": "压缩失败"
     },
     "unit": {
       "errors": "{count} 个错误",
@@ -1317,6 +1321,18 @@
       "actionIdle": "删除",
       "sourceMaps": "未使用的 source map",
       "sourceMapsHint": "已不再被任何上传引用的文件；被引用的文件永远不会被删除"
+    },
+    "compaction": {
+      "title": "此数据库由旧版 Rustrak 创建",
+      "description": "旧版本创建的数据库从不将已删除数据的空间归还给磁盘：保留策略删除的空间会被复用，但文件永远不会缩小。压缩一次即可永久解决；由此版本创建的数据库无需此操作。现在可释放 {size}。",
+      "action": "压缩数据库",
+      "dialogTitle": "压缩数据库？",
+      "dialogDescription": "Rustrak 会重写一次文件（与此版本创建的数据库相同）并释放 {size}。此后每次清理都会将空间归还给磁盘，此提示也会消失。",
+      "disk": "需要 {required} 磁盘可用空间 · 当前可用 {free}",
+      "diskUnknown": "需要 {required} 磁盘可用空间",
+      "pause": "运行期间数据库不接受写入：错误会被保留并稍后处理，但期间到达的日志、追踪和会话会丢失。",
+      "duration": "每 GB 数据需要几秒钟。请在空闲时段运行。",
+      "confirm": "压缩"
     }
   },
   "errors": {

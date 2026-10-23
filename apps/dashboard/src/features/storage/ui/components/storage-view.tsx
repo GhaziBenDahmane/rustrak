@@ -26,6 +26,7 @@ import {
 } from '@/shared/ui/components/shadcn/card';
 import { useCleanupJob } from '../hooks/use-cleanup-job';
 import { AgeChart } from './age-chart';
+import { CompactionNotice } from './compaction-notice';
 import { DeleteDialog } from './delete-dialog';
 import { ProjectRetentionDialog } from './project-retention-dialog';
 import { RetentionDialog } from './retention-dialog';
@@ -159,6 +160,8 @@ export function StorageView({
           </Button>
         </div>
       </div>
+
+      <CompactionNotice disabled={cleanup.running} onStarted={cleanup.follow} />
 
       {figures && 'error' in figures ? (
         <LoadFailure

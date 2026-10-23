@@ -88,3 +88,14 @@ export async function runRetention(): Promise<
   const client = await createClient();
   return client.storage.runRetention();
 }
+
+/**
+ * Compacts a SQLite file created before incremental mode, in the background;
+ * follow it with the cleanup status.
+ */
+export async function compactStorage(): Promise<
+  Result<CleanupStatus, RustrakError>
+> {
+  const client = await createClient();
+  return client.storage.compact();
+}

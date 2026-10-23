@@ -1046,3 +1046,372 @@ async fn keeping_everything_forever_previews_no_source_maps_since_no_cleanup_run
 
     assert_eq!(body["source_maps"], 0);
 }
+
+// =============================================================================
+// SQLite: a cleanup gives the space it freed back to the filesystem
+// =============================================================================
+
+/// A database built the way the server builds one (`db::create_pool`), so it
+/// has the `auto_vacuum` mode a new deployment gets.
+#[cfg(feature = "sqlite")]
+async fn production_sqlite(path: &std::path::Path) -> DbPool {
+    let pool = rustrak::db::create_pool(&DatabaseConfig {
+        url: format!("sqlite://{}?mode=rwc", path.display()),
+        max_connections: 1,
+        min_connections: 1,
+        acquire_timeout: Duration::from_secs(5),
+        idle_timeout: Duration::from_secs(60),
+        max_lifetime: Duration::from_secs(300),
+    })
+    .await
+    .expect("create the SQLite pool");
+    rustrak::db::run_migrations(&pool)
+        .await
+        .expect("run migrations");
+    pool
+}
+
+/// `count` logs ingested `days_ago` days back, each with a `body_bytes` body.
+#[cfg(feature = "sqlite")]
+async fn seed_old_logs(
+    pool: &DbPool,
+    project_id: i32,
+    days_ago: i64,
+    count: usize,
+    body_bytes: usize,
+) {
+    let old = Utc::now() - chrono::Duration::days(days_ago);
+    let body = "x".repeat(body_bytes);
+    let mut tx = pool.begin().await.unwrap();
+    for _ in 0..count {
+        sqlx::query(
+            "INSERT INTO logs (id, project_id, trace_id, span_id, level, severity_number, \
+             body, attributes, timestamp, ingested_at) \
+             VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, $9)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(project_id)
+        .bind("trace")
+        .bind("info")
+        .bind(9_i16)
+        .bind(&body)
+        .bind(json!({}))
+        .bind(old)
+        .bind(old)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    }
+    tx.commit().await.unwrap();
+}
+
+/// `(page_count, freelist_count)`.
+#[cfg(feature = "sqlite")]
+async fn pages(pool: &DbPool) -> (i64, i64) {
+    let total: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let free: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    (total, free)
+}
+
+#[cfg(feature = "sqlite")]
+fn logs_retention(days: i64) -> rustrak::models::RetentionSettings {
+    serde_json::from_value(json!({"defaults": {"logs_days": days}})).unwrap()
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_new_sqlite_database_can_give_space_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = production_sqlite(&dir.path().join("rustrak.db")).await;
+
+    let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        auto_vacuum, 2,
+        "new databases are created with auto_vacuum = INCREMENTAL"
+    );
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_cleanup_gives_the_space_it_freed_back_to_the_filesystem() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("rustrak.db");
+    let pool = production_sqlite(&path).await;
+    let project = create_project(&pool, "reclaim").await;
+    // About 8 MiB of logs, all older than the window.
+    seed_old_logs(&pool, project, 10, 2_000, 4_096).await;
+    let (before, _) = pages(&pool).await;
+    let file_before = std::fs::metadata(&path).unwrap().len();
+
+    let cleanup = CleanupJob::default();
+    cleanup
+        .run_retention(pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+
+    assert_eq!(log_count(&pool).await, 0);
+    let (after, free) = pages(&pool).await;
+    assert_eq!(free, 0, "every freed page went back to the filesystem");
+    assert!(
+        after * 4 < before,
+        "the database shrank: {before} pages before, {after} after"
+    );
+    let file_after = std::fs::metadata(&path).unwrap().len();
+    assert!(
+        file_after * 4 < file_before,
+        "the file shrank: {file_before} bytes before, {file_after} after"
+    );
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_reader_blocking_the_checkpoint_means_nothing_has_left_the_file_yet() {
+    use sqlx::Connection;
+    let dir = tempfile::tempdir().unwrap();
+    // Incremental, WAL and the shipped pool's busy timeout: a checkpoint that
+    // waited on the reader would hold every writer back for those 5 seconds.
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(dir.path().join("rustrak.db"))
+        .create_if_missing(true)
+        .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+        .busy_timeout(Duration::from_secs(5));
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options.clone())
+        .await
+        .unwrap();
+    rustrak::db::run_migrations(&pool).await.unwrap();
+    let project = create_project(&pool, "busy").await;
+    seed_old_logs(&pool, project, 10, 500, 4_096).await;
+
+    // A reader on the snapshot before the delete, open across the reclaim.
+    let mut reader = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .unwrap();
+    let mut read = reader.begin().await.unwrap();
+    let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM logs")
+        .fetch_one(&mut *read)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM logs")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let started = std::time::Instant::now();
+    let released = rustrak::services::StorageService::reclaim_free_space(&pool)
+        .await
+        .unwrap();
+
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the checkpoint does not wait on the reader: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(released, 0, "the checkpoint could not shrink the file yet");
+    let (_, free) = pages(&pool).await;
+    assert_eq!(free, 0, "the pages were freed all the same");
+    read.rollback().await.unwrap();
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_database_created_before_incremental_mode_keeps_its_freed_pages() {
+    // TestDb's file is created without auto_vacuum, like a database a server
+    // created before this mode existed: freed pages stay on the freelist for
+    // reuse, and releasing them needs a one-off VACUUM.
+    let db = TestDb::new().await;
+    let project = create_project(&db.pool, "legacy").await;
+    seed_old_logs(&db.pool, project, 10, 500, 4_096).await;
+
+    let cleanup = CleanupJob::default();
+    cleanup
+        .run_retention(db.pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+
+    assert_eq!(log_count(&db.pool).await, 0);
+    assert_eq!(
+        rustrak::services::StorageService::reclaim_free_space(&db.pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let (_, free) = pages(&db.pool).await;
+    assert!(free > 0, "the freed pages stay on the freelist");
+}
+
+// =============================================================================
+// SQLite: compacting a database created before incremental mode
+// =============================================================================
+
+/// `GET /api/storage/compaction` as `token`.
+async fn get_compaction<S>(app: &S, token: &str) -> actix_web::dev::ServiceResponse
+where
+    S: actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+{
+    let (k, v) = bearer(token);
+    let req = test::TestRequest::get()
+        .uri("/api/storage/compaction")
+        .insert_header((k, v))
+        .to_request();
+    test::call_service(app, req).await
+}
+
+/// `POST /api/storage/compaction` as `token`.
+async fn post_compaction<S>(app: &S, token: &str) -> actix_web::dev::ServiceResponse
+where
+    S: actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+{
+    let (k, v) = bearer(token);
+    let req = test::TestRequest::post()
+        .uri("/api/storage/compaction")
+        .insert_header((k, v))
+        .to_request();
+    test::call_service(app, req).await
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn an_old_database_reports_the_space_a_compaction_gives_back() {
+    // TestDb's file has SQLite's default, auto_vacuum = NONE.
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "legacy").await;
+    seed_old_logs(&db.pool, project, 10, 500, 4_096).await;
+    CleanupJob::default()
+        .run_retention(db.pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let resp = get_compaction(&app, &token).await;
+    assert_eq!(resp.status(), 200);
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["needed"], true, "the file never shrinks on its own");
+    let reclaimable = body["reclaimable_bytes"].as_i64().unwrap();
+    let live = body["live_bytes"].as_i64().unwrap();
+    assert!(reclaimable > 1024 * 1024, "the deleted logs: {reclaimable}");
+    assert_eq!(body["file_bytes"].as_i64().unwrap(), live + reclaimable);
+    assert_eq!(body["required_disk_bytes"].as_i64().unwrap(), 2 * live);
+    assert!(body["free_disk_bytes"].as_i64().unwrap() > 0);
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn compacting_an_old_database_lets_it_give_space_back_from_then_on() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "legacy").await;
+    seed_old_logs(&db.pool, project, 10, 500, 4_096).await;
+    CleanupJob::default()
+        .run_retention(db.pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+    let (before, _) = pages(&db.pool).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let resp = post_compaction(&app, &token).await;
+    assert_eq!(
+        resp.status(),
+        202,
+        "the compaction starts in the background"
+    );
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["state"], "running");
+    assert_eq!(body["kind"], "compaction");
+
+    let done = wait_for_cleanup(&app, &token).await;
+    assert_eq!(done["state"], "completed", "{done}");
+    assert_eq!(done["kind"], "compaction");
+    let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(auto_vacuum, 2, "now in incremental mode");
+    let (after, free) = pages(&db.pool).await;
+    assert_eq!(free, 0, "the freed pages left the file");
+    assert!(after * 4 < before, "{before} pages before, {after} after");
+
+    let body: Value = test::read_body_json(get_compaction(&app, &token).await).await;
+    assert_eq!(
+        body["needed"], false,
+        "a second compaction is never offered"
+    );
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_new_database_is_never_compacted() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = production_sqlite(&dir.path().join("rustrak.db")).await;
+    let admin = seed_user(&pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&pool, admin.id).await;
+    let app = build_app!(pool.clone(), create_test_config());
+
+    let body: Value = test::read_body_json(get_compaction(&app, &token).await).await;
+    assert_eq!(body["needed"], false, "it already gives space back");
+    assert_eq!(post_compaction(&app, &token).await.status(), 400);
+}
+
+#[cfg(feature = "postgres")]
+#[actix_web::test]
+async fn postgres_never_needs_a_compaction() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let body: Value = test::read_body_json(get_compaction(&app, &token).await).await;
+    assert_eq!(body["needed"], false, "autovacuum gives the space back");
+    assert_eq!(post_compaction(&app, &token).await.status(), 400);
+}
+
+#[actix_web::test]
+async fn compaction_is_admin_only() {
+    let db = TestDb::new().await;
+    let member = seed_user(&db.pool, "member@x.com", UserRole::Member).await;
+    let token = token_for(&db.pool, member.id).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    assert_eq!(get_compaction(&app, &token).await.status(), 403);
+    assert_eq!(post_compaction(&app, &token).await.status(), 403);
+}
+
+#[actix_web::test]
+async fn a_compaction_needs_twice_the_live_data_free() {
+    let compaction = |free| rustrak::models::Compaction {
+        needed: true,
+        file_bytes: 300,
+        live_bytes: 100,
+        reclaimable_bytes: 200,
+        required_disk_bytes: 200,
+        free_disk_bytes: free,
+    };
+    assert!(compaction(Some(200)).has_room());
+    assert!(
+        !compaction(Some(199)).has_room(),
+        "VACUUM would fill the disk"
+    );
+    assert!(compaction(None).has_room(), "unmeasurable: SQLite decides");
+}

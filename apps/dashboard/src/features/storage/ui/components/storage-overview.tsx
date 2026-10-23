@@ -114,6 +114,14 @@ function CleanupLine({
   const t = useTranslations('storage');
   const format = useFormatter();
 
+  if (job?.state === 'running' && job.kind === 'compaction') {
+    return (
+      <p className="flex items-center gap-2 text-sm">
+        <Loader2 className="size-3.5 animate-spin" />
+        {t('overview.compacting')}
+      </p>
+    );
+  }
   // Running here (followed, with progress) or on the schedule.
   if (job?.state === 'running' || retention.last_run?.status === 'running') {
     const parts = job?.state === 'running' ? removedParts(job.removed, t) : [];

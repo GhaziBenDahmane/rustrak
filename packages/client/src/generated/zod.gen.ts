@@ -344,6 +344,11 @@ export const zCleanupCounts = z.object({
 export const zCleanupFrequency = z.enum(['daily', 'weekly']);
 
 /**
+ * What the job is doing: deleting old data, or compacting the SQLite file.
+ */
+export const zCleanupKind = z.enum(['cleanup', 'compaction']);
+
+/**
  * Request body for a cleanup (preview or execute): remove data older than
  * `older_than_days`, optionally scoped to a single project (omit for all).
  *
@@ -377,6 +382,7 @@ export const zCleanupState = z.enum([
 export const zCleanupStatus = z.object({
     error: z.string().nullable(),
     finished_at: z.iso.datetime({ offset: true }).nullable(),
+    kind: zCleanupKind,
     removed: zCleanupCounts,
     started_at: z.iso.datetime({ offset: true }).nullable(),
     state: zCleanupState
@@ -395,6 +401,24 @@ export const zCodeMapping = z.object({
  */
 export const zCommentRequest = z.object({
     text: z.string()
+});
+
+/**
+ * Whether the SQLite file can give the space a cleanup frees back to the
+ * disk, and what compacting it once would take.
+ *
+ * A database created before Rustrak set `auto_vacuum = INCREMENTAL` keeps
+ * SQLite's default, `NONE`: its freed pages are reused but the file never
+ * shrinks. One `VACUUM` rewrites it in incremental mode. Always
+ * `needed: false` on Postgres, whose autovacuum gives the space back.
+ */
+export const zCompaction = z.object({
+    file_bytes: z.int(),
+    free_disk_bytes: z.int().nullable(),
+    live_bytes: z.int(),
+    needed: z.boolean(),
+    reclaimable_bytes: z.int(),
+    required_disk_bytes: z.int()
 });
 
 export const zConfirmSsoLinkRequest = z.object({
@@ -3422,6 +3446,16 @@ export const zStoragePreviewCleanupResponse = zCleanupCounts;
  * The current or last cleanup and the rows it removed
  */
 export const zStorageGetCleanupStatusResponse = zCleanupStatus;
+
+/**
+ * Whether the SQLite file gives freed space back, and what compacting it takes
+ */
+export const zStorageGetCompactionResponse = zCompaction;
+
+/**
+ * Compaction started in the background; poll the cleanup status
+ */
+export const zStorageCompactResponse = zCleanupStatus;
 
 /**
  * Per-project storage breakdown

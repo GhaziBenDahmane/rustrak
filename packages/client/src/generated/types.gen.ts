@@ -425,6 +425,11 @@ export type CleanupCounts = {
 export type CleanupFrequency = 'daily' | 'weekly';
 
 /**
+ * What the job is doing: deleting old data, or compacting the SQLite file.
+ */
+export type CleanupKind = 'cleanup' | 'compaction';
+
+/**
  * Request body for a cleanup (preview or execute): remove data older than
  * `older_than_days`, optionally scoped to a single project (omit for all).
  *
@@ -467,6 +472,7 @@ export type CleanupStatus = {
      */
     error: string | null;
     finished_at: string | null;
+    kind: CleanupKind;
     /**
      * Rows removed so far while `running`; the total once it has finished.
      */
@@ -494,6 +500,40 @@ export type CodeMapping = {
  */
 export type CommentRequest = {
     text: string;
+};
+
+/**
+ * Whether the SQLite file can give the space a cleanup frees back to the
+ * disk, and what compacting it once would take.
+ *
+ * A database created before Rustrak set `auto_vacuum = INCREMENTAL` keeps
+ * SQLite's default, `NONE`: its freed pages are reused but the file never
+ * shrinks. One `VACUUM` rewrites it in incremental mode. Always
+ * `needed: false` on Postgres, whose autovacuum gives the space back.
+ */
+export type Compaction = {
+    /**
+     * The database file's size.
+     */
+    file_bytes: number;
+    /**
+     * Free disk next to the database, `null` when it cannot be read.
+     */
+    free_disk_bytes: number | null;
+    /**
+     * What the data in it takes, the part a compaction keeps.
+     */
+    live_bytes: number;
+    needed: boolean;
+    /**
+     * Free pages inside the file, the part a compaction gives back.
+     */
+    reclaimable_bytes: number;
+    /**
+     * Free disk a compaction needs: twice the live data, one copy in
+     * SQLite's temporary file and one in the write-ahead log.
+     */
+    required_disk_bytes: number;
 };
 
 export type ConfirmSsoLinkRequest = {
@@ -7273,6 +7313,64 @@ export type StorageGetCleanupStatusResponses = {
 };
 
 export type StorageGetCleanupStatusResponse = StorageGetCleanupStatusResponses[keyof StorageGetCleanupStatusResponses];
+
+export type StorageGetCompactionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/storage/compaction';
+};
+
+export type StorageGetCompactionErrors = {
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+};
+
+export type StorageGetCompactionError = StorageGetCompactionErrors[keyof StorageGetCompactionErrors];
+
+export type StorageGetCompactionResponses = {
+    /**
+     * Whether the SQLite file gives freed space back, and what compacting it takes
+     */
+    200: Compaction;
+};
+
+export type StorageGetCompactionResponse = StorageGetCompactionResponses[keyof StorageGetCompactionResponses];
+
+export type StorageCompactData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/storage/compaction';
+};
+
+export type StorageCompactErrors = {
+    /**
+     * Nothing to compact, or not enough free disk
+     */
+    400: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * A cleanup is already running
+     */
+    409: ErrorResponse;
+};
+
+export type StorageCompactError = StorageCompactErrors[keyof StorageCompactErrors];
+
+export type StorageCompactResponses = {
+    /**
+     * Compaction started in the background; poll the cleanup status
+     */
+    202: CleanupStatus;
+};
+
+export type StorageCompactResponse = StorageCompactResponses[keyof StorageCompactResponses];
 
 export type StorageGetProjectsData = {
     body?: never;
