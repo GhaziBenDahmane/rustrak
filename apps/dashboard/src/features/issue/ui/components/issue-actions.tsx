@@ -13,9 +13,11 @@ import {
   BookmarkCheck,
   Check,
   ChevronDown,
+  Inbox,
   Loader2,
   MoreHorizontal,
   Rocket,
+  ShieldAlert,
   Trash2,
   Undo,
 } from 'lucide-react';
@@ -60,6 +62,41 @@ interface IssueActionsProps {
 
 const PRIORITIES: IssuePriority[] = ['high', 'medium', 'low'];
 
+/** The mute button's face: on a feedback, Sentry's spam mailbox. */
+function ArchiveLabel({
+  feedback,
+  archived,
+}: {
+  feedback: boolean;
+  archived: boolean;
+}) {
+  const t = useTranslations('issues');
+  if (feedback) {
+    return archived ? (
+      <>
+        <Inbox className="mr-2 size-4" />
+        {t('actions.moveToInbox')}
+      </>
+    ) : (
+      <>
+        <ShieldAlert className="mr-2 size-4" />
+        {t('actions.markSpam')}
+      </>
+    );
+  }
+  return archived ? (
+    <>
+      <ArchiveRestore className="mr-2 size-4" />
+      {t('actions.unarchive')}
+    </>
+  ) : (
+    <>
+      <Archive className="mr-2 size-4" />
+      {t('actions.archive')}
+    </>
+  );
+}
+
 export function IssueActions({ issue, projectId, extra }: IssueActionsProps) {
   const t = useTranslations('issues');
   const router = useRouter();
@@ -70,6 +107,8 @@ export function IssueActions({ issue, projectId, extra }: IssueActionsProps) {
   const busy = pending !== null;
   const isResolved = issue.status === 'resolved';
   const isArchived = issue.status === 'ignored';
+  // A muted feedback is spam, as in Sentry's feedback inbox.
+  const isFeedback = issue.issue_category === 'feedback';
   const priorityMeta = priorityDisplay(issue.priority);
 
   /**
@@ -188,12 +227,7 @@ export function IssueActions({ issue, projectId, extra }: IssueActionsProps) {
             )
           }
         >
-          {isArchived ? (
-            <ArchiveRestore className="mr-2 size-4" />
-          ) : (
-            <Archive className="mr-2 size-4" />
-          )}
-          {isArchived ? t('actions.unarchive') : t('actions.archive')}
+          <ArchiveLabel feedback={isFeedback} archived={isArchived} />
         </Button>
 
         {/* Overflow */}

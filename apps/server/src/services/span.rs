@@ -190,7 +190,7 @@ impl SpanService {
     ) -> AppResult<(Vec<SpanResponse>, i64)> {
         let page = page.max(1);
         let per_page = per_page.clamp(1, 100);
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         let total_count: (i64,) = sqlx::query_as(
             r#"
@@ -693,7 +693,7 @@ impl SpanService {
         filters: &AgentFilters,
     ) -> AppResult<(Vec<AgentTraceSummary>, i64)> {
         let per_page = per_page.clamp(1, 100);
-        let offset = (page.max(1) - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         let scope = filters.sql(2);
         #[cfg(feature = "postgres")]

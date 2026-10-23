@@ -1,0 +1,47 @@
+---
+version: v0.20.0
+title: User Feedback
+description: Rustrak collects user feedback from Sentry SDKs, with screenshots, a feedback inbox in the dashboard, feedback alerts and MCP tools
+date: 2026-10-22
+tags: [server, dashboard, client, mcp]
+---
+
+## User Feedback
+
+What your users tell you now lands next to your errors. Sentry's feedback
+widget and `captureFeedback` work against Rustrak with no changes to your app.
+
+- Accepts Sentry's `feedback` envelope item, the legacy `user_report` item,
+  and the legacy `user-feedback` API endpoint
+- Each feedback is its own issue, linked to the error event it was sent about
+- Screenshots the widget takes are kept with the feedback, up to 10 MB each,
+  and shown inline in the dashboard
+- A new **User Feedback** page in the project sidebar lists the inbox,
+  resolved and spam feedback. On a feedback, the archive button becomes
+  **Mark as spam** and **Move to inbox**
+- An event that has feedback shows it on the event page
+- Messages longer than 4096 characters are rejected, as Sentry does
+
+## Feedback alerts
+
+A new **New feedback** alert type notifies your channels when a user submits
+feedback.
+
+## API, client and MCP
+
+- `GET /api/projects/{id}/feedback` lists feedback, filtered by inbox,
+  resolved or spam. An issue's user reports are paged under
+  `/issues/{id}/user-reports`, and attachments are listed per event and
+  downloaded from `/api/projects/{id}/attachments/{attachment_id}`
+- The Sentry-compatible API understands `issue.category:feedback`
+- `@rustrak/client` has the new endpoints, and attachment downloads are typed
+  as `Blob`
+- New MCP tools: `list_feedback`, `list_user_reports` and `get_attachment`,
+  which hands a screenshot to the assistant as an image. `list_issues` takes
+  a `category`
+
+## Improvements
+
+- `rustls-webpki` is updated for RUSTSEC-2026-0381, RUSTSEC-2026-0382 and
+  RUSTSEC-2026-0383
+- A very large page number no longer overflows the page offset

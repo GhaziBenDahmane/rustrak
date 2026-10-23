@@ -16,6 +16,9 @@ fn item_type(kind: &EnvelopeItemKind) -> &str {
         EnvelopeItemKind::Span(_) => "span",
         EnvelopeItemKind::SpanV2Batch(_) => "span_v2",
         EnvelopeItemKind::CheckIn(_) => "check_in",
+        EnvelopeItemKind::Feedback(_) => "feedback",
+        EnvelopeItemKind::Attachment(_) => "attachment",
+        EnvelopeItemKind::UserReport(_) => "user_report",
         EnvelopeItemKind::Other(t, _) => t,
     }
 }
@@ -28,7 +31,10 @@ fn raw_payload(kind: &EnvelopeItemKind) -> Option<&[u8]> {
         | EnvelopeItemKind::Log(p)
         | EnvelopeItemKind::Span(p)
         | EnvelopeItemKind::SpanV2Batch(p)
-        | EnvelopeItemKind::CheckIn(p) => Some(p),
+        | EnvelopeItemKind::CheckIn(p)
+        | EnvelopeItemKind::Feedback(p)
+        | EnvelopeItemKind::UserReport(p) => Some(p),
+        EnvelopeItemKind::Attachment(a) => Some(&a.payload),
         EnvelopeItemKind::Other(_, p) => Some(p),
         EnvelopeItemKind::Session(_) | EnvelopeItemKind::Sessions(_) => None,
     }
@@ -333,7 +339,7 @@ fn test_parse_attachment_item() {
     let mut parser = EnvelopeParser::new(bytes::Bytes::copy_from_slice(envelope));
     let result = parser.parse().unwrap();
 
-    assert!(matches!(result.items[0], EnvelopeItemKind::Other(ref t, _) if t == "attachment"));
+    assert!(matches!(result.items[0], EnvelopeItemKind::Attachment(_)));
     assert_eq!(raw_payload(&result.items[0]).unwrap(), b"data");
 }
 
@@ -369,10 +375,67 @@ fn test_attachment_and_security_items_require_event_id() {
                 item_type: item_type.to_string(),
                 length: None,
                 content_type: None,
+                filename: None,
+                attachment_type: None,
             },
             bytes::Bytes::from_static(b"payload"),
         ));
         assert!(kind.requires_event());
+    }
+}
+
+#[test]
+fn test_attachment_payload_is_kept_byte_for_byte() {
+    // Not JSON: the NUL-escape scrub must not touch it, and raw bytes,
+    // newlines included, must survive.
+    let body: &[u8] = b"\x89PNG\r\n\x1a\n\x00\\u0000\n\xff";
+    let header = format!(
+        r#"{{"type":"attachment","length":{},"filename":"screenshot.png","content_type":"image/png"}}"#,
+        body.len()
+    );
+    let mut data = format!("{{\"event_id\":\"abc123\"}}\n{header}\n").into_bytes();
+    data.extend_from_slice(body);
+    let mut parser = EnvelopeParser::new(bytes::Bytes::from(data));
+    let result = parser.parse().unwrap();
+
+    let EnvelopeItemKind::Attachment(attachment) = &result.items[0] else {
+        panic!("expected an attachment item");
+    };
+    assert_eq!(attachment.payload.as_ref(), body);
+    assert_eq!(attachment.filename.as_deref(), Some("screenshot.png"));
+    assert_eq!(attachment.content_type.as_deref(), Some("image/png"));
+    assert_eq!(attachment.attachment_type, None);
+    assert!(result.items[0].requires_event());
+}
+
+#[test]
+fn test_attachment_may_exceed_the_json_item_limit() {
+    // Relay's attachment limit is far above its event limit; one large
+    // screenshot must not cost the envelope its feedback.
+    let body = vec![7u8; 2 * 1024 * 1024];
+    let data = envelope_with_item("attachment", "image/png", &body);
+    let mut parser = EnvelopeParser::new(bytes::Bytes::from(data));
+    assert!(parser.parse().is_ok());
+}
+
+#[test]
+fn test_feedback_and_user_report_items_are_typed_and_require_event_id() {
+    // Relay: `Item::requires_event()` is true for UserReport and UserReportV2.
+    for item_type in ["feedback", "user_report"] {
+        let data = envelope_with_item(item_type, "application/json", br#"{"a":1}"#);
+        let mut parser = EnvelopeParser::new(bytes::Bytes::copy_from_slice(&data));
+        let result = parser.parse().unwrap();
+
+        assert_eq!(item_type_of(&result.items[0]), item_type);
+        assert_eq!(raw_payload(&result.items[0]), Some(&br#"{"a":1}"#[..]));
+        assert!(result.items[0].requires_event());
+    }
+}
+
+fn item_type_of(kind: &EnvelopeItemKind) -> String {
+    match kind {
+        EnvelopeItemKind::Other(t, _) => format!("other:{t}"),
+        kind => item_type(kind).to_string(),
     }
 }
 

@@ -174,6 +174,7 @@ pub struct ProjectStorage {
     pub source_maps_count: i64,
     /// `events_bytes + transactions_bytes + logs_bytes`.
     pub estimated_bytes: i64,
+    /// Events with their attachments.
     pub events_bytes: i64,
     /// Transactions with their spans.
     pub transactions_bytes: i64,

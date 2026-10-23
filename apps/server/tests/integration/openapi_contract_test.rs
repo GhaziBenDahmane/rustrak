@@ -66,6 +66,8 @@ const NOT_SEEDED: &[&str] = &[
     // A token only an emailed invitation or an SSO login hands out.
     "auth.getInvitation",
     "auth.ssoLink",
+    // Bytes, not JSON, and the seed has no feedback screenshot.
+    "events.downloadAttachment",
 ];
 
 struct Seed {

@@ -1,12 +1,23 @@
-use actix_web::web;
+use actix_web::body::MessageBody;
+use actix_web::http::header::CONTENT_TYPE;
+use actix_web::{web, HttpResponse};
+use base64::Engine as _;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::CallToolResult;
+use rmcp::model::{CallToolResult, ContentBlock};
 use rmcp::schemars::{self, JsonSchema};
 use rmcp::{tool, tool_router};
 use serde::{Deserialize, Serialize};
 
-use super::{args, reply, uuid, RustrakMcp};
+use super::{args, from_error, refuse, reply, uuid, RustrakMcp};
 use crate::routes::events;
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct AttachmentArgs {
+    /// Project ID
+    project_id: i32,
+    /// Attachment ID, as list_feedback lists it
+    attachment_id: String,
+}
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct ListEventsArgs {
@@ -61,4 +72,46 @@ impl RustrakMcp {
         })
         .await
     }
+
+    #[tool(
+        description = "Get a file sent with an event, such as the screenshot of a user feedback. A PNG, JPEG, GIF or WebP image comes back as an image; any other file is only described.",
+        annotations(read_only_hint = true)
+    )]
+    async fn get_attachment(&self, Parameters(a): Parameters<AttachmentArgs>) -> CallToolResult {
+        let path = match uuid("attachment_id", &a.attachment_id) {
+            Ok(id) => web::Path::from((a.project_id, id)),
+            Err(e) => return from_error(e),
+        };
+        match events::download_attachment(self.pool(), path, self.actor()).await {
+            Ok(response) => attachment_content(response),
+            Err(e) => from_error(e),
+        }
+    }
+}
+
+/// The handler's file as tool content. The handler serves a file as an image
+/// only when its bytes are one, so its `Content-Type` decides; anything else
+/// is described rather than handed to the model as bytes.
+fn attachment_content(response: HttpResponse) -> CallToolResult {
+    let content_type = response
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    let Ok(bytes) = response.into_body().try_into_bytes() else {
+        return refuse("The attachment could not be read.");
+    };
+    let content = if content_type.starts_with("image/") {
+        ContentBlock::image(
+            base64::engine::general_purpose::STANDARD.encode(&bytes),
+            content_type,
+        )
+    } else {
+        ContentBlock::text(format!(
+            "The attachment is not an image ({content_type}, {} bytes), so it is not returned.",
+            bytes.len()
+        ))
+    };
+    CallToolResult::success(vec![content])
 }

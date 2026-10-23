@@ -210,7 +210,7 @@ export type AlertStatus = 'pending' | 'sent' | 'failed' | 'skipped';
 /**
  * Type of alert trigger
  */
-export type AlertType = 'new_issue' | 'regression' | 'unmute';
+export type AlertType = 'new_issue' | 'regression' | 'unmute' | 'new_feedback';
 
 export type AssembleBody = {
     checksum: string;
@@ -222,6 +222,33 @@ export type AssembleResponse = {
     detail?: string | null;
     missingChunks: Array<string>;
     state: string;
+};
+
+/**
+ * The raw bytes of an attachment. Untyped in the spec: the generated
+ * client validates bodies with zod, which has no type for a binary one.
+ */
+export type AttachmentBytes = unknown;
+
+/**
+ * An attachment, without its bytes.
+ */
+export type AttachmentInfo = {
+    /**
+     * As the SDK declared it; the download trusts only the bytes.
+     */
+    content_type: string;
+    created_at: string;
+    /**
+     * The event it was sent with (the stored row's id).
+     */
+    event_id: string;
+    filename: string;
+    id: string;
+    /**
+     * Size in bytes.
+     */
+    size: number;
 };
 
 export type AuthResponse = {
@@ -661,6 +688,34 @@ export type EventTimeseriesPoint = {
 };
 
 /**
+ * A user feedback: its issue's state and what the user submitted
+ * (`contexts.feedback`, develop.sentry.dev/sdk/telemetry/feedbacks/).
+ */
+export type FeedbackResponse = {
+    /**
+     * The SDK id of the error event it is about.
+     */
+    associated_event_id: string | null;
+    /**
+     * Files sent with it, such as a screenshot.
+     */
+    attachments: Array<AttachmentInfo>;
+    contact_email: string;
+    created_at: string;
+    /**
+     * The feedback's issue.
+     */
+    id: string;
+    message: string;
+    name: string;
+    status: IssueStatus;
+    /**
+     * The page it was sent from.
+     */
+    url: string;
+};
+
+/**
  * One rejected input, named as data rather than buried in the prose of
  * [`ErrorDetail::message`].
  *
@@ -805,6 +860,12 @@ export type IssueAggregates = {
     tags: Array<TagSummary>;
     user_count: number;
 };
+
+/**
+ * Which kind of issue a list shows. Feedback is kept out of the default
+ * list, as Sentry's `FeedbackGroup` is (`in_default_search=False`).
+ */
+export type IssueCategory = 'error' | 'feedback';
 
 /**
  * Filter for issues listing
@@ -1352,6 +1413,9 @@ export type ProjectStorage = {
      * `events_bytes + transactions_bytes + logs_bytes`.
      */
     estimated_bytes: number;
+    /**
+     * Events with their attachments.
+     */
     events_bytes: number;
     events_count: number;
     logs_bytes: number;
@@ -1653,6 +1717,38 @@ export type SentryStatus = {
 export type SentryTag = {
     key: string;
     value: string;
+};
+
+/**
+ * Body of a user report (`UserReportSerializer` in Sentry's
+ * `api/serializers/models/userreport.py`), as the report was received.
+ */
+export type SentryUserReport = {
+    comments: string;
+    dateCreated: string;
+    email: string;
+    /**
+     * The error event the report is about.
+     */
+    eventID: string;
+    /**
+     * The feedback the report became.
+     */
+    id: string;
+    name: string;
+};
+
+/**
+ * Request body of a user report.
+ */
+export type SentryUserReportRequest = {
+    comments?: string | null;
+    email?: string | null;
+    /**
+     * The error event the report is about.
+     */
+    event_id: string;
+    name?: string | null;
 };
 
 /**
@@ -2744,6 +2840,52 @@ export type ReleasesFinalizeResponses = {
 };
 
 export type ReleasesFinalizeResponse = ReleasesFinalizeResponses[keyof ReleasesFinalizeResponses];
+
+export type SentrySubmitUserFeedbackData = {
+    body: SentryUserReportRequest;
+    path: {
+        /**
+         * Organization slug (ignored)
+         */
+        org_slug: string;
+        /**
+         * Project slug
+         */
+        project_slug: string;
+    };
+    query?: never;
+    url: '/api/0/projects/{org_slug}/{project_slug}/user-feedback/';
+};
+
+export type SentrySubmitUserFeedbackErrors = {
+    /**
+     * Invalid report
+     */
+    400: ErrorResponse;
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Project not found
+     */
+    404: ErrorResponse;
+};
+
+export type SentrySubmitUserFeedbackError = SentrySubmitUserFeedbackErrors[keyof SentrySubmitUserFeedbackErrors];
+
+export type SentrySubmitUserFeedbackResponses = {
+    /**
+     * The report, or an empty body under DSN auth
+     */
+    200: SentryUserReport;
+};
+
+export type SentrySubmitUserFeedbackResponse = SentrySubmitUserFeedbackResponses[keyof SentrySubmitUserFeedbackResponses];
 
 export type GithubDisconnectData = {
     body?: never;
@@ -4384,6 +4526,44 @@ export type AlertRulesUpdateResponses = {
 
 export type AlertRulesUpdateResponse = AlertRulesUpdateResponses[keyof AlertRulesUpdateResponses];
 
+export type EventsDownloadAttachmentData = {
+    body?: never;
+    path: {
+        /**
+         * Project ID
+         */
+        project_id: number;
+        /**
+         * Attachment ID
+         */
+        attachment_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/attachments/{attachment_id}';
+};
+
+export type EventsDownloadAttachmentErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type EventsDownloadAttachmentError = EventsDownloadAttachmentErrors[keyof EventsDownloadAttachmentErrors];
+
+export type EventsDownloadAttachmentResponses = {
+    /**
+     * The file: inline when its bytes are a PNG, JPEG, GIF or WebP image, a download otherwise
+     */
+    200: AttachmentBytes;
+};
+
+export type EventsDownloadAttachmentResponse = EventsDownloadAttachmentResponses[keyof EventsDownloadAttachmentResponses];
+
 export type EventsGetBySentryIdData = {
     body?: never;
     path: {
@@ -4462,6 +4642,81 @@ export type StatsGetEventTimeseriesResponses = {
 };
 
 export type StatsGetEventTimeseriesResponse = StatsGetEventTimeseriesResponses[keyof StatsGetEventTimeseriesResponses];
+
+export type FeedbackListData = {
+    body?: never;
+    path: {
+        /**
+         * Project ID
+         */
+        project_id: number;
+    };
+    query?: {
+        /**
+         * Page number (1-indexed, default: 1)
+         */
+        page?: number;
+        /**
+         * Items per page (default: 25, max: 100)
+         */
+        per_page?: number;
+        /**
+         * open (the inbox, default), resolved, muted (spam) or all
+         */
+        filter?: IssueFilter;
+    };
+    url: '/api/projects/{project_id}/feedback';
+};
+
+export type FeedbackListErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Project not found
+     */
+    404: ErrorResponse;
+};
+
+export type FeedbackListError = FeedbackListErrors[keyof FeedbackListErrors];
+
+export type FeedbackListResponses = {
+    /**
+     * Offset-based paginated response wrapper
+     */
+    200: {
+        items: Array<{
+            /**
+             * The SDK id of the error event it is about.
+             */
+            associated_event_id: string | null;
+            /**
+             * Files sent with it, such as a screenshot.
+             */
+            attachments: Array<AttachmentInfo>;
+            contact_email: string;
+            created_at: string;
+            /**
+             * The feedback's issue.
+             */
+            id: string;
+            message: string;
+            name: string;
+            status: IssueStatus;
+            /**
+             * The page it was sent from.
+             */
+            url: string;
+        }>;
+        page: number;
+        per_page: number;
+        total_count: number;
+        total_pages: number;
+    };
+};
+
+export type FeedbackListResponse = FeedbackListResponses[keyof FeedbackListResponses];
 
 export type GithubDeleteProjectRepositoryData = {
     body?: never;
@@ -4682,6 +4937,10 @@ export type IssuesListData = {
          * Filter: open (not resolved, not muted), resolved, muted, all
          */
         filter?: IssueFilter;
+        /**
+         * Issue category: error (default) or feedback
+         */
+        category?: IssueCategory;
         /**
          * Free-text search across type, value, transaction, and culprit.
          */
@@ -5155,6 +5414,48 @@ export type EventsGetResponses = {
 
 export type EventsGetResponse = EventsGetResponses[keyof EventsGetResponses];
 
+export type EventsListAttachmentsData = {
+    body?: never;
+    path: {
+        /**
+         * Project ID
+         */
+        project_id: number;
+        /**
+         * Issue ID
+         */
+        issue_id: string;
+        /**
+         * Event ID
+         */
+        event_id: string;
+    };
+    query?: never;
+    url: '/api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments';
+};
+
+export type EventsListAttachmentsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type EventsListAttachmentsError = EventsListAttachmentsErrors[keyof EventsListAttachmentsErrors];
+
+export type EventsListAttachmentsResponses = {
+    /**
+     * The files sent with the event, without their bytes
+     */
+    200: Array<AttachmentInfo>;
+};
+
+export type EventsListAttachmentsResponse = EventsListAttachmentsResponses[keyof EventsListAttachmentsResponses];
+
 export type GithubIssueData = {
     body?: never;
     path: {
@@ -5526,7 +5827,16 @@ export type IssuesListUserReportsData = {
          */
         issue_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Page number (1-indexed, default: 1)
+         */
+        page?: number;
+        /**
+         * Items per page (default: 25, max: 100)
+         */
+        per_page?: number;
+    };
     url: '/api/projects/{project_id}/issues/{issue_id}/user-reports';
 };
 
@@ -5541,9 +5851,24 @@ export type IssuesListUserReportsError = IssuesListUserReportsErrors[keyof Issue
 
 export type IssuesListUserReportsResponses = {
     /**
-     * User feedback reports for the issue
+     * Offset-based paginated response wrapper
      */
-    200: Array<UserReport>;
+    200: {
+        items: Array<{
+            comments: string;
+            created_at: string;
+            email: string;
+            event_id: string | null;
+            id: string;
+            issue_id: string | null;
+            name: string;
+            project_id: number;
+        }>;
+        page: number;
+        per_page: number;
+        total_count: number;
+        total_pages: number;
+    };
 };
 
 export type IssuesListUserReportsResponse = IssuesListUserReportsResponses[keyof IssuesListUserReportsResponses];
@@ -6974,6 +7299,9 @@ export type StorageGetProjectsResponses = {
          * `events_bytes + transactions_bytes + logs_bytes`.
          */
         estimated_bytes: number;
+        /**
+         * Events with their attachments.
+         */
         events_bytes: number;
         events_count: number;
         logs_bytes: number;

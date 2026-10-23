@@ -16,6 +16,8 @@ fn test_enum_dispatch_transaction_maps_to_transaction_kind() {
         item_type: "transaction".into(),
         length: None,
         content_type: None,
+        filename: None,
+        attachment_type: None,
     };
     let kind = EnvelopeItemKind::from((headers, bytes::Bytes::from(b"{}".to_vec())));
     assert!(matches!(kind, EnvelopeItemKind::Transaction(_)));
@@ -27,6 +29,8 @@ fn test_enum_dispatch_event_maps_to_event_kind() {
         item_type: "event".into(),
         length: None,
         content_type: None,
+        filename: None,
+        attachment_type: None,
     };
     let kind = EnvelopeItemKind::from((headers, bytes::Bytes::from(b"{}".to_vec())));
     assert!(matches!(kind, EnvelopeItemKind::Event(_)));
