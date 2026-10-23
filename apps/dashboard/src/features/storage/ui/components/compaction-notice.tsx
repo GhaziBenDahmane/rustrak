@@ -36,7 +36,14 @@ export function CompactionNotice({
   const [compaction, setCompaction] = useState<Compaction | null>(null);
   const [confirming, setConfirming] = useState(false);
 
+  // Hidden while a job runs and read again once it stops: a compaction that
+  // just finished must not leave its button up, and a cleanup changes what
+  // there is to give back.
   useEffect(() => {
+    if (disabled) {
+      setCompaction(null);
+      return;
+    }
     let cancelled = false;
     getStorageCompaction().then((result) => {
       if (!cancelled && result.success) setCompaction(result.data);
@@ -44,7 +51,7 @@ export function CompactionNotice({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [disabled]);
 
   if (!compaction?.needed) return null;
 

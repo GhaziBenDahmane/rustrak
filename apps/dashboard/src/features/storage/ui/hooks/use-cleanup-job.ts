@@ -1,5 +1,5 @@
 import type { CleanupCounts, CleanupStatus } from '@rustrak/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
 import { getStorageCleanupStatus } from '@/features/storage/api/mutations';
@@ -35,6 +35,18 @@ export function useCleanupJob(onSettled: () => void) {
       cancelled = true;
     };
   }, []);
+
+  // Leaving the page stops the polling, so a compaction's loading toast,
+  // which never times out, would stay up for good. Its outcome replaces it
+  // in place, so only one still running is taken down.
+  const compactingRef = useRef(false);
+  compactingRef.current = job?.state === 'running' && job.kind === 'compaction';
+  useEffect(
+    () => () => {
+      if (compactingRef.current) toast.dismiss(COMPACTION_TOAST);
+    },
+    [],
+  );
 
   // Each answer is a new `job`, which schedules the next ask; a failed ask is
   // retried on the next tick. A chain of timeouts rather than an interval, so

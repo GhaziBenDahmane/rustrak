@@ -123,8 +123,17 @@ To do it by hand instead, stop Rustrak and run:
 sqlite3 /path/to/rustrak.db "PRAGMA auto_vacuum = INCREMENTAL; VACUUM;"
 ```
 
-If the disk is short of room, copy the file to a disk with room, run it there
-and copy the result back. Check the result with
+If the disk is short of room, make the copy with SQLite's own backup, which
+also takes what is still in the write-ahead log (copying `rustrak.db` alone can
+miss it after a crash), compact the copy there and move it back in place of the
+original and its `-wal` and `-shm` files:
+
+```bash
+sqlite3 /path/to/rustrak.db ".backup /mnt/roomy/rustrak.db"
+sqlite3 /mnt/roomy/rustrak.db "PRAGMA auto_vacuum = INCREMENTAL; VACUUM;"
+```
+
+Check the result with
 `sqlite3 /path/to/rustrak.db "PRAGMA auto_vacuum;"`, which answers `2`.
 
 ### Limitations
