@@ -596,3 +596,17 @@ async fn every_operation_names_its_client_method() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// A project's key is whatever 16 bytes its DSN carries, and a key carried
+/// over from Sentry is random hex, not an RFC 4122 UUID. The client turns
+/// `format: uuid` into a check of the version and variant digits, which would
+/// fail the whole project list for such a project; the formats this file
+/// asserts above are too lenient to notice.
+#[actix_web::test]
+async fn the_spec_does_not_promise_an_rfc_4122_uuid_for_a_project_key() {
+    let spec = serde_json::to_value(rustrak::openapi::ApiDoc::openapi()).unwrap();
+    let key = &spec["components"]["schemas"]["ProjectResponse"]["properties"]["sentry_key"];
+
+    assert_eq!(key["type"], "string", "{key}");
+    assert!(key.get("format").is_none(), "{key}");
+}
