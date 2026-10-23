@@ -8,7 +8,7 @@ use crate::auth::{self, AuthenticatedUser, OidcService};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult, FieldErrorCode};
 use crate::models::{
-    AcceptInvitation, ChangePasswordRequest, CreateUserRequest, LoginRequest, User, UserRole,
+    AcceptInvitation, ChangePasswordRequest, CreateUserRequest, LoginRequest, User,
 };
 use crate::services::OidcOutcome;
 use crate::services::{InvitationService, UsersService};
@@ -53,10 +53,10 @@ struct PendingLink {
     email: String,
     email_verified: bool,
     user_id: i32,
-    /// The role the provider's groups ask for, resolved while the token is at
-    /// hand. The groups themselves are not kept: the session cookie is 4 KB,
-    /// and only the answer matters once the password proves the owner.
-    role: Option<UserRole>,
+    /// The identity's groups that were admin groups when the token was read.
+    /// Only the intersection is kept, which the operator's own list bounds,
+    /// and it is re-checked against the current mapping before it is used.
+    matched_admin_groups: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -416,9 +416,10 @@ async fn handle_sso_callback(
             "SSO provider returned an invalid email address".to_string(),
         ));
     }
-    // Resolved here, from the token that was just validated, and stored as the
-    // one answer the confirmation step needs.
-    let role = service.link_policy().role_for(&identity.groups);
+    // Bounded by OIDC_ADMIN_GROUPS, so the cookie cannot grow with whatever
+    // the provider sends. Re-decided at confirmation, in case the mapping
+    // changed in between.
+    let matched_admin_groups = service.link_policy().matched_admin_groups(&identity.groups);
     let result =
         match UsersService::find_or_provision_oidc(pool, &identity, service.link_policy()).await? {
             OidcOutcome::SignedIn(user) => CallbackResult::SignedIn(user),
@@ -428,7 +429,7 @@ async fn handle_sso_callback(
                 email: identity.email,
                 email_verified: identity.email_verified,
                 user_id: user.id,
-                role,
+                matched_admin_groups,
             }),
         };
     Ok(result)
@@ -570,9 +571,14 @@ pub async fn sso_link(
 /// is given, and sign in. A wrong password keeps the link pending for a retry.
 pub async fn confirm_sso_link(
     pool: web::Data<DbPool>,
+    oidc: web::Data<Option<OidcService>>,
     session: Session,
     req: web::Json<ConfirmSsoLinkRequest>,
 ) -> AppResult<HttpResponse> {
+    let service = oidc
+        .as_ref()
+        .as_ref()
+        .ok_or_else(|| AppError::NotFound("SSO is not configured".to_string()))?;
     let pending = pending_link(&session)?;
     let identity = auth::OidcIdentity {
         issuer: pending.issuer,
@@ -581,12 +587,17 @@ pub async fn confirm_sso_link(
         email_verified: pending.email_verified,
         groups: Vec::new(),
     };
+    // Decided now, not at the callback: the operator may have changed the
+    // mapping, or turned SSO off, while this link waited for a password.
+    let role = service
+        .link_policy()
+        .role_from_matched(&pending.matched_admin_groups);
     let user = UsersService::confirm_oidc_link(
         pool.get_ref(),
         &identity,
         pending.user_id,
         &req.password,
-        pending.role,
+        role,
     )
     .await?;
 

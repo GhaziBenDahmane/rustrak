@@ -2047,18 +2047,40 @@ async fn test_oidc_group_role_applies_only_after_the_link_is_confirmed() {
         .unwrap();
     assert!(!before.is_admin(), "an unconfirmed link changes nothing");
 
-    // The role was resolved from the token at callback time; only the
-    // password was missing.
+    // The matched groups were read from the token at callback time; only the
+    // password was missing, and the role is decided against the mapping as it
+    // is now.
+    let matched = policy.matched_admin_groups(&identity.groups);
     let linked = UsersService::confirm_oidc_link(
         &db.pool,
         &identity,
         existing.id,
         &password,
-        policy.role_for(&identity.groups),
+        policy.role_from_matched(&matched),
     )
     .await
     .expect("the right password links the identity and applies its groups");
     assert!(linked.is_admin());
+}
+
+#[actix_web::test]
+async fn test_oidc_pending_link_does_not_grant_a_retired_admin_group() {
+    // The link was started while `rustrak-admins` meant admin. The operator
+    // then changed the mapping (or the provider's groups did) before the
+    // password arrived.
+    let started_with = linking_with_admin_groups(false, false, &["rustrak-admins"]);
+    let matched = started_with.matched_admin_groups(&["rustrak-admins".to_string()]);
+    assert_eq!(matched, ["rustrak-admins"]);
+
+    let since_retired = linking_with_admin_groups(false, false, &["other-group"]);
+    assert_eq!(
+        since_retired.role_from_matched(&matched),
+        Some(rustrak::models::UserRole::Member),
+        "a group the operator has since removed must not still grant admin"
+    );
+
+    // With mapping turned off entirely, the role is left alone.
+    assert_eq!(linking(false, false).role_from_matched(&matched), None);
 }
 
 #[actix_web::test]

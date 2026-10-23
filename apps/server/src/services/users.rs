@@ -31,11 +31,35 @@ impl OidcLinkPolicy {
     /// The role an identity's groups ask for, or `None` when the operator has
     /// not configured a mapping and roles are therefore left alone.
     pub fn role_for(&self, groups: &[String]) -> Option<UserRole> {
+        let matched = self.matched_admin_groups(groups);
+        self.role_from_matched(&matched)
+    }
+
+    /// The identity's groups that are admin groups right now.
+    ///
+    /// Bounded by the operator's list, never by what the provider sends, which
+    /// is what makes it safe to keep in a session cookie until the account's
+    /// password arrives.
+    pub fn matched_admin_groups(&self, groups: &[String]) -> Vec<String> {
+        self.admin_groups
+            .iter()
+            .filter(|admin| groups.iter().any(|group| group == *admin))
+            .cloned()
+            .collect()
+    }
+
+    /// The role for a link interrupted by the password step, decided against
+    /// the configuration as it is now.
+    ///
+    /// The matched groups were read from the token minutes earlier; a group the
+    /// operator has since removed from `OIDC_ADMIN_GROUPS`, or a mapping that
+    /// has since been turned off, must not still grant admin.
+    pub fn role_from_matched(&self, matched: &[String]) -> Option<UserRole> {
         if self.admin_groups.is_empty() {
             return None;
         }
         Some(
-            if groups
+            if matched
                 .iter()
                 .any(|group| self.admin_groups.iter().any(|admin| admin == group))
             {
