@@ -27,6 +27,26 @@ pub struct OidcLinkPolicy {
     pub admin_groups: Vec<String>,
 }
 
+impl OidcLinkPolicy {
+    /// The role an identity's groups ask for, or `None` when the operator has
+    /// not configured a mapping and roles are therefore left alone.
+    pub fn role_for(&self, groups: &[String]) -> Option<UserRole> {
+        if self.admin_groups.is_empty() {
+            return None;
+        }
+        Some(
+            if groups
+                .iter()
+                .any(|group| self.admin_groups.iter().any(|admin| admin == group))
+            {
+                UserRole::Admin
+            } else {
+                UserRole::Member
+            },
+        )
+    }
+}
+
 impl UsersService {
     /// Creates a new user with the given global role.
     ///
@@ -125,7 +145,7 @@ impl UsersService {
             email.as_str(),
             *email_verified,
         );
-        let mapped_role = Self::sso_role(&policy, groups);
+        let mapped_role = policy.role_for(groups);
 
         if let Some(mut user) = Self::get_by_oidc_identity(pool, issuer, subject).await? {
             if !user.is_active {
@@ -264,7 +284,7 @@ impl UsersService {
         identity: &OidcIdentity,
         user_id: i32,
         password: &str,
-        policy: &OidcLinkPolicy,
+        role: Option<UserRole>,
     ) -> AppResult<User> {
         let invalid = || AppError::Unauthorized("Invalid credentials".to_string());
         let user = Self::get_by_id(pool, user_id).await?.ok_or_else(invalid)?;
@@ -303,8 +323,7 @@ impl UsersService {
         // only when the link actually landed: before that point anyone who can
         // authenticate at the provider with this email could change it.
         if inserted.rows_affected() > 0 {
-            Self::apply_sso_role(&mut tx, &mut user, Self::sso_role(policy, &identity.groups))
-                .await?;
+            Self::apply_sso_role(&mut tx, &mut user, role).await?;
         }
         sqlx::query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1")
             .bind(user.id)
@@ -377,24 +396,6 @@ impl UsersService {
             .await?;
         tx.commit().await?;
         Ok(())
-    }
-
-    /// The role an identity's groups ask for, or `None` when the operator has
-    /// not configured a mapping and roles are therefore left alone.
-    fn sso_role(policy: &OidcLinkPolicy, groups: &[String]) -> Option<UserRole> {
-        if policy.admin_groups.is_empty() {
-            return None;
-        }
-        Some(
-            if groups
-                .iter()
-                .any(|group| policy.admin_groups.iter().any(|admin| admin == group))
-            {
-                UserRole::Admin
-            } else {
-                UserRole::Member
-            },
-        )
     }
 
     /// Write an SSO-derived role, unless that would take admin away from the

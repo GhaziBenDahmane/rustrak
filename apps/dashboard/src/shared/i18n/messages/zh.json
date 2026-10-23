@@ -1385,6 +1385,8 @@
       "ssoFailure": "单点登录失败，请重试。",
       "or": "或",
       "passwordLoginDisabled": "密码登录已禁用，请使用 {provider} 继续。",
+      "usePassword": "使用密码登录",
+      "passwordLoginDisallowed": "该账户已禁用密码登录，请使用单点登录。",
       "invalidCredentials": "电子邮件或密码无效",
       "failureNetwork": "无法连接服务器。请检查您的网络连接后重试。",
       "failureRateLimited": "登录尝试次数过多。请等待约 {duration} 后再试。",

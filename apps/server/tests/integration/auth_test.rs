@@ -1696,14 +1696,8 @@ async fn test_oidc_link_is_confirmed_only_with_the_account_password() {
         groups: Vec::new(),
     };
 
-    let wrong = UsersService::confirm_oidc_link(
-        &db.pool,
-        &identity,
-        existing.id,
-        "not-it",
-        &linking(false, false),
-    )
-    .await;
+    let wrong =
+        UsersService::confirm_oidc_link(&db.pool, &identity, existing.id, "not-it", None).await;
     assert!(matches!(
         wrong,
         Err(rustrak::error::AppError::Unauthorized(_))
@@ -1722,15 +1716,9 @@ async fn test_oidc_link_is_confirmed_only_with_the_account_password() {
         OidcOutcome::ConfirmWithPassword(_)
     ));
 
-    let linked = UsersService::confirm_oidc_link(
-        &db.pool,
-        &identity,
-        existing.id,
-        &password,
-        &linking(false, false),
-    )
-    .await
-    .expect("the right password links the identity");
+    let linked = UsersService::confirm_oidc_link(&db.pool, &identity, existing.id, &password, None)
+        .await
+        .expect("the right password links the identity");
     assert_eq!(linked.id, existing.id);
 
     // From now on the identity signs in directly, whatever the switches say.
@@ -1759,23 +1747,11 @@ async fn test_oidc_link_cannot_move_an_identity_to_a_second_account() {
         groups: Vec::new(),
     };
 
-    UsersService::confirm_oidc_link(
-        &db.pool,
-        &identity,
-        first.id,
-        "password-one",
-        &linking(false, false),
-    )
-    .await
-    .unwrap();
-    let moved = UsersService::confirm_oidc_link(
-        &db.pool,
-        &identity,
-        second.id,
-        "password-two",
-        &linking(false, false),
-    )
-    .await;
+    UsersService::confirm_oidc_link(&db.pool, &identity, first.id, "password-one", None)
+        .await
+        .unwrap();
+    let moved =
+        UsersService::confirm_oidc_link(&db.pool, &identity, second.id, "password-two", None).await;
 
     assert!(matches!(moved, Err(rustrak::error::AppError::Conflict(_))));
     let owner = oidc_login(
@@ -2071,9 +2047,41 @@ async fn test_oidc_group_role_applies_only_after_the_link_is_confirmed() {
         .unwrap();
     assert!(!before.is_admin(), "an unconfirmed link changes nothing");
 
-    let linked =
-        UsersService::confirm_oidc_link(&db.pool, &identity, existing.id, &password, &policy)
-            .await
-            .expect("the right password links the identity and applies its groups");
+    // The role was resolved from the token at callback time; only the
+    // password was missing.
+    let linked = UsersService::confirm_oidc_link(
+        &db.pool,
+        &identity,
+        existing.id,
+        &password,
+        policy.role_for(&identity.groups),
+    )
+    .await
+    .expect("the right password links the identity and applies its groups");
     assert!(linked.is_admin());
+}
+
+#[actix_web::test]
+async fn test_oidc_group_names_match_whole_names_only() {
+    let policy = linking_with_admin_groups(true, true, &["admins"]);
+
+    assert_eq!(
+        policy.role_for(&["staff,admins".to_string()]),
+        Some(rustrak::models::UserRole::Member),
+        "a comma inside a group name must not act as a separator"
+    );
+    assert_eq!(
+        policy.role_for(&["admins".to_string()]),
+        Some(rustrak::models::UserRole::Admin)
+    );
+    assert_eq!(
+        policy.role_for(&[]),
+        Some(rustrak::models::UserRole::Member),
+        "mapping configured: no admin group means member"
+    );
+    assert_eq!(
+        linking(true, true).role_for(&["admins".to_string()]),
+        None,
+        "mapping not configured: roles are left alone"
+    );
 }

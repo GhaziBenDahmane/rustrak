@@ -1385,6 +1385,8 @@
       "ssoFailure": "Autentificarea unică a eșuat. Încearcă din nou.",
       "or": "sau",
       "passwordLoginDisabled": "Autentificarea cu parolă este dezactivată. Folosește {provider} pentru a continua.",
+      "usePassword": "Autentifică-te cu parolă",
+      "passwordLoginDisallowed": "Autentificarea cu parolă este dezactivată pentru acest cont. Folosește autentificarea unică.",
       "invalidCredentials": "E-mail sau parolă invalidă",
       "failureNetwork": "Serverul nu a putut fi contactat. Verifică conexiunea și încearcă din nou.",
       "failureRateLimited": "Prea multe încercări de autentificare. Așteaptă aproximativ {duration} înainte de a reîncerca.",

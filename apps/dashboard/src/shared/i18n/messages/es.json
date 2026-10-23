@@ -1385,6 +1385,8 @@
       "ssoFailure": "El inicio de sesión único falló. Inténtalo de nuevo.",
       "or": "o",
       "passwordLoginDisabled": "El inicio de sesión con contraseña está deshabilitado. Usa {provider} para continuar.",
+      "usePassword": "Iniciar sesión con contraseña",
+      "passwordLoginDisallowed": "El inicio de sesión con contraseña está deshabilitado para esta cuenta. Usa el inicio de sesión único.",
       "invalidCredentials": "Correo electrónico o contraseña no válidos",
       "failureNetwork": "No se pudo contactar con el servidor. Comprueba tu conexión e inténtalo de nuevo.",
       "failureRateLimited": "Demasiados intentos de inicio de sesión. Espera aproximadamente {duration} antes de intentarlo de nuevo.",

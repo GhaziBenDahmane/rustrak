@@ -38,6 +38,10 @@ function loginFailureMessage(error: RustrakError, t: LoginTranslator): string {
   switch (error.kind) {
     case 'network':
       return t('form.failureNetwork');
+    case 'forbidden':
+      // The only 403 this form can get is the SSO-only switch: the account
+      // exists but may not sign in with a password.
+      return t('form.passwordLoginDisallowed');
     case 'rate_limited':
       // `retryAfter` is reachable only on this arm, which is what branching on
       // the client's own union buys over a flattened domain enum.
@@ -59,6 +63,41 @@ function formatWait(seconds: number, t: LoginTranslator): string {
   return t('form.waitHours', { count: hours });
 }
 
+/**
+ * The note shown when the operator turned password sign-in off, and the one
+ * generic way back to the form: the account that may still use a password is
+ * the first one, and naming it would publish which account that is.
+ */
+function PasswordLoginDisabled({
+  provider,
+  revealed,
+  onReveal,
+}: {
+  provider: string;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
+  const t = useTranslations('auth');
+
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">
+        {t('form.passwordLoginDisabled', { provider })}
+      </p>
+      {!revealed && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full text-xs uppercase tracking-widest"
+          onClick={onReveal}
+        >
+          {t('form.usePassword')}
+        </Button>
+      )}
+    </>
+  );
+}
+
 export function LoginForm({
   ssoConfig,
   ssoFailed,
@@ -78,8 +117,16 @@ export function LoginForm({
   const [ssoErrorDismissed, setSsoErrorDismissed] = useState(false);
   const [ssoStartFailed, setSsoStartFailed] = useState(false);
   const hasSsoError = ssoStartFailed || (ssoFailed && !ssoErrorDismissed);
-  // Older servers do not send the field; treat that as "password login works".
+  // A failed or absent config lookup means the login page is all we have, so
+  // the password form stays; the server decides whether it is allowed.
   const passwordLoginEnabled = ssoConfig?.password_login_enabled ?? true;
+  // The switch hides the form for everyone, but the first account can still
+  // sign in with its password as a break-glass when the provider is down. That
+  // account cannot be named here without publishing which one it is, so the
+  // recovery is one generic link, and the server rejects everyone else.
+  const [passwordFormRevealed, setPasswordFormRevealed] = useState(false);
+  const passwordFormVisible = passwordLoginEnabled || passwordFormRevealed;
+  const providerName = ssoConfig?.provider_name ?? 'SSO';
 
   const loginSchema = z.object({
     email: z.email(t('form.emailInvalid')),
@@ -180,9 +227,7 @@ export function LoginForm({
             >
               {isSsoPending
                 ? t('form.ssoRedirecting')
-                : t('form.continueWithSso', {
-                    provider: ssoConfig.provider_name ?? 'SSO',
-                  })}
+                : t('form.continueWithSso', { provider: providerName })}
             </Button>
             {hasSsoError && (
               <p className="text-sm font-medium text-destructive" role="alert">
@@ -191,7 +236,7 @@ export function LoginForm({
             )}
           </div>
 
-          {passwordLoginEnabled && (
+          {passwordFormVisible && (
             <div className="flex items-center gap-3" aria-hidden="true">
               <div className="h-px flex-1 bg-border" />
               <span className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -204,14 +249,14 @@ export function LoginForm({
       )}
 
       {!passwordLoginEnabled && (
-        <p className="text-sm text-muted-foreground">
-          {t('form.passwordLoginDisabled', {
-            provider: ssoConfig?.provider_name ?? 'SSO',
-          })}
-        </p>
+        <PasswordLoginDisabled
+          provider={providerName}
+          revealed={passwordFormRevealed}
+          onReveal={() => setPasswordFormRevealed(true)}
+        />
       )}
 
-      {passwordLoginEnabled && (
+      {passwordFormVisible && (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField

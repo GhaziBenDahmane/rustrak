@@ -33,22 +33,29 @@ pub struct SsoClaims {
 impl AdditionalClaims for SsoClaims {}
 
 impl SsoClaims {
-    /// Values of a claim that is expected to be a group list, either as a JSON
-    /// array or as a comma-separated string. Anything else is no groups.
+    /// Values of a claim that is expected to be a group list.
+    ///
+    /// A JSON array is taken entry by entry: a group called `staff,admins` is
+    /// one group, and no entry is ever split. A single string is the one form
+    /// that has to be separated, because that is what a comma-separated claim
+    /// looks like on the wire. Anything else is no groups.
     pub fn groups(&self, claim: &str) -> Vec<String> {
-        let values = match self.claims.get(claim) {
-            Some(serde_json::Value::Array(values)) => values.iter().collect::<Vec<_>>(),
-            Some(value @ serde_json::Value::String(_)) => vec![value],
-            _ => return Vec::new(),
-        };
-        values
-            .into_iter()
-            .filter_map(serde_json::Value::as_str)
-            .flat_map(|value| value.split(','))
-            .map(str::trim)
-            .filter(|group| !group.is_empty())
-            .map(str::to_string)
-            .collect()
+        match self.claims.get(claim) {
+            Some(serde_json::Value::Array(values)) => values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|group| !group.is_empty())
+                .map(str::to_string)
+                .collect(),
+            Some(serde_json::Value::String(value)) => value
+                .split(',')
+                .map(str::trim)
+                .filter(|group| !group.is_empty())
+                .map(str::to_string)
+                .collect(),
+            _ => Vec::new(),
+        }
     }
 
     /// Insert a claim. Used by the tests' fake provider to sign a group list.
@@ -368,8 +375,37 @@ impl OidcService {
 
 #[cfg(test)]
 mod tests {
-    use super::{require_https, HttpsClient, OidcHttpError};
+    use super::{require_https, HttpsClient, OidcHttpError, SsoClaims};
     use openidconnect::{http, url::Url, AsyncHttpClient};
+
+    /// A group name that contains a comma is one group. Splitting entries would
+    /// invent memberships the provider never asserted.
+    #[test]
+    fn groups_from_an_array_are_never_split() {
+        let mut claims = SsoClaims::default();
+        claims.insert("groups", serde_json::json!(["staff,admins", " ops "]));
+
+        assert_eq!(claims.groups("groups"), ["staff,admins", "ops"]);
+    }
+
+    /// Some providers send one comma-separated string instead of an array, and
+    /// that form does have to be split.
+    #[test]
+    fn groups_from_a_string_are_split_on_commas() {
+        let mut claims = SsoClaims::default();
+        claims.insert("groups", serde_json::json!("admins, ops ,,"));
+
+        assert_eq!(claims.groups("groups"), ["admins", "ops"]);
+    }
+
+    #[test]
+    fn groups_ignore_claims_that_are_not_group_lists() {
+        let mut claims = SsoClaims::default();
+        claims.insert("groups", serde_json::json!({"admins": true}));
+
+        assert!(claims.groups("groups").is_empty());
+        assert!(claims.groups("missing").is_empty());
+    }
 
     #[test]
     fn oidc_endpoints_require_https() {

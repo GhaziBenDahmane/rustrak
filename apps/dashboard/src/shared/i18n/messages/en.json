@@ -1385,6 +1385,8 @@
       "ssoFailure": "Single sign-on failed. Please try again.",
       "or": "or",
       "passwordLoginDisabled": "Password sign-in is disabled. Use {provider} to continue.",
+      "usePassword": "Sign in with a password",
+      "passwordLoginDisallowed": "Password sign-in is disabled for this account. Use single sign-on instead.",
       "invalidCredentials": "Invalid email or password",
       "failureNetwork": "Could not reach the server. Check your connection and try again.",
       "failureRateLimited": "Too many login attempts. Wait about {duration} before trying again.",

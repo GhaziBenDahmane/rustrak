@@ -193,7 +193,10 @@ move them (or use a client scope that copies them into the token).
 
 The first account keeps working with its password as a documented
 break-glass. It is the account `CREATE_SUPERUSER` created, and blocking it too
-would leave a provider outage with no way back into the instance.
+would leave a provider outage with no way back into the instance. Because the
+login page must not advertise which account that is, it offers one generic
+**Sign in with a password** link that reveals the form; every other account
+gets `403` from it.
 
 Rustrak refuses to start when the switch is on without `OIDC_ISSUER_URL`,
 because that combination could not sign anyone in at all.

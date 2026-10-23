@@ -8,7 +8,7 @@ use crate::auth::{self, AuthenticatedUser, OidcService};
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult, FieldErrorCode};
 use crate::models::{
-    AcceptInvitation, ChangePasswordRequest, CreateUserRequest, LoginRequest, User,
+    AcceptInvitation, ChangePasswordRequest, CreateUserRequest, LoginRequest, User, UserRole,
 };
 use crate::services::OidcOutcome;
 use crate::services::{InvitationService, UsersService};
@@ -53,9 +53,10 @@ struct PendingLink {
     email: String,
     email_verified: bool,
     user_id: i32,
-    /// Kept so the role mapping is applied only after the password proves the
-    /// account's owner is the person behind the identity.
-    groups: Vec<String>,
+    /// The role the provider's groups ask for, resolved while the token is at
+    /// hand. The groups themselves are not kept: the session cookie is 4 KB,
+    /// and only the answer matters once the password proves the owner.
+    role: Option<UserRole>,
 }
 
 #[derive(Serialize)]
@@ -415,6 +416,9 @@ async fn handle_sso_callback(
             "SSO provider returned an invalid email address".to_string(),
         ));
     }
+    // Resolved here, from the token that was just validated, and stored as the
+    // one answer the confirmation step needs.
+    let role = service.link_policy().role_for(&identity.groups);
     let result =
         match UsersService::find_or_provision_oidc(pool, &identity, service.link_policy()).await? {
             OidcOutcome::SignedIn(user) => CallbackResult::SignedIn(user),
@@ -424,7 +428,7 @@ async fn handle_sso_callback(
                 email: identity.email,
                 email_verified: identity.email_verified,
                 user_id: user.id,
-                groups: identity.groups,
+                role,
             }),
         };
     Ok(result)
@@ -561,7 +565,6 @@ pub async fn sso_link(
 /// is given, and sign in. A wrong password keeps the link pending for a retry.
 pub async fn confirm_sso_link(
     pool: web::Data<DbPool>,
-    oidc: web::Data<Option<OidcService>>,
     session: Session,
     req: web::Json<ConfirmSsoLinkRequest>,
 ) -> AppResult<HttpResponse> {
@@ -571,18 +574,14 @@ pub async fn confirm_sso_link(
         subject: pending.subject,
         email: pending.email,
         email_verified: pending.email_verified,
-        groups: pending.groups,
+        groups: Vec::new(),
     };
-    let service = oidc
-        .as_ref()
-        .as_ref()
-        .ok_or_else(|| AppError::NotFound("SSO is not configured".to_string()))?;
     let user = UsersService::confirm_oidc_link(
         pool.get_ref(),
         &identity,
         pending.user_id,
         &req.password,
-        &service.link_policy(),
+        pending.role,
     )
     .await?;
 
