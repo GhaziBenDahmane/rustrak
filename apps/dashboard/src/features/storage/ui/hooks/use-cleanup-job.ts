@@ -40,7 +40,10 @@ export function useCleanupJob(onSettled: () => void) {
   // which never times out, would stay up for good. Its outcome replaces it
   // in place, so only one still running is taken down.
   const compactingRef = useRef(false);
-  compactingRef.current = job?.state === 'running' && job.kind === 'compaction';
+  useEffect(() => {
+    compactingRef.current =
+      job?.state === 'running' && job.kind === 'compaction';
+  }, [job]);
   useEffect(
     () => () => {
       if (compactingRef.current) toast.dismiss(COMPACTION_TOAST);
