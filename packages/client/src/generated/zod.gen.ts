@@ -148,7 +148,8 @@ export const zAlertHistory = z.object({
 export const zAlertType = z.enum([
     'new_issue',
     'regression',
-    'unmute'
+    'unmute',
+    'new_feedback'
 ]);
 
 /**
@@ -179,6 +180,24 @@ export const zAssembleResponse = z.object({
     detail: z.string().nullish(),
     missingChunks: z.array(z.string()),
     state: z.string()
+});
+
+/**
+ * The raw bytes of an attachment. Untyped in the spec: the generated
+ * client validates bodies with zod, which has no type for a binary one.
+ */
+export const zAttachmentBytes = z.unknown();
+
+/**
+ * An attachment, without its bytes.
+ */
+export const zAttachmentInfo = z.object({
+    content_type: z.string(),
+    created_at: z.iso.datetime({ offset: true }),
+    event_id: z.uuid(),
+    filename: z.string(),
+    id: z.uuid(),
+    size: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
 });
 
 /**
@@ -325,6 +344,11 @@ export const zCleanupCounts = z.object({
 export const zCleanupFrequency = z.enum(['daily', 'weekly']);
 
 /**
+ * What the job is doing: deleting old data, or compacting the SQLite file.
+ */
+export const zCleanupKind = z.enum(['cleanup', 'compaction']);
+
+/**
  * Request body for a cleanup (preview or execute): remove data older than
  * `older_than_days`, optionally scoped to a single project (omit for all).
  *
@@ -358,6 +382,7 @@ export const zCleanupState = z.enum([
 export const zCleanupStatus = z.object({
     error: z.string().nullable(),
     finished_at: z.iso.datetime({ offset: true }).nullable(),
+    kind: zCleanupKind,
     removed: zCleanupCounts,
     started_at: z.iso.datetime({ offset: true }).nullable(),
     state: zCleanupState
@@ -376,6 +401,24 @@ export const zCodeMapping = z.object({
  */
 export const zCommentRequest = z.object({
     text: z.string()
+});
+
+/**
+ * Whether the SQLite file can give the space a cleanup frees back to the
+ * disk, and what compacting it once would take.
+ *
+ * A database created before Rustrak set `auto_vacuum = INCREMENTAL` keeps
+ * SQLite's default, `NONE`: its freed pages are reused but the file never
+ * shrinks. One `VACUUM` rewrites it in incremental mode. Always
+ * `needed: false` on Postgres, whose autovacuum gives the space back.
+ */
+export const zCompaction = z.object({
+    file_bytes: z.int(),
+    free_disk_bytes: z.int().nullable(),
+    live_bytes: z.int(),
+    needed: z.boolean(),
+    reclaimable_bytes: z.int(),
+    required_disk_bytes: z.int()
 });
 
 export const zConfirmSsoLinkRequest = z.object({
@@ -609,6 +652,12 @@ export const zIntervalUnit = z.enum([
 ]);
 
 /**
+ * Which kind of issue a list shows. Feedback is kept out of the default
+ * list, as Sentry's `FeedbackGroup` is (`in_default_search=False`).
+ */
+export const zIssueCategory = z.enum(['error', 'feedback']);
+
+/**
  * Filter for issues listing
  */
 export const zIssueFilter = z.enum([
@@ -678,6 +727,22 @@ export const zIssueStatus = z.enum([
     'resolved',
     'ignored'
 ]);
+
+/**
+ * A user feedback: its issue's state and what the user submitted
+ * (`contexts.feedback`, develop.sentry.dev/sdk/telemetry/feedbacks/).
+ */
+export const zFeedbackResponse = z.object({
+    associated_event_id: z.string().nullable(),
+    attachments: z.array(zAttachmentInfo),
+    contact_email: z.string(),
+    created_at: z.iso.datetime({ offset: true }),
+    id: z.uuid(),
+    message: z.string(),
+    name: z.string(),
+    status: zIssueStatus,
+    url: z.string()
+});
 
 /**
  * Response for API
@@ -1364,6 +1429,29 @@ export const zSentryEvent = z.object({
 });
 
 /**
+ * Body of a user report (`UserReportSerializer` in Sentry's
+ * `api/serializers/models/userreport.py`), as the report was received.
+ */
+export const zSentryUserReport = z.object({
+    comments: z.string(),
+    dateCreated: z.iso.datetime({ offset: true }),
+    email: z.string(),
+    eventID: z.string(),
+    id: z.string(),
+    name: z.string()
+});
+
+/**
+ * Request body of a user report.
+ */
+export const zSentryUserReportRequest = z.object({
+    comments: z.string().nullish(),
+    email: z.string().nullish(),
+    event_id: z.string(),
+    name: z.string().nullish()
+});
+
+/**
  * Project-wide session health summary, aggregated across all releases and environments.
  */
 export const zSessionSummary = z.object({
@@ -1966,6 +2054,18 @@ export const zReleasesFinalizePath = z.object({
  */
 export const zReleasesFinalizeResponse = zReleaseResponse;
 
+export const zSentrySubmitUserFeedbackBody = zSentryUserReportRequest;
+
+export const zSentrySubmitUserFeedbackPath = z.object({
+    org_slug: z.string(),
+    project_slug: z.string()
+});
+
+/**
+ * The report, or an empty body under DSN auth
+ */
+export const zSentrySubmitUserFeedbackResponse = zSentryUserReport;
+
 /**
  * GitHub App removed
  */
@@ -2430,6 +2530,16 @@ export const zAlertRulesUpdatePath = z.object({
  */
 export const zAlertRulesUpdateResponse = zAlertRuleResponse;
 
+export const zEventsDownloadAttachmentPath = z.object({
+    project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
+    attachment_id: z.uuid()
+});
+
+/**
+ * The file: inline when its bytes are a PNG, JPEG, GIF or WebP image, a download otherwise
+ */
+export const zEventsDownloadAttachmentResponse = zAttachmentBytes;
+
 export const zEventsGetBySentryIdPath = z.object({
     project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
     event_id: z.string()
@@ -2453,6 +2563,37 @@ export const zStatsGetEventTimeseriesQuery = z.object({
  * Time-bucketed error-event volume by severity
  */
 export const zStatsGetEventTimeseriesResponse = z.array(zEventTimeseriesPoint);
+
+export const zFeedbackListPath = z.object({
+    project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
+});
+
+export const zFeedbackListQuery = z.object({
+    page: z.int().optional(),
+    per_page: z.int().optional(),
+    filter: zIssueFilter.optional()
+});
+
+/**
+ * Offset-based paginated response wrapper
+ */
+export const zFeedbackListResponse = z.object({
+    items: z.array(z.object({
+        associated_event_id: z.string().nullable(),
+        attachments: z.array(zAttachmentInfo),
+        contact_email: z.string(),
+        created_at: z.iso.datetime({ offset: true }),
+        id: z.uuid(),
+        message: z.string(),
+        name: z.string(),
+        status: zIssueStatus,
+        url: z.string()
+    })),
+    page: z.int(),
+    per_page: z.int(),
+    total_count: z.int(),
+    total_pages: z.int()
+});
 
 export const zGithubDeleteProjectRepositoryPath = z.object({
     project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
@@ -2513,6 +2654,7 @@ export const zIssuesListQuery = z.object({
     sort: zIssueSort.optional(),
     order: zSortOrder.optional(),
     filter: zIssueFilter.optional(),
+    category: zIssueCategory.optional(),
     q: z.string().nullish()
 });
 
@@ -2686,6 +2828,17 @@ export const zEventsGetPath = z.object({
  */
 export const zEventsGetResponse = zEventDetailResponse;
 
+export const zEventsListAttachmentsPath = z.object({
+    project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
+    issue_id: z.uuid(),
+    event_id: z.uuid()
+});
+
+/**
+ * The files sent with the event, without their bytes
+ */
+export const zEventsListAttachmentsResponse = z.array(zAttachmentInfo);
+
 export const zGithubIssuePath = z.object({
     project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' }),
     issue_id: z.uuid()
@@ -2793,10 +2946,30 @@ export const zIssuesListUserReportsPath = z.object({
     issue_id: z.uuid()
 });
 
+export const zIssuesListUserReportsQuery = z.object({
+    page: z.int().optional(),
+    per_page: z.int().optional()
+});
+
 /**
- * User feedback reports for the issue
+ * Offset-based paginated response wrapper
  */
-export const zIssuesListUserReportsResponse = z.array(zUserReport);
+export const zIssuesListUserReportsResponse = z.object({
+    items: z.array(z.object({
+        comments: z.string(),
+        created_at: z.iso.datetime({ offset: true }),
+        email: z.string(),
+        event_id: z.uuid().nullable(),
+        id: z.uuid(),
+        issue_id: z.uuid().nullable(),
+        name: z.string(),
+        project_id: z.int().min(-2147483648, { error: 'Invalid value: Expected int32 to be >= -2147483648' }).max(2147483647, { error: 'Invalid value: Expected int32 to be <= 2147483647' })
+    })),
+    page: z.int(),
+    per_page: z.int(),
+    total_count: z.int(),
+    total_pages: z.int()
+});
 
 export const zIssuesCreateUserReportBody = zUserReportRequest;
 
@@ -3273,6 +3446,16 @@ export const zStoragePreviewCleanupResponse = zCleanupCounts;
  * The current or last cleanup and the rows it removed
  */
 export const zStorageGetCleanupStatusResponse = zCleanupStatus;
+
+/**
+ * Whether the SQLite file gives freed space back, and what compacting it takes
+ */
+export const zStorageGetCompactionResponse = zCompaction;
+
+/**
+ * Compaction started in the background; poll the cleanup status
+ */
+export const zStorageCompactResponse = zCleanupStatus;
 
 /**
  * Per-project storage breakdown

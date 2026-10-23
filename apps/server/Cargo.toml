@@ -1,6 +1,6 @@
 [package]
 name = "rustrak"
-version = "0.19.1"
+version = "0.20.0"
 edition = "2021"
 authors = ["Rustrak Team"]
 description = "Ultra-lightweight error tracking server compatible with Sentry SDKs"
@@ -149,6 +149,10 @@ mimalloc = "0.1.52"
 utoipa = { version = "6.0.0", features = ["actix_extras", "uuid", "chrono"], optional = true }
 utoipa-scalar = { version = "0.4.0", features = ["actix-web"], optional = true }
 croner = "4.0.1"
+
+[target.'cfg(unix)'.dependencies]
+# statvfs: free disk before a SQLite compaction. Already built for `zip`.
+nix = { version = "0.31.3", default-features = false, features = ["fs"] }
 
 [dev-dependencies]
 # The crate depends on itself so the integration tests, which are separate

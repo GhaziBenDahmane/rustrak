@@ -231,7 +231,9 @@
       "removeBookmark": "Quitar de marcadores",
       "subscribe": "Suscribirse",
       "unsubscribe": "Cancelar suscripción",
-      "deleteIssue": "Eliminar problema"
+      "deleteIssue": "Eliminar problema",
+      "markSpam": "Marcar como spam",
+      "moveToInbox": "Mover a la bandeja de entrada"
     },
     "toasts": {
       "updateFailed": "No se pudieron actualizar los problemas",
@@ -512,7 +514,8 @@
       "agents": "Agentes",
       "logs": "Logs",
       "settings": "Configuración",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "Feedback de usuarios"
     },
     "collapse": {
       "expand": "Expandir",
@@ -864,6 +867,10 @@
     "unmute": {
       "name": "Reactivación",
       "description": "Se reactiva un problema silenciado"
+    },
+    "newFeedback": {
+      "name": "Feedback nuevo",
+      "description": "Un usuario envía feedback"
     }
   },
   "events": {
@@ -1197,7 +1204,8 @@
       "starting": "empezando…",
       "off": "No se borra nada: todos los datos se guardan siempre. Configura la retención para liberar espacio automáticamente.",
       "next": "Próxima limpieza {when} · liberará ≈ {size}",
-      "scheduling": "Programando la próxima limpieza…"
+      "scheduling": "Programando la próxima limpieza…",
+      "compacting": "Compactando la base de datos…"
     },
     "status": {
       "lastRunRunning": "Última limpieza en marcha desde {when}",
@@ -1280,7 +1288,10 @@
       "cleanupFailed": "La limpieza falló",
       "removed": "Se borraron {parts}",
       "nothingRemoved": "Nada que borrar",
-      "gcFailed": "No se pudieron borrar los source maps sin usar"
+      "gcFailed": "No se pudieron borrar los source maps sin usar",
+      "compacting": "Compactando la base de datos… {elapsed}",
+      "compacted": "Base de datos compactada",
+      "compactionFailed": "La compactación falló"
     },
     "unit": {
       "errors": "{count, plural, =1 {# error} other {# errores}}",
@@ -1310,6 +1321,18 @@
       "actionIdle": "Borrar",
       "sourceMaps": "Source maps sin usar",
       "sourceMapsHint": "Archivos que ya no referencia ninguna subida; los referenciados nunca se tocan"
+    },
+    "compaction": {
+      "title": "Esta base de datos se creó con una versión anterior de Rustrak",
+      "description": "Las bases de datos de versiones anteriores nunca devuelven al disco el espacio de lo borrado: lo que borra la retención se reutiliza, pero el archivo nunca encoge. Compactarla una vez lo arregla para siempre; las creadas con esta versión no lo necesitan. Ahora se liberarían {size}.",
+      "action": "Compactar base de datos",
+      "dialogTitle": "¿Compactar la base de datos?",
+      "dialogDescription": "Rustrak reescribe el archivo una vez, como ya están las bases de datos creadas con esta versión, y libera {size}. A partir de ahí cada limpieza devuelve su espacio al disco y este aviso desaparece.",
+      "disk": "Necesita {required} libres en disco · hay {free}",
+      "diskUnknown": "Necesita {required} libres en disco",
+      "pause": "Mientras dura, la base de datos no acepta escrituras: los errores se guardan y se procesan después, pero los logs, trazas y sesiones que lleguen mientras tanto se pierden.",
+      "duration": "Tarda unos segundos por GB de datos. Hazlo en un momento tranquilo.",
+      "confirm": "Compactar"
     }
   },
   "errors": {
@@ -1616,7 +1639,37 @@
       "formatPlainText": "Texto sin formato",
       "formatJson": "JSON",
       "noEventsYet": "Aún no hay eventos",
-      "noEventsDescription": "Este problema se creó pero aún no se ha registrado ningún evento. Los eventos aparecerán aquí en cuanto tu aplicación los envíe."
+      "noEventsDescription": "Este problema se creó pero aún no se ha registrado ningún evento. Los eventos aparecerán aquí en cuanto tu aplicación los envíe.",
+      "sectionFeedback": "Feedback",
+      "sectionUserFeedback": "Feedback de usuarios",
+      "feedback": {
+        "from": "De",
+        "anonymous": "Anónimo",
+        "email": "Correo",
+        "page": "Página",
+        "viewError": "Ver el error al que se refiere",
+        "errorNotFound": "Ese evento de error no ha llegado o se ha eliminado.",
+        "showOlder": "Mostrar anteriores ({count})",
+        "showOlderFailed": "No se pudieron cargar los comentarios anteriores."
+      }
+    },
+    "feedback": {
+      "title": "Feedback de usuarios",
+      "subtitle": "Lo que te han dicho los usuarios de {project}",
+      "meta": {
+        "description": "Feedback de usuarios de {project}"
+      },
+      "loadFailed": "No se pudo cargar el feedback",
+      "mailbox": {
+        "inbox": "Bandeja de entrada",
+        "resolved": "Resueltos",
+        "spam": "Spam"
+      },
+      "empty": {
+        "title": "No hay feedback aquí",
+        "description": "Aquí aparece el feedback enviado con el widget de feedback del SDK o con captureFeedback"
+      },
+      "anonymous": "Anónimo"
     }
   },
   "settings": {

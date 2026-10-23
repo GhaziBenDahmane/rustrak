@@ -231,7 +231,9 @@
       "removeBookmark": "Remove bookmark",
       "subscribe": "Subscribe",
       "unsubscribe": "Unsubscribe",
-      "deleteIssue": "Delete issue"
+      "deleteIssue": "Delete issue",
+      "markSpam": "Mark as spam",
+      "moveToInbox": "Move to inbox"
     },
     "toasts": {
       "updateFailed": "Failed to update issues",
@@ -512,7 +514,8 @@
       "agents": "Agents",
       "logs": "Logs",
       "settings": "Settings",
-      "crons": "Crons"
+      "crons": "Crons",
+      "feedback": "User Feedback"
     },
     "collapse": {
       "expand": "Expand",
@@ -864,6 +867,10 @@
     "unmute": {
       "name": "Unmute",
       "description": "A muted issue is unmuted"
+    },
+    "newFeedback": {
+      "name": "New feedback",
+      "description": "A user submits feedback"
     }
   },
   "events": {
@@ -1197,7 +1204,8 @@
       "starting": "starting…",
       "off": "Nothing is deleted: every kind of data is kept forever. Configure retention to free space automatically.",
       "next": "Next cleanup {when} · frees ≈ {size}",
-      "scheduling": "Scheduling the next cleanup…"
+      "scheduling": "Scheduling the next cleanup…",
+      "compacting": "Compacting the database…"
     },
     "status": {
       "lastRunRunning": "Last cleanup running since {when}",
@@ -1280,7 +1288,10 @@
       "cleanupFailed": "Cleanup failed",
       "removed": "Removed {parts}",
       "nothingRemoved": "Nothing to delete",
-      "gcFailed": "Could not delete the unused source maps"
+      "gcFailed": "Could not delete the unused source maps",
+      "compacting": "Compacting the database… {elapsed}",
+      "compacted": "Database compacted",
+      "compactionFailed": "Compaction failed"
     },
     "unit": {
       "errors": "{count, plural, =1 {# error} other {# errors}}",
@@ -1310,6 +1321,18 @@
       "actionIdle": "Delete",
       "sourceMaps": "Unused source maps",
       "sourceMapsHint": "Files no upload references any more; referenced ones are never touched"
+    },
+    "compaction": {
+      "title": "This database was created by an earlier version of Rustrak",
+      "description": "Databases from earlier versions never give deleted data's space back to the disk: what retention deletes is reused, but the file never shrinks. Compacting it once fixes that for good; databases created by this version never need it. {size} would be freed now.",
+      "action": "Compact database",
+      "dialogTitle": "Compact the database?",
+      "dialogDescription": "Rustrak rewrites the file once, as databases created by this version already are, and frees {size}. From then on every cleanup gives its space back to the disk, and this notice goes away.",
+      "disk": "Needs {required} free on disk · {free} available",
+      "diskUnknown": "Needs {required} free on disk",
+      "pause": "While it runs the database accepts no writes: errors are kept and processed afterwards, but logs, traces and sessions that arrive meanwhile are lost.",
+      "duration": "It takes a few seconds per GB of data. Run it at a quiet time.",
+      "confirm": "Compact"
     }
   },
   "errors": {
@@ -1616,7 +1639,37 @@
       "formatPlainText": "Plain Text",
       "formatJson": "JSON",
       "noEventsYet": "No Events Yet",
-      "noEventsDescription": "This issue has been created but no events have been recorded yet. Events will appear here once your application sends them."
+      "noEventsDescription": "This issue has been created but no events have been recorded yet. Events will appear here once your application sends them.",
+      "sectionFeedback": "Feedback",
+      "sectionUserFeedback": "User Feedback",
+      "feedback": {
+        "from": "From",
+        "anonymous": "Anonymous",
+        "email": "Email",
+        "page": "Page",
+        "viewError": "View the error it is about",
+        "errorNotFound": "That error event has not arrived, or it has been deleted.",
+        "showOlder": "Show older ({count})",
+        "showOlderFailed": "Could not load older feedback."
+      }
+    },
+    "feedback": {
+      "title": "User Feedback",
+      "subtitle": "What users of {project} told you",
+      "meta": {
+        "description": "User feedback for {project}"
+      },
+      "loadFailed": "Could not load the feedback",
+      "mailbox": {
+        "inbox": "Inbox",
+        "resolved": "Resolved",
+        "spam": "Spam"
+      },
+      "empty": {
+        "title": "No feedback here",
+        "description": "Feedback sent with the SDK's feedback widget or captureFeedback shows up here"
+      },
+      "anonymous": "Anonymous"
     }
   },
   "settings": {

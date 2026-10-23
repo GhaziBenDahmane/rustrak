@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::db::{Db, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::models::{Grouping, Issue};
-use crate::pagination::{IssueCursor, IssueFilter, IssueSort, SortOrder};
+use crate::pagination::{IssueCategory, IssueCursor, IssueFilter, IssueSort, SortOrder};
 use crate::services::grouping::DenormalizedFields;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -497,7 +497,7 @@ impl IssueService {
         let issues = sqlx::query_as::<_, Issue>(
             r#"
             SELECT * FROM issues
-            WHERE project_id = $1 AND first_release = $2
+            WHERE project_id = $1 AND first_release = $2 AND issue_category = 'error'
             ORDER BY first_seen DESC
             LIMIT $3
             "#,
@@ -521,6 +521,7 @@ impl IssueService {
         sort: IssueSort,
         order: SortOrder,
         filter: IssueFilter,
+        category: IssueCategory,
         page: i64,
         per_page: i64,
         search: Option<&str>,
@@ -537,7 +538,7 @@ impl IssueService {
                 per_page
             )));
         }
-        let offset = (page - 1) * per_page;
+        let offset = crate::pagination::offset(page, per_page);
 
         // Build ORDER BY clause
         let order_clause = match (sort, order) {
@@ -554,6 +555,7 @@ impl IssueService {
             project_id,
             order_clause,
             filter,
+            category,
             offset,
             per_page,
             search,
@@ -561,20 +563,22 @@ impl IssueService {
         .await
     }
 
-    /// One window of a project's issues: `filter` and `search` as in
-    /// [`Self::list_offset`], ordered by a trusted `order_clause`.
+    /// One window of a project's issues: `filter`, `category` and `search` as
+    /// in [`Self::list_offset`], ordered by a trusted `order_clause`.
     ///
     /// Returns (issues, total_count) where total_count is the total matching issues.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn list_window(
         pool: &DbPool,
         project_id: i32,
         order_clause: &str,
         filter: IssueFilter,
+        category: IssueCategory,
         offset: i64,
         per_page: i64,
         search: Option<&str>,
     ) -> AppResult<(Vec<Issue>, i64)> {
-        let status_clause = filter_clause(filter);
+        let status_clause = filter_clause(filter, category);
 
         // Normalize the search term into a case-insensitive LIKE pattern (works
         // on both Postgres and SQLite, unlike Postgres-only ILIKE). Literal
@@ -1110,7 +1114,8 @@ impl IssueService {
         filter: IssueFilter,
     ) -> AppResult<u64> {
         // `filter_clause` returns fixed SQL; only the project id is user input.
-        let clause = filter_clause(filter);
+        // Bulk deletes act on the error list, never on feedback.
+        let clause = filter_clause(filter, IssueCategory::Error);
 
         #[cfg(feature = "postgres")]
         let deleted = {
@@ -1344,6 +1349,44 @@ impl IssueService {
         Ok(out)
     }
 
+    /// Each feedback issue's `contexts.feedback`, from its one event.
+    pub async fn feedback_contexts(
+        pool: &DbPool,
+        issue_ids: &[Uuid],
+    ) -> AppResult<HashMap<Uuid, serde_json::Value>> {
+        if issue_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        // Only the context, not the whole event: a feedback event is small,
+        // but this runs once per page of up to 100.
+        #[cfg(feature = "postgres")]
+        let rows: Vec<(Uuid, Option<serde_json::Value>)> = sqlx::query_as(
+            "SELECT issue_id, data -> 'contexts' -> 'feedback' FROM events WHERE issue_id = ANY($1)",
+        )
+        .bind(issue_ids)
+        .fetch_all(pool)
+        .await?;
+
+        #[cfg(not(feature = "postgres"))]
+        let rows: Vec<(Uuid, Option<serde_json::Value>)> = {
+            use sqlx::QueryBuilder;
+            let mut qb = QueryBuilder::new(
+                "SELECT issue_id, json_extract(data, '$.contexts.feedback') FROM events WHERE issue_id IN (",
+            );
+            let mut sep = qb.separated(", ");
+            for id in issue_ids {
+                sep.push_bind(*id);
+            }
+            qb.push(")");
+            qb.build_query_as().fetch_all(pool).await?
+        };
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, context)| Some((id, context?)))
+            .collect())
+    }
+
     /// Bulk-computes [`IssueListStats`] (user_count + 24h trend) for the given
     /// issues in a single time-bounded query (all events across all issues
     /// within the last 24h) — used by the issue list so it can show per-row
@@ -1559,13 +1602,17 @@ impl IssueService {
 }
 
 /// WHERE clause for an issue filter; `$1` is the project id.
-fn filter_clause(filter: IssueFilter) -> &'static str {
-    match filter {
-        IssueFilter::Open => "project_id = $1 AND status = 'unresolved'",
-        IssueFilter::Resolved => "project_id = $1 AND status = 'resolved'",
-        IssueFilter::Muted => "project_id = $1 AND status = 'ignored'",
-        IssueFilter::All => "project_id = $1",
-    }
+fn filter_clause(filter: IssueFilter, category: IssueCategory) -> String {
+    let status = match filter {
+        IssueFilter::Open => " AND status = 'unresolved'",
+        IssueFilter::Resolved => " AND status = 'resolved'",
+        IssueFilter::Muted => " AND status = 'ignored'",
+        IssueFilter::All => "",
+    };
+    format!(
+        "project_id = $1{status} AND issue_category = '{}'",
+        category.as_str()
+    )
 }
 
 #[cfg(test)]

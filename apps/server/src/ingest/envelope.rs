@@ -42,6 +42,22 @@ pub struct ItemHeaders {
 
     /// Content type of the payload
     pub content_type: Option<String>,
+
+    /// File name of an attachment
+    pub filename: Option<String>,
+
+    /// Kind of an attachment (`event.attachment` when absent)
+    pub attachment_type: Option<String>,
+}
+
+/// An `attachment` item: an arbitrary file sent beside an event, such as the
+/// screenshot a feedback widget takes. The payload is raw bytes, not JSON.
+#[derive(Debug)]
+pub struct Attachment {
+    pub filename: Option<String>,
+    pub content_type: Option<String>,
+    pub attachment_type: Option<String>,
+    pub payload: Bytes,
 }
 
 /// Typed representation of a parsed envelope item.
@@ -76,6 +92,13 @@ pub enum EnvelopeItemKind {
     /// A cron monitor check-in (Sentry Crons). Relay processes only the
     /// first one in an envelope.
     CheckIn(Bytes),
+    /// User feedback (Sentry "feedback" item, Relay's `UserReportV2`): an
+    /// event payload carrying `contexts.feedback`, digested like an event.
+    Feedback(Bytes),
+    /// Legacy user report (`{event_id, name, email, comments}`), shimmed
+    /// into a feedback the way Sentry's `shim_to_feedback` does.
+    UserReport(Bytes),
+    Attachment(Attachment),
     Other(String, Bytes),
 }
 
@@ -84,8 +107,12 @@ impl EnvelopeItemKind {
     /// Mirrors Relay's `Item::requires_event()`.
     pub fn requires_event(&self) -> bool {
         match self {
-            Self::Event(_) | Self::Transaction(_) => true,
-            Self::Other(t, _) if t == "attachment" || t == "security" => true,
+            Self::Event(_)
+            | Self::Transaction(_)
+            | Self::Feedback(_)
+            | Self::UserReport(_)
+            | Self::Attachment(_) => true,
+            Self::Other(t, _) if t == "security" => true,
             _ => false,
         }
     }
@@ -103,6 +130,14 @@ impl From<(ItemHeaders, Bytes)> for EnvelopeItemKind {
             "transaction" => Self::Transaction(payload),
             "log" => Self::Log(payload),
             "check_in" => Self::CheckIn(payload),
+            "feedback" => Self::Feedback(payload),
+            "user_report" => Self::UserReport(payload),
+            "attachment" => Self::Attachment(Attachment {
+                filename: headers.filename,
+                content_type: headers.content_type,
+                attachment_type: headers.attachment_type,
+                payload,
+            }),
             "span" => {
                 if headers.content_type.as_deref() == Some(SPAN_V2_CONTENT_TYPE) {
                     Self::SpanV2Batch(payload)

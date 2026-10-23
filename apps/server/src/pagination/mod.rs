@@ -7,6 +7,15 @@ use serde::{Deserialize, Serialize};
 /// Default page size for pagination
 pub const PAGE_SIZE: i64 = 20;
 
+/// The rows before a 1-indexed `page`. `page` comes from the query string, so
+/// a page below 1 is the first and one past any offset saturates: an empty
+/// page rather than an overflow or a negative `OFFSET`.
+pub fn offset(page: i64, per_page: i64) -> i64 {
+    page.max(1)
+        .saturating_sub(1)
+        .saturating_mul(per_page.max(0))
+}
+
 /// Paginated response wrapper (cursor-based)
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -43,7 +52,7 @@ pub struct OffsetPaginatedResponse<T> {
 impl<T> OffsetPaginatedResponse<T> {
     pub fn new(items: Vec<T>, total_count: i64, page: i64, per_page: i64) -> Self {
         let per_page = per_page.max(1);
-        let total_pages = (total_count + per_page - 1) / per_page;
+        let total_pages = total_count.saturating_add(per_page - 1) / per_page;
         Self {
             items,
             total_count,
@@ -140,6 +149,10 @@ pub struct ListIssuesQuery {
     #[serde(default)]
     pub filter: IssueFilter,
 
+    /// Issue category: error (default) or feedback
+    #[serde(default)]
+    pub category: IssueCategory,
+
     /// Free-text search across type, value, transaction, and culprit.
     #[serde(default)]
     pub q: Option<String>,
@@ -167,6 +180,29 @@ pub enum IssueFilter {
     Muted,
     /// All issues
     All,
+}
+
+/// Which kind of issue a list shows. Feedback is kept out of the default
+/// list, as Sentry's `FeedbackGroup` is (`in_default_search=False`).
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum IssueCategory {
+    /// Issues grouped from error events
+    #[default]
+    Error,
+    /// User feedback, one issue per submission
+    Feedback,
+}
+
+impl IssueCategory {
+    /// The `issues.issue_category` value; also trusted SQL.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Feedback => "feedback",
+        }
+    }
 }
 
 /// Query parameters for listing transactions (offset-based)
@@ -394,4 +430,22 @@ pub struct ListProjectsQuery {
     /// way.
     #[serde(default)]
     pub stats_period: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::offset;
+
+    #[test]
+    fn offset_skips_the_pages_before() {
+        assert_eq!(offset(1, 25), 0);
+        assert_eq!(offset(3, 25), 50);
+    }
+
+    #[test]
+    fn offset_never_goes_negative_or_overflows() {
+        assert_eq!(offset(0, 25), 0);
+        assert_eq!(offset(-5, 25), 0);
+        assert_eq!(offset(i64::MAX, 100), i64::MAX);
+    }
 }

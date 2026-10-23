@@ -1,4 +1,5 @@
 import type {
+  Compaction,
   ProjectStorage,
   Result,
   RetentionResponse,
@@ -47,4 +48,12 @@ export async function getStorageAge(): Promise<
 > {
   const client = await createClient();
   return client.storage.getAge();
+}
+
+/** Whether the SQLite file gives freed space back, and what compacting takes. */
+export async function getStorageCompaction(): Promise<
+  Result<Compaction, RustrakError>
+> {
+  const client = await createClient();
+  return client.storage.getCompaction();
 }

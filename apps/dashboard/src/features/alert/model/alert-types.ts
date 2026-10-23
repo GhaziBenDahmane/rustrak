@@ -27,6 +27,11 @@ export const alertTypes: {
     nameKey: 'unmute.name',
     descriptionKey: 'unmute.description',
   },
+  {
+    type: 'new_feedback',
+    nameKey: 'newFeedback.name',
+    descriptionKey: 'newFeedback.description',
+  },
 ];
 
 /**

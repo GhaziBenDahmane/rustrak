@@ -15,6 +15,8 @@ fn test_enum_dispatch_span_maps_to_span_kind() {
         item_type: "span".into(),
         length: None,
         content_type: None,
+        filename: None,
+        attachment_type: None,
     };
     let kind = EnvelopeItemKind::from((headers, bytes::Bytes::from(b"{}".to_vec())));
     assert!(matches!(kind, EnvelopeItemKind::Span(_)));

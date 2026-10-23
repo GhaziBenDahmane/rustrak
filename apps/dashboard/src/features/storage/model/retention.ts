@@ -314,3 +314,14 @@ export function impactState(
   if (impact === 'failed') return 'failed';
   return impact === null ? 'counting' : 'ready';
 }
+
+/**
+ * How long the job has run, as `m:ss`: what a compaction, which reports no
+ * progress of its own, shows while it runs.
+ */
+export function elapsed(since: string | null, now: number): string {
+  const seconds = since
+    ? Math.max(0, Math.floor((now - Date.parse(since)) / 1000))
+    : 0;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}

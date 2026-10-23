@@ -286,9 +286,11 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `events.downloadAttachment({ path })` | `GET /api/projects/{project_id}/attachments/{attachment_id}` | Downloads an attachment. |
 | `events.get({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}` | Gets a single event with full data |
 | `events.getBySentryId({ path })` | `GET /api/projects/{project_id}/events/sentry/{event_id}` | Resolve the ID returned by a Sentry SDK without already knowing the issue. |
 | `events.list({ path, query? })` | `GET /api/projects/{project_id}/issues/{issue_id}/events` | Lists events for an issue with cursor-based pagination |
+| `events.listAttachments({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/events/{event_id}/attachments` | Lists the files sent with an event, such as a feedback's screenshot. |
 
 ### GitHub
 
@@ -332,6 +334,7 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `feedback.list({ path, query? })` | `GET /api/projects/{project_id}/feedback` | Lists user feedback with what each user submitted. |
 | `issues.bulkDelete({ path, body })` | `DELETE /api/projects/{project_id}/issues` | Bulk delete by ids or filter |
 | `issues.bulkUpdate({ path, body })` | `PUT /api/projects/{project_id}/issues` | Bulk mutate |
 | `issues.createComment({ path, body })` | `POST /api/projects/{project_id}/issues/{issue_id}/comments` | Add a note. |
@@ -344,7 +347,7 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 | `issues.getStats({ path, query? })` | `GET /api/projects/{project_id}/issues/{issue_id}/stats` | Zero-filled event-count timeseries. |
 | `issues.getTagValues({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/tags/{key}` | Lists the distinct values (with counts) for a tag key across the issue. |
 | `issues.list({ path, query? })` | `GET /api/projects/{project_id}/issues` | Lists issues for a project with offset-based pagination |
-| `issues.listUserReports({ path })` | `GET /api/projects/{project_id}/issues/{issue_id}/user-reports` | List user feedback for an issue. |
+| `issues.listUserReports({ path, query? })` | `GET /api/projects/{project_id}/issues/{issue_id}/user-reports` | List user feedback for an issue. |
 | `issues.markSeen({ path })` | `POST /api/projects/{project_id}/issues/{issue_id}/seen` | Mark the issue as seen by the current user. |
 | `issues.setBookmark({ path, body })` | `PUT /api/projects/{project_id}/issues/{issue_id}/bookmark` | Set/clear the per-user bookmark. |
 | `issues.setSubscription({ path, body })` | `PUT /api/projects/{project_id}/issues/{issue_id}/subscription` | Set/clear the per-user subscription. |
@@ -420,6 +423,7 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 | `sentry.listProjects({ query? })` | `GET /api/0/projects/` | The projects the token can see, newest first (Sentry's `ProjectIndexEndpoint`, `core/endpoints/project_index.py`). |
 | `sentry.listRepos({ path })` | `GET /api/0/organizations/{org_slug}/repos/` | The code repositories connected to the organization (Sentry's `OrganizationRepositoriesEndpoint`). |
 | `sentry.openIssue({ path })` | `GET /{org_slug}/{project_slug}/issues/{issue_id}` | The issue page GitLab's "View in Sentry" opens: Sentry redirects this legacy path to the issue (`static/app/router/routes.tsx`), Rustrak to its dashboard. |
+| `sentry.submitUserFeedback({ path, body })` | `POST /api/0/projects/{org_slug}/{project_slug}/user-feedback/` | Submit a user report about an error event (Sentry's `ProjectUserReportsEndpoint`, `feedback/endpoints/project_user_reports.py`). |
 | `sentry.updateIssue({ path, body })` | `PUT /api/0/issues/{issue_id}/` | Sets an issue's status and returns the issue (Sentry's `GroupDetailsEndpoint.put`). |
 
 ### Sessions
@@ -465,10 +469,12 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `storage.compact()` | `POST /api/storage/compaction` | Rewrites a SQLite file created before incremental mode, so it gives freed space back from then on. |
 | `storage.executeCleanup({ body })` | `POST /api/storage/cleanup` | Starts deleting old data and the issues it empties. |
 | `storage.gcSourceMaps()` | `POST /api/storage/source-maps/gc` | Delete orphaned source maps (DB + disk). |
 | `storage.getAge()` | `GET /api/storage/age` | Rows per age bucket, per project and kind. |
 | `storage.getCleanupStatus()` | `GET /api/storage/cleanup/status` | Progress of the running cleanup, or the outcome of the last one. |
+| `storage.getCompaction()` | `GET /api/storage/compaction` | Whether the database file shrinks when data is deleted, and the disk a one-off compaction needs. |
 | `storage.getProjects()` | `GET /api/storage/projects` | Per-project counts and estimated weight. |
 | `storage.getRetention()` | `GET /api/storage/retention` |  |
 | `storage.getSummary()` | `GET /api/storage/summary` | Row counts, DB size, and source-map weight. |

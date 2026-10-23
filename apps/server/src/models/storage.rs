@@ -127,6 +127,16 @@ pub enum CleanupState {
     Failed,
 }
 
+/// What the job is doing: deleting old data, or compacting the SQLite file.
+#[derive(Debug, Default, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub enum CleanupKind {
+    #[default]
+    Cleanup,
+    Compaction,
+}
+
 /// The cleanup job as the API reports it. Kept in memory: a restart forgets
 /// it, and a run cut short by one is simply run again, since every batch it
 /// committed is already gone.
@@ -134,6 +144,7 @@ pub enum CleanupState {
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct CleanupStatus {
     pub state: CleanupState,
+    pub kind: CleanupKind,
     /// Rows removed so far while `running`; the total once it has finished.
     pub removed: CleanupCounts,
     #[cfg_attr(feature = "openapi", schema(required))]
@@ -143,6 +154,40 @@ pub struct CleanupStatus {
     /// Why a `failed` run stopped. Batches committed before it stay deleted.
     #[cfg_attr(feature = "openapi", schema(required))]
     pub error: Option<String>,
+}
+
+/// Whether the SQLite file can give the space a cleanup frees back to the
+/// disk, and what compacting it once would take.
+///
+/// A database created before Rustrak set `auto_vacuum = INCREMENTAL` keeps
+/// SQLite's default, `NONE`: its freed pages are reused but the file never
+/// shrinks. One `VACUUM` rewrites it in incremental mode. Always
+/// `needed: false` on Postgres, whose autovacuum gives the space back.
+#[derive(Debug, Default, Clone, Serialize, PartialEq)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct Compaction {
+    pub needed: bool,
+    /// The database file's size.
+    pub file_bytes: i64,
+    /// What the data in it takes, the part a compaction keeps.
+    pub live_bytes: i64,
+    /// Free pages inside the file, the part a compaction gives back.
+    pub reclaimable_bytes: i64,
+    /// Free disk a compaction needs: twice the live data, one copy in
+    /// SQLite's temporary file and one in the write-ahead log.
+    pub required_disk_bytes: i64,
+    /// Free disk next to the database, `null` when it cannot be read.
+    #[cfg_attr(feature = "openapi", schema(required))]
+    pub free_disk_bytes: Option<i64>,
+}
+
+impl Compaction {
+    /// Whether the disk can take the compaction. An unreadable free space
+    /// lets it run: SQLite fails it cleanly if the disk fills.
+    pub fn has_room(&self) -> bool {
+        self.free_disk_bytes
+            .is_none_or(|free| free >= self.required_disk_bytes)
+    }
 }
 
 /// Outcome of a source-map garbage collection: orphaned `source_file` rows
@@ -174,6 +219,7 @@ pub struct ProjectStorage {
     pub source_maps_count: i64,
     /// `events_bytes + transactions_bytes + logs_bytes`.
     pub estimated_bytes: i64,
+    /// Events with their attachments.
     pub events_bytes: i64,
     /// Transactions with their spans.
     pub transactions_bytes: i64,
