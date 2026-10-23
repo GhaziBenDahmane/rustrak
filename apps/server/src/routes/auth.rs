@@ -512,9 +512,14 @@ pub async fn sso_callback(
 }
 
 fn pending_link(session: &Session) -> AppResult<PendingLink> {
+    // A value that no longer deserializes is a link started before an upgrade
+    // changed this struct. The cookie is signed and encrypted, so it is ours,
+    // just stale: the browser has to start the login again, which is the same
+    // answer as "nothing pending" and not a server error.
     session
         .get::<PendingLink>(OIDC_PENDING_LINK_KEY)
-        .map_err(|e| AppError::Internal(format!("Failed to read SSO session: {e}")))?
+        .ok()
+        .flatten()
         .ok_or_else(|| AppError::NotFound("No SSO account link is pending".to_string()))
 }
 
