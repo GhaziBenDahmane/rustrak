@@ -469,10 +469,12 @@ Every method, grouped as it hangs off the client (`client.issues.list(...)`).
 
 | Method | Endpoint | Description |
 |---|---|---|
+| `storage.compact()` | `POST /api/storage/compaction` | Rewrites a SQLite file created before incremental mode, so it gives freed space back from then on. |
 | `storage.executeCleanup({ body })` | `POST /api/storage/cleanup` | Starts deleting old data and the issues it empties. |
 | `storage.gcSourceMaps()` | `POST /api/storage/source-maps/gc` | Delete orphaned source maps (DB + disk). |
 | `storage.getAge()` | `GET /api/storage/age` | Rows per age bucket, per project and kind. |
 | `storage.getCleanupStatus()` | `GET /api/storage/cleanup/status` | Progress of the running cleanup, or the outcome of the last one. |
+| `storage.getCompaction()` | `GET /api/storage/compaction` | Whether the database file shrinks when data is deleted, and the disk a one-off compaction needs. |
 | `storage.getProjects()` | `GET /api/storage/projects` | Per-project counts and estimated weight. |
 | `storage.getRetention()` | `GET /api/storage/retention` |  |
 | `storage.getSummary()` | `GET /api/storage/summary` | Row counts, DB size, and source-map weight. |

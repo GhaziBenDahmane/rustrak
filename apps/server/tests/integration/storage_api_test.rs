@@ -1177,14 +1177,14 @@ async fn a_cleanup_gives_the_space_it_freed_back_to_the_filesystem() {
 async fn a_reader_blocking_the_checkpoint_means_nothing_has_left_the_file_yet() {
     use sqlx::Connection;
     let dir = tempfile::tempdir().unwrap();
-    // Incremental and WAL like the shipped pool, but a short busy timeout so
-    // the blocked checkpoint gives up quickly.
+    // Incremental, WAL and the shipped pool's busy timeout: a checkpoint that
+    // waited on the reader would hold every writer back for those 5 seconds.
     let options = sqlx::sqlite::SqliteConnectOptions::new()
         .filename(dir.path().join("rustrak.db"))
         .create_if_missing(true)
         .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Incremental)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-        .busy_timeout(Duration::from_millis(200));
+        .busy_timeout(Duration::from_secs(5));
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(options.clone())
@@ -1208,10 +1208,16 @@ async fn a_reader_blocking_the_checkpoint_means_nothing_has_left_the_file_yet() 
         .await
         .unwrap();
 
+    let started = std::time::Instant::now();
     let released = rustrak::services::StorageService::reclaim_free_space(&pool)
         .await
         .unwrap();
 
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "the checkpoint does not wait on the reader: {:?}",
+        started.elapsed()
+    );
     assert_eq!(released, 0, "the checkpoint could not shrink the file yet");
     let (_, free) = pages(&pool).await;
     assert_eq!(free, 0, "the pages were freed all the same");
@@ -1243,4 +1249,169 @@ async fn a_database_created_before_incremental_mode_keeps_its_freed_pages() {
     );
     let (_, free) = pages(&db.pool).await;
     assert!(free > 0, "the freed pages stay on the freelist");
+}
+
+// =============================================================================
+// SQLite: compacting a database created before incremental mode
+// =============================================================================
+
+/// `GET /api/storage/compaction` as `token`.
+async fn get_compaction<S>(app: &S, token: &str) -> actix_web::dev::ServiceResponse
+where
+    S: actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+{
+    let (k, v) = bearer(token);
+    let req = test::TestRequest::get()
+        .uri("/api/storage/compaction")
+        .insert_header((k, v))
+        .to_request();
+    test::call_service(app, req).await
+}
+
+/// `POST /api/storage/compaction` as `token`.
+async fn post_compaction<S>(app: &S, token: &str) -> actix_web::dev::ServiceResponse
+where
+    S: actix_web::dev::Service<
+        actix_http::Request,
+        Response = actix_web::dev::ServiceResponse,
+        Error = actix_web::Error,
+    >,
+{
+    let (k, v) = bearer(token);
+    let req = test::TestRequest::post()
+        .uri("/api/storage/compaction")
+        .insert_header((k, v))
+        .to_request();
+    test::call_service(app, req).await
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn an_old_database_reports_the_space_a_compaction_gives_back() {
+    // TestDb's file has SQLite's default, auto_vacuum = NONE.
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "legacy").await;
+    seed_old_logs(&db.pool, project, 10, 500, 4_096).await;
+    CleanupJob::default()
+        .run_retention(db.pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let resp = get_compaction(&app, &token).await;
+    assert_eq!(resp.status(), 200);
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["needed"], true, "the file never shrinks on its own");
+    let reclaimable = body["reclaimable_bytes"].as_i64().unwrap();
+    let live = body["live_bytes"].as_i64().unwrap();
+    assert!(reclaimable > 1024 * 1024, "the deleted logs: {reclaimable}");
+    assert_eq!(body["file_bytes"].as_i64().unwrap(), live + reclaimable);
+    assert_eq!(body["required_disk_bytes"].as_i64().unwrap(), 2 * live);
+    assert!(body["free_disk_bytes"].as_i64().unwrap() > 0);
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn compacting_an_old_database_lets_it_give_space_back_from_then_on() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let project = create_project(&db.pool, "legacy").await;
+    seed_old_logs(&db.pool, project, 10, 500, 4_096).await;
+    CleanupJob::default()
+        .run_retention(db.pool.clone(), logs_retention(1), test_store())
+        .await
+        .unwrap();
+    let (before, _) = pages(&db.pool).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let resp = post_compaction(&app, &token).await;
+    assert_eq!(
+        resp.status(),
+        202,
+        "the compaction starts in the background"
+    );
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["state"], "running");
+    assert_eq!(body["kind"], "compaction");
+
+    let done = wait_for_cleanup(&app, &token).await;
+    assert_eq!(done["state"], "completed", "{done}");
+    assert_eq!(done["kind"], "compaction");
+    let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+    assert_eq!(auto_vacuum, 2, "now in incremental mode");
+    let (after, free) = pages(&db.pool).await;
+    assert_eq!(free, 0, "the freed pages left the file");
+    assert!(after * 4 < before, "{before} pages before, {after} after");
+
+    let body: Value = test::read_body_json(get_compaction(&app, &token).await).await;
+    assert_eq!(
+        body["needed"], false,
+        "a second compaction is never offered"
+    );
+}
+
+#[cfg(feature = "sqlite")]
+#[actix_web::test]
+async fn a_new_database_is_never_compacted() {
+    let dir = tempfile::tempdir().unwrap();
+    let pool = production_sqlite(&dir.path().join("rustrak.db")).await;
+    let admin = seed_user(&pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&pool, admin.id).await;
+    let app = build_app!(pool.clone(), create_test_config());
+
+    let body: Value = test::read_body_json(get_compaction(&app, &token).await).await;
+    assert_eq!(body["needed"], false, "it already gives space back");
+    assert_eq!(post_compaction(&app, &token).await.status(), 400);
+}
+
+#[cfg(feature = "postgres")]
+#[actix_web::test]
+async fn postgres_never_needs_a_compaction() {
+    let db = TestDb::new().await;
+    let admin = seed_user(&db.pool, "admin@x.com", UserRole::Admin).await;
+    let token = token_for(&db.pool, admin.id).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    let body: Value = test::read_body_json(get_compaction(&app, &token).await).await;
+    assert_eq!(body["needed"], false, "autovacuum gives the space back");
+    assert_eq!(post_compaction(&app, &token).await.status(), 400);
+}
+
+#[actix_web::test]
+async fn compaction_is_admin_only() {
+    let db = TestDb::new().await;
+    let member = seed_user(&db.pool, "member@x.com", UserRole::Member).await;
+    let token = token_for(&db.pool, member.id).await;
+    let app = build_app!(db.pool.clone(), create_test_config());
+
+    assert_eq!(get_compaction(&app, &token).await.status(), 403);
+    assert_eq!(post_compaction(&app, &token).await.status(), 403);
+}
+
+#[actix_web::test]
+async fn a_compaction_needs_twice_the_live_data_free() {
+    let compaction = |free| rustrak::models::Compaction {
+        needed: true,
+        file_bytes: 300,
+        live_bytes: 100,
+        reclaimable_bytes: 200,
+        required_disk_bytes: 200,
+        free_disk_bytes: free,
+    };
+    assert!(compaction(Some(200)).has_room());
+    assert!(
+        !compaction(Some(199)).has_room(),
+        "VACUUM would fill the disk"
+    );
+    assert!(compaction(None).has_room(), "unmeasurable: SQLite decides");
 }

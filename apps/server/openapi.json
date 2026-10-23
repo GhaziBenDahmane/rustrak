@@ -9991,6 +9991,96 @@
         ]
       }
     },
+    "/api/storage/compaction": {
+      "get": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "GET /api/storage/compaction — whether the database file shrinks when data\nis deleted, and the disk a one-off compaction needs.",
+        "operationId": "storage.getCompaction",
+        "responses": {
+          "200": {
+            "description": "Whether the SQLite file gives freed space back, and what compacting it takes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Compaction"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Storage"
+        ],
+        "summary": "POST /api/storage/compaction — rewrites a SQLite file created before\nincremental mode, so it gives freed space back from then on. Writes wait\nwhile it runs; follow it with `GET /api/storage/cleanup/status`.",
+        "operationId": "storage.compact",
+        "responses": {
+          "202": {
+            "description": "Compaction started in the background; poll the cleanup status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleanupStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Nothing to compact, or not enough free disk",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A cleanup is already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
     "/api/storage/projects": {
       "get": {
         "tags": [
@@ -12754,6 +12844,14 @@
           "weekly"
         ]
       },
+      "CleanupKind": {
+        "type": "string",
+        "description": "What the job is doing: deleting old data, or compacting the SQLite file.",
+        "enum": [
+          "cleanup",
+          "compaction"
+        ]
+      },
       "CleanupRequest": {
         "type": "object",
         "description": "Request body for a cleanup (preview or execute): remove data older than\n`older_than_days`, optionally scoped to a single project (omit for all).\n\n`older_than_days` must be at least 1 — the service rejects smaller values,\nsince a window of 0 (or negative) would move the cutoff to now/the future and\npurge the entire dataset.",
@@ -12802,6 +12900,7 @@
         "description": "The cleanup job as the API reports it. Kept in memory: a restart forgets\nit, and a run cut short by one is simply run again, since every batch it\ncommitted is already gone.",
         "required": [
           "state",
+          "kind",
           "removed",
           "started_at",
           "finished_at",
@@ -12821,6 +12920,9 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CleanupKind"
           },
           "removed": {
             "$ref": "#/components/schemas/CleanupCounts",
@@ -12865,6 +12967,51 @@
         "properties": {
           "text": {
             "type": "string"
+          }
+        }
+      },
+      "Compaction": {
+        "type": "object",
+        "description": "Whether the SQLite file can give the space a cleanup frees back to the\ndisk, and what compacting it once would take.\n\nA database created before Rustrak set `auto_vacuum = INCREMENTAL` keeps\nSQLite's default, `NONE`: its freed pages are reused but the file never\nshrinks. One `VACUUM` rewrites it in incremental mode. Always\n`needed: false` on Postgres, whose autovacuum gives the space back.",
+        "required": [
+          "needed",
+          "file_bytes",
+          "live_bytes",
+          "reclaimable_bytes",
+          "required_disk_bytes",
+          "free_disk_bytes"
+        ],
+        "properties": {
+          "file_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The database file's size."
+          },
+          "free_disk_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Free disk next to the database, `null` when it cannot be read."
+          },
+          "live_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What the data in it takes, the part a compaction keeps."
+          },
+          "needed": {
+            "type": "boolean"
+          },
+          "reclaimable_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Free pages inside the file, the part a compaction gives back."
+          },
+          "required_disk_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Free disk a compaction needs: twice the live data, one copy in\nSQLite's temporary file and one in the write-ahead log."
           }
         }
       },

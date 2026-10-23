@@ -155,6 +155,8 @@ impl Modify for SecurityAddon {
         crate::routes::storage::preview_cleanup,
         crate::routes::storage::execute_cleanup,
         crate::routes::storage::get_cleanup_status,
+        crate::routes::storage::get_compaction,
+        crate::routes::storage::compact,
         crate::routes::storage::get_retention,
         crate::routes::storage::update_retention,
         crate::routes::storage::preview_retention,

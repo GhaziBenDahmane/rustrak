@@ -4325,6 +4325,7 @@ dependencies = [
  "log",
  "mimalloc",
  "minijinja",
+ "nix",
  "openidconnect",
  "pretty_assertions",
  "proptest",

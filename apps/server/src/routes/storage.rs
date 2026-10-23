@@ -13,7 +13,7 @@ use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 #[cfg(feature = "openapi")]
 use crate::models::{
-    CleanupCounts, CleanupStatus, ProjectStorage, SourceMapGcResult, SourceMapStorage,
+    CleanupCounts, CleanupStatus, Compaction, ProjectStorage, SourceMapGcResult, SourceMapStorage,
     StorageSummary,
 };
 use crate::models::{
@@ -208,6 +208,51 @@ pub async fn gc_source_maps(
     Ok(HttpResponse::Ok().json(result))
 }
 
+#[cfg_attr(feature = "openapi", utoipa::path(
+    get,
+    path = "/api/storage/compaction",
+    operation_id = "storage.getCompaction",
+    tag = "Storage",
+    responses(
+        (status = 200, description = "Whether the SQLite file gives freed space back, and what compacting it takes", body = Compaction),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// GET /api/storage/compaction — whether the database file shrinks when data
+/// is deleted, and the disk a one-off compaction needs.
+pub async fn get_compaction(pool: web::Data<DbPool>, actor: ApiActor) -> AppResult<HttpResponse> {
+    require_admin(&actor)?;
+    let compaction = StorageService::compaction(pool.get_ref()).await?;
+    Ok(HttpResponse::Ok().json(compaction))
+}
+
+#[cfg_attr(feature = "openapi", utoipa::path(
+    post,
+    path = "/api/storage/compaction",
+    operation_id = "storage.compact",
+    tag = "Storage",
+    responses(
+        (status = 202, description = "Compaction started in the background; poll the cleanup status", body = CleanupStatus),
+        (status = 400, description = "Nothing to compact, or not enough free disk", body = crate::error::ErrorResponse),
+        (status = 403, description = "Forbidden", body = crate::error::ErrorResponse),
+        (status = 409, description = "A cleanup is already running", body = crate::error::ErrorResponse),
+    ),
+    security(("bearer_auth" = [])),
+))]
+/// POST /api/storage/compaction — rewrites a SQLite file created before
+/// incremental mode, so it gives freed space back from then on. Writes wait
+/// while it runs; follow it with `GET /api/storage/cleanup/status`.
+pub async fn compact(
+    pool: web::Data<DbPool>,
+    job: web::Data<CleanupJob>,
+    actor: ApiActor,
+) -> AppResult<HttpResponse> {
+    require_admin(&actor)?;
+    let status = job.start_compaction(pool.get_ref().clone()).await?;
+    Ok(HttpResponse::Accepted().json(status))
+}
+
 #[cfg(feature = "openapi")]
 #[derive(OpenApi)]
 #[openapi(
@@ -217,6 +262,8 @@ pub async fn gc_source_maps(
         preview_cleanup,
         execute_cleanup,
         get_cleanup_status,
+        get_compaction,
+        compact,
         preview_source_map_gc,
         gc_source_maps,
         get_retention,
@@ -241,7 +288,9 @@ pub async fn gc_source_maps(
         CleanupCounts,
         CleanupRequest,
         CleanupState,
+        crate::models::CleanupKind,
         CleanupStatus,
+        Compaction,
         SourceMapGcResult,
     ))
 )]
@@ -459,6 +508,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route("/cleanup/preview", web::post().to(preview_cleanup))
             .route("/cleanup", web::post().to(execute_cleanup))
             .route("/cleanup/status", web::get().to(get_cleanup_status))
+            .route("/compaction", web::get().to(get_compaction))
+            .route("/compaction", web::post().to(compact))
             .route("/retention", web::get().to(get_retention))
             .route("/retention", web::put().to(update_retention))
             .route("/retention/preview", web::post().to(preview_retention))

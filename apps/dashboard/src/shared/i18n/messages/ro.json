@@ -1204,7 +1204,8 @@
       "starting": "începe…",
       "off": "Nu se șterge nimic: toate datele se păstrează pentru totdeauna. Configurează retenția ca să eliberezi spațiu automat.",
       "next": "Următoarea curățare {when} · va elibera ≈ {size}",
-      "scheduling": "Se programează următoarea curățare…"
+      "scheduling": "Se programează următoarea curățare…",
+      "compacting": "Se compactează baza de date…"
     },
     "status": {
       "lastRunRunning": "Ultima curățare rulează din {when}",
@@ -1287,7 +1288,10 @@
       "cleanupFailed": "Curățarea a eșuat",
       "removed": "S-au șters {parts}",
       "nothingRemoved": "Nimic de șters",
-      "gcFailed": "Nu s-au putut șterge source maps nefolosite"
+      "gcFailed": "Nu s-au putut șterge source maps nefolosite",
+      "compacting": "Se compactează baza de date… {elapsed}",
+      "compacted": "Baza de date a fost compactată",
+      "compactionFailed": "Compactarea a eșuat"
     },
     "unit": {
       "errors": "{count, plural, =1 {# eroare} other {# erori}}",
@@ -1317,6 +1321,18 @@
       "actionIdle": "Șterge",
       "sourceMaps": "Source maps nefolosite",
       "sourceMapsHint": "Fișiere pe care niciun upload nu le mai referă; cele referite nu sunt atinse niciodată"
+    },
+    "compaction": {
+      "title": "Această bază de date a fost creată de o versiune anterioară Rustrak",
+      "description": "Bazele de date din versiunile anterioare nu eliberează niciodată pe disc spațiul datelor șterse: ce șterge retenția este reutilizat, dar fișierul nu se micșorează niciodată. O compactare o singură dată rezolvă asta definitiv; bazele create de această versiune nu au nevoie de ea. Acum s-ar elibera {size}.",
+      "action": "Compactează baza de date",
+      "dialogTitle": "Compactezi baza de date?",
+      "dialogDescription": "Rustrak rescrie fișierul o dată, așa cum sunt deja bazele create de această versiune, și eliberează {size}. De atunci, fiecare curățare eliberează spațiul pe disc, iar acest aviz dispare.",
+      "disk": "Necesită {required} liberi pe disc · disponibili {free}",
+      "diskUnknown": "Necesită {required} liberi pe disc",
+      "pause": "Cât rulează, baza de date nu acceptă scrieri: erorile sunt păstrate și procesate după, dar logurile, trace-urile și sesiunile sosite între timp se pierd.",
+      "duration": "Durează câteva secunde per GB de date. Rulează-o într-un moment liniștit.",
+      "confirm": "Compactează"
     }
   },
   "errors": {

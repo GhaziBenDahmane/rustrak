@@ -3,10 +3,13 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'use-intl';
 import { getStorageCleanupStatus } from '@/features/storage/api/mutations';
-import { removedParts } from '@/features/storage/model/retention';
+import { elapsed, removedParts } from '@/features/storage/model/retention';
 
 /** How often a running cleanup is asked for its progress. */
 const POLL_MS = 2000;
+
+/** One toast per compaction, updated in place while it runs. */
+const COMPACTION_TOAST = 'storage-compaction';
 
 /**
  * The server's cleanup job, followed while it runs.
@@ -39,6 +42,17 @@ export function useCleanupJob(onSettled: () => void) {
   // once.
   useEffect(() => {
     if (job?.state !== 'running') return;
+    // A compaction reports no progress, so its toast stays up with the time
+    // it has run, and the outcome replaces it.
+    const compacting = job.kind === 'compaction';
+    if (compacting) {
+      toast.loading(
+        t('toasts.compacting', {
+          elapsed: elapsed(job.started_at, Date.now()),
+        }),
+        { id: COMPACTION_TOAST },
+      );
+    }
     let cancelled = false;
     const timer = setTimeout(async () => {
       const status = await getStorageCleanupStatus();
@@ -48,13 +62,8 @@ export function useCleanupJob(onSettled: () => void) {
         return;
       }
       setJob(status.data);
-      if (status.data.state === 'completed') {
-        toast.success(summarizeRemoved(status.data.removed, t));
-        onSettled();
-      } else if (status.data.state === 'failed') {
-        toast.error(t('toasts.cleanupFailed'), {
-          description: status.data.error ?? undefined,
-        });
+      if (status.data.state !== 'running') {
+        announce(status.data, t);
         onSettled();
       }
     }, POLL_MS);
@@ -65,6 +74,26 @@ export function useCleanupJob(onSettled: () => void) {
   }, [job, onSettled, t]);
 
   return { job, running: job?.state === 'running', follow: setJob };
+}
+
+/** The finished job's toast; a compaction's replaces the one that ran. */
+function announce(
+  job: CleanupStatus,
+  t: (key: string, values?: Record<string, string | number>) => string,
+) {
+  const compacting = job.kind === 'compaction';
+  const id = compacting ? COMPACTION_TOAST : undefined;
+  if (job.state === 'completed') {
+    toast.success(
+      compacting ? t('toasts.compacted') : summarizeRemoved(job.removed, t),
+      { id },
+    );
+  } else {
+    toast.error(
+      t(compacting ? 'toasts.compactionFailed' : 'toasts.cleanupFailed'),
+      { id, description: job.error ?? undefined },
+    );
+  }
 }
 
 /** Success toast text after a cleanup: what it removed, zeros left out. */

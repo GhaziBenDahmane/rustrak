@@ -126,6 +126,19 @@ async fn main() -> std::io::Result<()> {
         std::io::Error::other(e.to_string())
     })?;
 
+    // A SQLite file from before incremental mode never shrinks; say so once.
+    match rustrak::services::StorageService::compaction(&db_pool).await {
+        Ok(compaction) if compaction.needed => log::warn!(
+            "This SQLite database was created by an earlier version of Rustrak and \
+             never gives deleted data's space back to the disk ({} MiB could be freed \
+             now). Compact it once from Settings > Storage; databases created by this \
+             version never need it. https://rustrak.dev/configuration/database",
+            compaction.reclaimable_bytes / (1024 * 1024)
+        ),
+        Ok(_) => {}
+        Err(e) => log::warn!("Could not read the database's compaction state: {e}"),
+    }
+
     // Create source map store and provider
     let sourcemap_store: Arc<dyn rustrak::services::sourcemap_store::SourceMapStore> =
         Arc::new(LocalSourceMapStore::new(&config.sourcemap_storage_path));

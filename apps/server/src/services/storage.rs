@@ -11,9 +11,9 @@ use chrono::Utc;
 use crate::db::DbPool;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    CleanupCounts, CleanupFilter, CleanupState, CleanupStatus, KindAge, ProjectAge, ProjectStorage,
-    RetentionSettings, SourceMapGcResult, SourceMapStorage, StorageAge, StorageSummary,
-    AGE_BUCKET_DAYS,
+    CleanupCounts, CleanupFilter, CleanupKind, CleanupState, CleanupStatus, Compaction, KindAge,
+    ProjectAge, ProjectStorage, RetentionSettings, SourceMapGcResult, SourceMapStorage, StorageAge,
+    StorageSummary, AGE_BUCKET_DAYS,
 };
 use crate::services::sourcemap_store::SourceMapStore;
 
@@ -126,6 +126,22 @@ async fn pause_between_batches() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 }
 
+/// Free bytes on the filesystem holding `file`, `None` when unreadable (an
+/// in-memory database, or a platform without `statvfs`).
+#[cfg(all(feature = "sqlite", unix))]
+// `fsblkcnt_t` and `c_ulong` are u64 on Linux but u32 on macOS.
+#[allow(clippy::unnecessary_cast)]
+fn free_disk_bytes(file: &std::path::Path) -> Option<i64> {
+    let stat = nix::sys::statvfs::statvfs(file.parent()?).ok()?;
+    let bytes = (stat.blocks_available() as u64).checked_mul(stat.fragment_size() as u64)?;
+    i64::try_from(bytes).ok()
+}
+
+#[cfg(all(feature = "sqlite", not(unix)))]
+fn free_disk_bytes(_file: &std::path::Path) -> Option<i64> {
+    None
+}
+
 /// The instance's cleanup job: at most one runs at a time, detached from the
 /// request that started it.
 ///
@@ -159,6 +175,9 @@ enum CleanupPlan {
         settings: RetentionSettings,
         store: Arc<dyn SourceMapStore>,
     },
+    /// Rewrites a SQLite file created before incremental mode. Deletes
+    /// nothing, but runs as the job so it never overlaps a cleanup.
+    Compact,
 }
 
 impl CleanupJob {
@@ -271,8 +290,38 @@ impl CleanupJob {
         Ok((started, handle))
     }
 
+    /// Starts compacting a SQLite file created before incremental mode, in
+    /// the background. Refuses with `Validation` when the file needs no
+    /// compaction or the disk has no room for it, and with `Conflict` while
+    /// a cleanup runs.
+    pub async fn start_compaction(&self, pool: DbPool) -> AppResult<CleanupStatus> {
+        let compaction = StorageService::compaction(&pool).await?;
+        if !compaction.needed {
+            return Err(AppError::Validation(
+                "This database already gives the space it frees back to the disk".to_string(),
+            ));
+        }
+        if !compaction.has_room() {
+            return Err(AppError::Validation(format!(
+                "Compacting needs {} MiB free on the database's disk",
+                compaction.required_disk_bytes / (1024 * 1024)
+            )));
+        }
+        let started = self.begin_kind(CleanupKind::Compaction)?;
+        tokio::spawn(Self::execute(
+            Arc::clone(&self.status),
+            pool,
+            CleanupPlan::Compact,
+        ));
+        Ok(started)
+    }
+
     /// Marks the job `running`, or refuses with `Conflict` while it already is.
     fn begin(&self) -> AppResult<CleanupStatus> {
+        self.begin_kind(CleanupKind::Cleanup)
+    }
+
+    fn begin_kind(&self, kind: CleanupKind) -> AppResult<CleanupStatus> {
         let mut status = lock(&self.status);
         if status.state == CleanupState::Running {
             return Err(AppError::Conflict(
@@ -281,6 +330,7 @@ impl CleanupJob {
         }
         *status = CleanupStatus {
             state: CleanupState::Running,
+            kind,
             started_at: Some(Utc::now()),
             ..Default::default()
         };
@@ -327,6 +377,9 @@ impl CleanupJob {
                     lock(&progress).removed = counts.clone();
                     Ok(counts)
                 }
+                CleanupPlan::Compact => StorageService::compact(&pool)
+                    .await
+                    .map(|()| CleanupCounts::default()),
             };
             // The rows are gone either way; giving their space back is best
             // effort, so a failure here is logged rather than failing the run.
@@ -439,18 +492,83 @@ impl StorageService {
             pause_between_batches().await;
         }
         // Under WAL the shrink is recorded in the log; the checkpoint applies
-        // it to the database file and empties the log. A reader still on an
-        // older snapshot keeps the checkpoint from completing, which SQLite
-        // reports in the row's `busy` column rather than as an error. The
-        // pages are freed all the same and a later checkpoint shrinks the
-        // file, so this stays best effort, but nothing has left the file yet.
-        let (busy, _, _): (i64, i64, i64) = sqlx::query_as("PRAGMA wal_checkpoint(TRUNCATE)")
+        // it to the database file. PASSIVE never waits: TRUNCATE or FULL
+        // would hold every writer back for the busy timeout while a reader
+        // sits on an older snapshot. A checkpoint that could not copy the
+        // whole log leaves the shrink to a later one, so nothing has left the
+        // file yet.
+        let (_, logged, copied): (i64, i64, i64) = sqlx::query_as("PRAGMA wal_checkpoint(PASSIVE)")
             .fetch_one(pool)
             .await?;
-        if busy != 0 {
+        if copied < logged {
             return Ok(0);
         }
         Ok(released * page_size)
+    }
+
+    /// Whether the database file can give freed space back, and what
+    /// compacting it once would take. See [`Compaction`].
+    #[cfg(feature = "sqlite")]
+    pub async fn compaction(pool: &DbPool) -> AppResult<Compaction> {
+        let auto_vacuum: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+            .fetch_one(pool)
+            .await?;
+        let page_size: i64 = sqlx::query_scalar("PRAGMA page_size")
+            .fetch_one(pool)
+            .await?;
+        let pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(pool)
+            .await?;
+        let free: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+            .fetch_one(pool)
+            .await?;
+        let file: String =
+            sqlx::query_scalar("SELECT file FROM pragma_database_list WHERE name = 'main'")
+                .fetch_one(pool)
+                .await?;
+        let live_bytes = (pages - free) * page_size;
+        Ok(Compaction {
+            needed: auto_vacuum == 0,
+            file_bytes: pages * page_size,
+            live_bytes,
+            reclaimable_bytes: free * page_size,
+            required_disk_bytes: 2 * live_bytes,
+            free_disk_bytes: free_disk_bytes(std::path::Path::new(&file)),
+        })
+    }
+
+    #[cfg(feature = "postgres")]
+    pub async fn compaction(_pool: &DbPool) -> AppResult<Compaction> {
+        Ok(Compaction::default())
+    }
+
+    /// Rewrites the database in incremental mode with one `VACUUM`. It holds
+    /// the write lock throughout: digests wait and retry from their files,
+    /// while logs, spans and sessions arriving meanwhile fail once the busy
+    /// timeout runs out. Measured at about 3 s per GB of live data on NVMe.
+    #[cfg(feature = "sqlite")]
+    pub async fn compact(pool: &DbPool) -> AppResult<()> {
+        let mut conn = pool.acquire().await?;
+        sqlx::query("PRAGMA auto_vacuum = INCREMENTAL")
+            .execute(&mut *conn)
+            .await?;
+        sqlx::query("VACUUM").execute(&mut *conn).await?;
+        // The log now holds a copy of the whole database. TRUNCATE gives that
+        // back too; it may wait up to the busy timeout on a reader, which
+        // next to the VACUUM itself is nothing. Best effort: the next
+        // checkpoints apply it anyway, only the log file keeps its size.
+        if let Err(error) = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(&mut *conn)
+            .await
+        {
+            log::warn!("Compaction could not truncate the write-ahead log: {error}");
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "postgres")]
+    pub async fn compact(_pool: &DbPool) -> AppResult<()> {
+        Ok(())
     }
 
     /// Postgres reclaims a deleted row's space with its own autovacuum.
