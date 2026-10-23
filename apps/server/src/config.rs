@@ -116,6 +116,16 @@ pub struct OidcConfig {
     pub auto_provision: bool,
     pub require_email_verified: bool,
     pub link_existing_accounts: bool,
+    /// Claim that carries the identity's groups. Operator-configurable because
+    /// providers disagree on its name (`groups`, `roles`, `memberOf`, ...).
+    pub groups_claim: String,
+    /// Groups that grant the global `admin` role on an SSO login. Empty leaves
+    /// roles exactly as they are, which keeps SSO from being a role oracle by
+    /// accident.
+    pub admin_groups: Vec<String>,
+    /// Refuse password sign-in so SSO is the only way in. Startup rejects the
+    /// switch when SSO is not configured: it would lock everyone out.
+    pub disable_password_login: bool,
 }
 
 impl std::fmt::Debug for OidcConfig {
@@ -133,6 +143,9 @@ impl std::fmt::Debug for OidcConfig {
             .field("auto_provision", &self.auto_provision)
             .field("require_email_verified", &self.require_email_verified)
             .field("link_existing_accounts", &self.link_existing_accounts)
+            .field("groups_claim", &self.groups_claim)
+            .field("admin_groups", &self.admin_groups)
+            .field("disable_password_login", &self.disable_password_login)
             .finish()
     }
 }
@@ -366,6 +379,7 @@ pub enum ConfigError {
     SessionSecretTooShort { len: usize },
     IncompleteOidcConfig(String),
     InvalidBoolean { name: String, value: String },
+    PasswordLoginDisabledWithoutSso,
 }
 
 impl std::fmt::Display for ConfigError {
@@ -404,6 +418,11 @@ impl std::fmt::Display for ConfigError {
                 f,
                 "{name} must be true or false (also accepted: 1/0, yes/no, on/off), got \"{value}\""
             ),
+            ConfigError::PasswordLoginDisabledWithoutSso => write!(
+                f,
+                "OIDC_DISABLE_PASSWORD_LOGIN is on, but SSO is not configured (OIDC_ISSUER_URL is unset). \
+                 That would leave no way to sign in"
+            ),
         }
     }
 }
@@ -440,10 +459,17 @@ impl OidcConfig {
     /// `OIDC_ISSUER_URL` without the rest is a startup error, not a silently
     /// disabled provider.
     pub fn from_env() -> Result<Option<Self>, ConfigError> {
+        // Read before the early return: the switch is meaningless without SSO,
+        // and silently ignoring it would let an operator believe password
+        // login is off while it still works.
+        let disable_password_login = env_bool("OIDC_DISABLE_PASSWORD_LOGIN", false)?;
         let Some(issuer_url) = env::var("OIDC_ISSUER_URL")
             .ok()
             .filter(|value| !value.trim().is_empty())
         else {
+            if disable_password_login {
+                return Err(ConfigError::PasswordLoginDisabledWithoutSso);
+            }
             return Ok(None);
         };
 
@@ -465,6 +491,12 @@ impl OidcConfig {
             .map(|domain| domain.trim().to_ascii_lowercase())
             .filter(|domain| !domain.is_empty())
             .collect();
+        let admin_groups: Vec<String> = env::var("OIDC_ADMIN_GROUPS")
+            .unwrap_or_default()
+            .split(',')
+            .map(|group| group.trim().to_string())
+            .filter(|group| !group.is_empty())
+            .collect();
 
         Ok(Some(Self {
             issuer_url: issuer_url.trim().to_string(),
@@ -480,6 +512,13 @@ impl OidcConfig {
             auto_provision: env_bool("OIDC_AUTO_PROVISION", false)?,
             require_email_verified: env_bool("OIDC_REQUIRE_EMAIL_VERIFIED", true)?,
             link_existing_accounts: env_bool("OIDC_LINK_EXISTING_ACCOUNTS", false)?,
+            groups_claim: env::var("OIDC_GROUPS_CLAIM")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| value.trim().to_string())
+                .unwrap_or_else(|| "groups".to_string()),
+            admin_groups,
+            disable_password_login,
         }))
     }
 }

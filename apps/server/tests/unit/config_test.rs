@@ -655,6 +655,9 @@ fn clear_oidc_env() {
         "OIDC_AUTO_PROVISION",
         "OIDC_REQUIRE_EMAIL_VERIFIED",
         "OIDC_LINK_EXISTING_ACCOUNTS",
+        "OIDC_GROUPS_CLAIM",
+        "OIDC_ADMIN_GROUPS",
+        "OIDC_DISABLE_PASSWORD_LOGIN",
     ] {
         std::env::remove_var(name);
     }
@@ -717,6 +720,62 @@ fn test_oidc_account_linking_and_provisioning_can_be_enabled() {
     std::env::set_var("OIDC_LINK_EXISTING_ACCOUNTS", "maybe");
     let message = OidcConfig::from_env().unwrap_err().to_string();
     assert!(message.contains("OIDC_LINK_EXISTING_ACCOUNTS"));
+    clear_oidc_env();
+}
+
+#[test]
+#[serial]
+fn test_oidc_group_mapping_defaults_to_the_groups_claim() {
+    clear_oidc_env();
+    std::env::set_var("OIDC_ISSUER_URL", "https://id.example.com");
+    std::env::set_var("OIDC_CLIENT_ID", "rustrak");
+    std::env::set_var("OIDC_CLIENT_SECRET", "secret");
+    std::env::set_var(
+        "OIDC_REDIRECT_URL",
+        "https://rustrak.example.com/auth/sso/callback",
+    );
+
+    let config = OidcConfig::from_env().unwrap().unwrap();
+    assert_eq!(config.groups_claim, "groups");
+    assert!(
+        config.admin_groups.is_empty(),
+        "no mapping means SSO must not touch roles"
+    );
+    assert!(!config.disable_password_login);
+
+    std::env::set_var("OIDC_GROUPS_CLAIM", " memberOf ");
+    std::env::set_var("OIDC_ADMIN_GROUPS", "rustrak-admins, ops ,,");
+
+    let config = OidcConfig::from_env().unwrap().unwrap();
+    assert_eq!(config.groups_claim, "memberOf");
+    assert_eq!(config.admin_groups, ["rustrak-admins", "ops"]);
+    clear_oidc_env();
+}
+
+#[test]
+#[serial]
+fn test_oidc_password_login_can_only_be_disabled_with_sso() {
+    clear_oidc_env();
+    std::env::set_var("OIDC_DISABLE_PASSWORD_LOGIN", "true");
+
+    let error = OidcConfig::from_env().unwrap_err().to_string();
+    assert!(
+        error.contains("OIDC_DISABLE_PASSWORD_LOGIN"),
+        "a switch that would lock everyone out must be named: {error}"
+    );
+    clear_oidc_env();
+
+    std::env::set_var("OIDC_ISSUER_URL", "https://id.example.com");
+    std::env::set_var("OIDC_CLIENT_ID", "rustrak");
+    std::env::set_var("OIDC_CLIENT_SECRET", "secret");
+    std::env::set_var(
+        "OIDC_REDIRECT_URL",
+        "https://rustrak.example.com/auth/sso/callback",
+    );
+    std::env::set_var("OIDC_DISABLE_PASSWORD_LOGIN", "true");
+
+    let config = OidcConfig::from_env().unwrap().unwrap();
+    assert!(config.disable_password_login);
     clear_oidc_env();
 }
 

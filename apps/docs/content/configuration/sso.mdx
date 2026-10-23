@@ -125,7 +125,9 @@ provider.
 created for them. The first account on an empty installation becomes an
 administrator; every later one is a member who sees nothing until added to a
 team or project. With provisioning off, which is the default, they are turned
-away and an administrator has to invite them first.
+away and an administrator has to invite them first. With
+`OIDC_ADMIN_GROUPS` set the provider decides the role instead; see
+[Roles from provider groups](#roles-from-provider-groups).
 
 ### Choosing the switches for your provider
 
@@ -147,6 +149,54 @@ away and an administrator has to invite them first.
   verified. Only turn it on with a provider whose users cannot pick an email
   they do not own. With a provider that lets people choose their address, it
   would let someone take over an existing account by claiming its email.
+
+## Roles from provider groups
+
+By default SSO never rewrites a role: a new account is a member and an
+existing one keeps the role an administrator gave it. To let the provider
+decide, name the groups that mean "admin":
+
+```bash
+OIDC_ADMIN_GROUPS=rustrak-admins
+# OIDC_GROUPS_CLAIM=groups
+```
+
+From then on **every SSO login refreshes that account's global role**: someone
+in one of the listed groups becomes an `admin`, everyone else becomes a
+`member`. Membership is re-read on each login, so adding someone to the group
+promotes them the next time they sign in and taking them out demotes them the
+same way. Accounts that sign in with a password are never touched.
+
+Two exceptions and one warning:
+
+- The first account on the installation (the one `CREATE_SUPERUSER` created)
+  keeps its `admin` role even when its groups say otherwise. Every other
+  safeguard protects that account from demotion, and this must not be the way
+  around it.
+- Leaving `OIDC_ADMIN_GROUPS` unset leaves every role exactly as it is.
+- The first account on an installation is created as an administrator even
+  when it is in no group, so a fresh deployment cannot end up with no
+  administrator. After that, a mapping nobody satisfies leaves only members:
+  keep at least one person in an admin group.
+
+The claim may be a JSON array (`["rustrak-admins", "everyone"]`) or a
+comma-separated string, and group names are compared exactly, including case.
+A provider that reports groups in `roles`, `memberOf` or anything else needs
+`OIDC_GROUPS_CLAIM` set to that name. Groups are read from the ID token only,
+so a provider that puts them in the UserInfo response instead will need to
+move them (or use a client scope that copies them into the token).
+
+## SSO-only login
+
+`OIDC_DISABLE_PASSWORD_LOGIN=true` hides the password form and makes
+`POST /auth/login` answer `403`, leaving the provider as the only way in.
+
+The first account keeps working with its password as a documented
+break-glass. It is the account `CREATE_SUPERUSER` created, and blocking it too
+would leave a provider outage with no way back into the instance.
+
+Rustrak refuses to start when the switch is on without `OIDC_ISSUER_URL`,
+because that combination could not sign anyone in at all.
 
 ## Other providers
 
@@ -184,6 +234,9 @@ set `OIDC_REQUIRE_EMAIL_VERIFIED=false`.
 | `OIDC_LINK_EXISTING_ACCOUNTS` | `false` | Link to an existing account without asking for its password |
 | `OIDC_REQUIRE_EMAIL_VERIFIED` | `true` | Refuse identities whose email the provider has not verified |
 | `OIDC_ALLOWED_DOMAINS` | *(all)* | Comma-separated email domains allowed to use SSO |
+| `OIDC_GROUPS_CLAIM` | `groups` | Claim carrying the identity's groups |
+| `OIDC_ADMIN_GROUPS` | *(none)* | Comma-separated groups that grant the global `admin` role |
+| `OIDC_DISABLE_PASSWORD_LOGIN` | `false` | Refuse password sign-in; the first account stays as break-glass |
 
 The booleans accept `true/false`, `1/0`, `yes/no` and `on/off`. An empty value
 means unset. Anything else stops Rustrak at startup instead of silently
@@ -211,6 +264,8 @@ line that starts with `SSO browser callback failed:`.
 | `SSO authentication failed` | The provider refused the code exchange, usually a wrong client secret | Check `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`. A line starting `OIDC code exchange failed` carries the provider's answer |
 | `SSO identity token is invalid` | The ID token failed its checks: wrong audience, issuer or signature | Check `OIDC_CLIENT_ID` and that `OIDC_ISSUER_URL` matches the `issuer` in the discovery document |
 | `Account is disabled` | The matching Rustrak account is deactivated | Reactivate it in Rustrak |
+| `Password login is disabled; sign in through SSO` | `OIDC_DISABLE_PASSWORD_LOGIN=true` and the account is not the first one | Sign in through the provider; the first account is the break-glass |
+| `Password login is disabled, but SSO is not configured` (at startup) | `OIDC_DISABLE_PASSWORD_LOGIN=true` without `OIDC_ISSUER_URL` | Configure SSO, or turn the switch off |
 
 **`SSO session expired`** almost always means the browser did not send
 Rustrak's session cookie back on the callback. Check that:
@@ -242,6 +297,9 @@ Rustrak's session cookie back on the callback. Check that:
   the Rustrak container can reach the provider over the network.
 - `must use HTTPS`: the issuer or one of its endpoints is plain HTTP on a
   host other than `localhost`.
+- `OIDC_DISABLE_PASSWORD_LOGIN is on, but SSO is not configured`: set
+  `OIDC_ISSUER_URL` too, or turn the switch off. Password login would be the
+  only way in and it is off.
 
 ## Try it locally
 

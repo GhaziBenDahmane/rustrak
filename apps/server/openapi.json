@@ -11118,6 +11118,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Password login is disabled; use SSO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -16392,11 +16402,16 @@
         "type": "object",
         "required": [
           "enabled",
-          "provider_name"
+          "provider_name",
+          "password_login_enabled"
         ],
         "properties": {
           "enabled": {
             "type": "boolean"
+          },
+          "password_login_enabled": {
+            "type": "boolean",
+            "description": "Whether the login page should show the password form. False only when\nthe operator turned password sign-in off."
           },
           "provider_name": {
             "type": [

@@ -78,6 +78,8 @@ export function LoginForm({
   const [ssoErrorDismissed, setSsoErrorDismissed] = useState(false);
   const [ssoStartFailed, setSsoStartFailed] = useState(false);
   const hasSsoError = ssoStartFailed || (ssoFailed && !ssoErrorDismissed);
+  // Older servers do not send the field; treat that as "password login works".
+  const passwordLoginEnabled = ssoConfig?.password_login_enabled ?? true;
 
   const loginSchema = z.object({
     email: z.email(t('form.emailInvalid')),
@@ -189,98 +191,110 @@ export function LoginForm({
             )}
           </div>
 
-          <div className="flex items-center gap-3" aria-hidden="true">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs uppercase tracking-widest text-muted-foreground">
-              {t('form.or')}
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
+          {passwordLoginEnabled && (
+            <div className="flex items-center gap-3" aria-hidden="true">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs uppercase tracking-widest text-muted-foreground">
+                {t('form.or')}
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
         </>
       )}
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <FormField
-            control={form.control}
-            name="email"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                  {t('form.emailLabel')}
-                </FormLabel>
-                <FormControl>
-                  <Input
-                    type="email"
-                    placeholder={t('form.emailPlaceholder')}
-                    autoComplete="email"
-                    disabled={isPending || isSsoPending}
-                    className="bg-background border-border px-4 py-3.5 text-sm placeholder:text-muted-foreground/30"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+      {!passwordLoginEnabled && (
+        <p className="text-sm text-muted-foreground">
+          {t('form.passwordLoginDisabled', {
+            provider: ssoConfig?.provider_name ?? 'SSO',
+          })}
+        </p>
+      )}
 
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <div className="flex items-center justify-between">
+      {passwordLoginEnabled && (
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
                   <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-                    {t('form.passwordLabel')}
+                    {t('form.emailLabel')}
                   </FormLabel>
-                </div>
-                <FormControl>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder={t('form.passwordPlaceholder')}
-                      autoComplete="current-password"
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder={t('form.emailPlaceholder')}
+                      autoComplete="email"
                       disabled={isPending || isSsoPending}
-                      className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-4 py-3.5 pr-10 text-sm shadow-xs outline-none placeholder:text-muted-foreground/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                      className="bg-background border-border px-4 py-3.5 text-sm placeholder:text-muted-foreground/30"
                       {...field}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      disabled={isPending || isSsoPending}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                      tabIndex={-1}
-                      aria-label={
-                        showPassword
-                          ? t('form.hidePassword')
-                          : t('form.showPassword')
-                      }
-                    >
-                      {showPassword ? (
-                        <EyeOff className="size-4" />
-                      ) : (
-                        <Eye className="size-4" />
-                      )}
-                    </button>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="password"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                      {t('form.passwordLabel')}
+                    </FormLabel>
                   </div>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormControl>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder={t('form.passwordPlaceholder')}
+                        autoComplete="current-password"
+                        disabled={isPending || isSsoPending}
+                        className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-4 py-3.5 pr-10 text-sm shadow-xs outline-none placeholder:text-muted-foreground/30 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                        {...field}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        disabled={isPending || isSsoPending}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                        tabIndex={-1}
+                        aria-label={
+                          showPassword
+                            ? t('form.hidePassword')
+                            : t('form.showPassword')
+                        }
+                      >
+                        {showPassword ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
+                      </button>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* Where an outage lands, kept off the credential fields. */}
-          <FormRootError />
+            {/* Where an outage lands, kept off the credential fields. */}
+            <FormRootError />
 
-          <Button
-            type="submit"
-            className="w-full font-extrabold uppercase tracking-widest text-xs py-6 mt-2"
-            disabled={isPending || isSsoPending}
-          >
-            {isPending ? t('form.signingIn') : t('form.login')}
-          </Button>
-        </form>
-      </Form>
+            <Button
+              type="submit"
+              className="w-full font-extrabold uppercase tracking-widest text-xs py-6 mt-2"
+              disabled={isPending || isSsoPending}
+            >
+              {isPending ? t('form.signingIn') : t('form.login')}
+            </Button>
+          </form>
+        </Form>
+      )}
     </div>
   );
 }

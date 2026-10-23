@@ -82,6 +82,7 @@ macro_rules! build_app {
                         .cookie_secure(false)
                         .build(),
                 )
+                .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
                 .configure(routes::auth::configure)
                 .configure(routes::events::configure)
                 .configure(routes::issues::configure)

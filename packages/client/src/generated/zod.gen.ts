@@ -1568,6 +1568,7 @@ export const zSpanDetailResponse = zSpanResponse.and(z.object({
 
 export const zSsoConfigResponse = z.object({
     enabled: z.boolean(),
+    password_login_enabled: z.boolean(),
     provider_name: z.string().nullable()
 });
 

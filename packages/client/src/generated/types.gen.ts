@@ -1956,6 +1956,11 @@ export type SpanResponse = {
 
 export type SsoConfigResponse = {
     enabled: boolean;
+    /**
+     * Whether the login page should show the password form. False only when
+     * the operator turned password sign-in off.
+     */
+    password_login_enabled: boolean;
     provider_name: string | null;
 };
 
@@ -7960,6 +7965,10 @@ export type AuthLoginErrors = {
      * Invalid credentials
      */
     401: ErrorResponse;
+    /**
+     * Password login is disabled; use SSO
+     */
+    403: ErrorResponse;
 };
 
 export type AuthLoginError = AuthLoginErrors[keyof AuthLoginErrors];

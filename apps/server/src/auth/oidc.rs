@@ -1,15 +1,98 @@
-use openidconnect::core::{CoreClient, CoreJsonWebKeySet, CoreProviderMetadata, CoreResponseType};
-use openidconnect::{
-    AsyncHttpClient, AuthenticationFlow, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    HttpRequest, HttpResponse, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl,
-    Scope,
+use openidconnect::core::{
+    CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim, CoreJsonWebKey,
+    CoreJsonWebKeySet, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm,
+    CoreProviderMetadata, CoreResponseType, CoreRevocableToken, CoreRevocationErrorResponse,
+    CoreTokenIntrospectionResponse, CoreTokenType,
 };
+use openidconnect::{
+    AdditionalClaims, AsyncHttpClient, AuthenticationFlow, AuthorizationCode, Client, ClientId,
+    ClientSecret, CsrfToken, EmptyExtraTokenFields, EndpointMaybeSet, EndpointNotSet, EndpointSet,
+    HttpRequest, HttpResponse, IdTokenFields, IssuerUrl, Nonce, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, Scope, StandardErrorResponse, StandardTokenResponse,
+};
+use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 
 use crate::config::OidcConfig;
 use crate::error::{AppError, AppResult};
 use crate::services::OidcLinkPolicy;
+
+/// The claims this server keeps beyond the registered set.
+///
+/// It is a map rather than a fixed field because the claim that carries groups
+/// is operator-configurable (`OIDC_GROUPS_CLAIM`): providers call it `groups`,
+/// `roles`, `memberOf` and more. Only the names the operator asks about are
+/// read; everything else stays untyped, as the provider sent it.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct SsoClaims {
+    #[serde(flatten)]
+    claims: serde_json::Map<String, serde_json::Value>,
+}
+
+impl AdditionalClaims for SsoClaims {}
+
+impl SsoClaims {
+    /// Values of a claim that is expected to be a group list, either as a JSON
+    /// array or as a comma-separated string. Anything else is no groups.
+    pub fn groups(&self, claim: &str) -> Vec<String> {
+        let values = match self.claims.get(claim) {
+            Some(serde_json::Value::Array(values)) => values.iter().collect::<Vec<_>>(),
+            Some(value @ serde_json::Value::String(_)) => vec![value],
+            _ => return Vec::new(),
+        };
+        values
+            .into_iter()
+            .filter_map(serde_json::Value::as_str)
+            .flat_map(|value| value.split(','))
+            .map(str::trim)
+            .filter(|group| !group.is_empty())
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Insert a claim. Used by the tests' fake provider to sign a group list.
+    pub fn insert(&mut self, name: &str, value: serde_json::Value) {
+        self.claims.insert(name.to_string(), value);
+    }
+}
+
+/// Token response whose ID token keeps the provider's extra claims, so the
+/// configured groups claim survives validation.
+type SsoTokenResponse = StandardTokenResponse<
+    IdTokenFields<
+        SsoClaims,
+        EmptyExtraTokenFields,
+        CoreGenderClaim,
+        CoreJweContentEncryptionAlgorithm,
+        CoreJwsSigningAlgorithm,
+    >,
+    CoreTokenType,
+>;
+
+/// The core client with extra claims: identical to [`CoreClient`] except for
+/// the claim type, which is what makes `groups` readable after verification.
+type SsoClient = Client<
+    SsoClaims,
+    CoreAuthDisplay,
+    CoreGenderClaim,
+    CoreJweContentEncryptionAlgorithm,
+    CoreJsonWebKey,
+    CoreAuthPrompt,
+    StandardErrorResponse<CoreErrorResponseType>,
+    SsoTokenResponse,
+    CoreTokenIntrospectionResponse,
+    CoreRevocableToken,
+    CoreRevocationErrorResponse,
+    // The state `from_provider_metadata` returns: discovery found the
+    // authorization endpoint, and the token endpoint may or may not be there.
+    EndpointSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointNotSet,
+    EndpointMaybeSet,
+    EndpointMaybeSet,
+>;
 
 /// Values that must be retained in the encrypted browser session while the
 /// user authenticates with the identity provider.
@@ -26,6 +109,8 @@ pub struct OidcIdentity {
     pub subject: String,
     pub email: String,
     pub email_verified: bool,
+    /// Groups the provider asserted for this login, from `OIDC_GROUPS_CLAIM`.
+    pub groups: Vec<String>,
 }
 
 /// OIDC provider metadata and the client used for authorization and token exchange.
@@ -149,12 +234,18 @@ impl OidcService {
         OidcLinkPolicy {
             auto_provision: self.config.auto_provision,
             link_existing_accounts: self.config.link_existing_accounts,
+            admin_groups: self.config.admin_groups.clone(),
         }
+    }
+
+    /// Whether the operator turned password sign-in off.
+    pub fn password_login_disabled(&self) -> bool {
+        self.config.disable_password_login
     }
 
     /// Build an authorization URL and fresh state, nonce, and PKCE protections.
     pub fn authorization_url(&self) -> AppResult<OidcAuthorization> {
-        let client = CoreClient::from_provider_metadata(
+        let client = SsoClient::from_provider_metadata(
             self.metadata.clone(),
             ClientId::new(self.config.client_id.clone()),
             Some(ClientSecret::new(self.config.client_secret.clone())),
@@ -200,7 +291,7 @@ impl OidcService {
         let jwks = CoreJsonWebKeySet::fetch_async(self.metadata.jwks_uri(), &self.http_client)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to fetch OIDC signing keys: {e}")))?;
-        let client = CoreClient::from_provider_metadata(
+        let client = SsoClient::from_provider_metadata(
             self.metadata.clone().set_jwks(jwks),
             ClientId::new(self.config.client_id.clone()),
             Some(ClientSecret::new(self.config.client_secret.clone())),
@@ -267,6 +358,10 @@ impl OidcService {
             subject: claims.subject().as_str().to_string(),
             email,
             email_verified,
+            // From the validated ID token only: the groups decide a role, so
+            // they must come from the same signed, audience-checked document
+            // as the subject.
+            groups: claims.additional_claims().groups(&self.config.groups_claim),
         })
     }
 }

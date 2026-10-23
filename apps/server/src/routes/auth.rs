@@ -53,6 +53,9 @@ struct PendingLink {
     email: String,
     email_verified: bool,
     user_id: i32,
+    /// Kept so the role mapping is applied only after the password proves the
+    /// account's owner is the person behind the identity.
+    groups: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -79,6 +82,9 @@ struct SsoConfigResponse {
     enabled: bool,
     #[cfg_attr(feature = "openapi", schema(required))]
     provider_name: Option<String>,
+    /// Whether the login page should show the password form. False only when
+    /// the operator turned password sign-in off.
+    password_login_enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -256,6 +262,7 @@ pub async fn get_invitation(
     responses(
         (status = 200, description = "Logged in", body = AuthResponse),
         (status = 401, description = "Invalid credentials", body = crate::error::ErrorResponse),
+        (status = 403, description = "Password login is disabled; use SSO", body = crate::error::ErrorResponse),
     ),
     security(()),
 ))]
@@ -263,6 +270,7 @@ pub async fn get_invitation(
 /// Authenticate user and create session
 pub async fn login(
     pool: web::Data<crate::db::DbPool>,
+    oidc: web::Data<Option<OidcService>>,
     session: Session,
     req: web::Json<LoginRequest>,
 ) -> AppResult<impl Responder> {
@@ -279,6 +287,21 @@ pub async fn login(
     // Verify password
     if !user.verify_password(&req.password)? {
         return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+    }
+
+    // With OIDC_DISABLE_PASSWORD_LOGIN the provider is the only way in. The
+    // primary account stays as the documented break-glass: it is the one
+    // CREATE_SUPERUSER created, and blocking it too would leave a provider
+    // outage with no way back. The check comes after the password so it does
+    // not tell an anonymous caller which account is primary.
+    let sso_only = oidc
+        .as_ref()
+        .as_ref()
+        .is_some_and(|service| service.password_login_disabled());
+    if sso_only && UsersService::primary_user_id(pool.get_ref()).await? != Some(user.id) {
+        return Err(AppError::Forbidden(
+            "Password login is disabled; sign in through SSO".to_string(),
+        ));
     }
 
     // Update last login
@@ -301,12 +324,13 @@ pub async fn login(
 /// GET /auth/sso/config
 /// Public, non-sensitive information used to render the login page.
 pub async fn sso_config(oidc: web::Data<Option<OidcService>>) -> impl Responder {
+    let service = oidc.as_ref().as_ref();
     HttpResponse::Ok().json(SsoConfigResponse {
-        enabled: oidc.is_some(),
-        provider_name: oidc
-            .as_ref()
-            .as_ref()
-            .map(|service| service.provider_name().to_string()),
+        enabled: service.is_some(),
+        provider_name: service.map(|service| service.provider_name().to_string()),
+        // Startup refuses the switch without SSO configured, so "no provider"
+        // always means password login is the way in.
+        password_login_enabled: service.is_none_or(|service| !service.password_login_disabled()),
     })
 }
 
@@ -400,6 +424,7 @@ async fn handle_sso_callback(
                 email: identity.email,
                 email_verified: identity.email_verified,
                 user_id: user.id,
+                groups: identity.groups,
             }),
         };
     Ok(result)
@@ -536,6 +561,7 @@ pub async fn sso_link(
 /// is given, and sign in. A wrong password keeps the link pending for a retry.
 pub async fn confirm_sso_link(
     pool: web::Data<DbPool>,
+    oidc: web::Data<Option<OidcService>>,
     session: Session,
     req: web::Json<ConfirmSsoLinkRequest>,
 ) -> AppResult<HttpResponse> {
@@ -545,10 +571,20 @@ pub async fn confirm_sso_link(
         subject: pending.subject,
         email: pending.email,
         email_verified: pending.email_verified,
+        groups: pending.groups,
     };
-    let user =
-        UsersService::confirm_oidc_link(pool.get_ref(), &identity, pending.user_id, &req.password)
-            .await?;
+    let service = oidc
+        .as_ref()
+        .as_ref()
+        .ok_or_else(|| AppError::NotFound("SSO is not configured".to_string()))?;
+    let user = UsersService::confirm_oidc_link(
+        pool.get_ref(),
+        &identity,
+        pending.user_id,
+        &req.password,
+        &service.link_policy(),
+    )
+    .await?;
 
     session.remove(OIDC_PENDING_LINK_KEY);
     session.renew();

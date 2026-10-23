@@ -141,6 +141,9 @@ and troubleshooting.
 | `OIDC_LINK_EXISTING_ACCOUNTS` | `false` | Link to an existing account without asking for its password |
 | `OIDC_REQUIRE_EMAIL_VERIFIED` | `true` | Refuse identities whose email the provider has not verified |
 | `OIDC_ALLOWED_DOMAINS` | *(all)* | Comma-separated email domains allowed to use SSO |
+| `OIDC_GROUPS_CLAIM` | `groups` | Claim that carries the identity's groups |
+| `OIDC_ADMIN_GROUPS` | *(none)* | Comma-separated groups that grant the global `admin` role |
+| `OIDC_DISABLE_PASSWORD_LOGIN` | `false` | Refuse password sign-in, leaving SSO as the only way in |
 
 ## Database
 

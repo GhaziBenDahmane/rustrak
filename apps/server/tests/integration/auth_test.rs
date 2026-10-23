@@ -99,6 +99,7 @@ async fn test_register_success() {
                     .cookie_http_only(true)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -139,6 +140,7 @@ async fn test_register_invalid_email() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -172,6 +174,7 @@ async fn test_register_empty_password_rejected() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -208,6 +211,7 @@ async fn test_register_duplicate_email() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -242,6 +246,7 @@ async fn test_register_creates_session() {
                     .cookie_http_only(true)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -282,6 +287,7 @@ async fn test_login_success() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -320,6 +326,7 @@ async fn test_login_wrong_password() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -352,6 +359,7 @@ async fn test_login_nonexistent_user() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -392,6 +400,7 @@ async fn test_login_inactive_user() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -429,6 +438,7 @@ async fn test_login_updates_last_login() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -472,6 +482,7 @@ async fn test_logout_success() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -509,6 +520,7 @@ async fn test_get_current_user_authenticated() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -560,6 +572,7 @@ async fn test_get_current_user_unauthenticated() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -626,6 +639,7 @@ async fn test_middleware_blocks_unauthenticated_access() {
                     .build(),
             )
             .wrap(RequireAuth::new(false))
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure)
             .configure(routes::projects::configure),
     )
@@ -658,6 +672,7 @@ async fn test_middleware_allows_authenticated_access() {
                     .build(),
             )
             .wrap(RequireAuth::new(false))
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure)
             .configure(routes::projects::configure),
     )
@@ -703,6 +718,7 @@ async fn test_middleware_exempts_auth_routes() {
                     .build(),
             )
             .wrap(RequireAuth::new(false))
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -773,6 +789,7 @@ async fn test_register_with_very_long_email() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -818,6 +835,7 @@ async fn test_login_case_insensitive_email() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -866,6 +884,7 @@ async fn login_as(pool: &rustrak::db::DbPool, email: &str, password: &str) -> (u
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -966,6 +985,7 @@ async fn test_concurrent_registrations_same_email() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1023,6 +1043,7 @@ async fn test_session_persists_across_requests() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1072,6 +1093,7 @@ async fn test_logout_invalidates_session() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1144,6 +1166,7 @@ async fn test_new_user_has_no_language_or_timezone_preference() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1200,6 +1223,7 @@ async fn test_patch_me_persists_language_and_timezone() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1253,6 +1277,7 @@ async fn test_patch_me_rejects_malformed_preferences() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1309,6 +1334,7 @@ async fn test_patch_me_unauthenticated_is_rejected() {
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1343,6 +1369,7 @@ async fn change_password_as(
                     .cookie_secure(false)
                     .build(),
             )
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .configure(routes::auth::configure),
     )
     .await;
@@ -1492,6 +1519,7 @@ async fn oidc_outcome(
         subject: subject.to_string(),
         email: email.to_string(),
         email_verified,
+        groups: Vec::new(),
     };
     UsersService::find_or_provision_oidc(pool, &identity, policy).await
 }
@@ -1518,6 +1546,19 @@ fn linking(link_existing_accounts: bool, auto_provision: bool) -> OidcLinkPolicy
     OidcLinkPolicy {
         auto_provision,
         link_existing_accounts,
+        admin_groups: Vec::new(),
+    }
+}
+
+fn linking_with_admin_groups(
+    link_existing_accounts: bool,
+    auto_provision: bool,
+    admin_groups: &[&str],
+) -> OidcLinkPolicy {
+    OidcLinkPolicy {
+        auto_provision,
+        link_existing_accounts,
+        admin_groups: admin_groups.iter().map(|group| group.to_string()).collect(),
     }
 }
 
@@ -1652,9 +1693,17 @@ async fn test_oidc_link_is_confirmed_only_with_the_account_password() {
         subject: "owner-subject".to_string(),
         email: "owner@example.com".to_string(),
         email_verified: true,
+        groups: Vec::new(),
     };
 
-    let wrong = UsersService::confirm_oidc_link(&db.pool, &identity, existing.id, "not-it").await;
+    let wrong = UsersService::confirm_oidc_link(
+        &db.pool,
+        &identity,
+        existing.id,
+        "not-it",
+        &linking(false, false),
+    )
+    .await;
     assert!(matches!(
         wrong,
         Err(rustrak::error::AppError::Unauthorized(_))
@@ -1673,9 +1722,15 @@ async fn test_oidc_link_is_confirmed_only_with_the_account_password() {
         OidcOutcome::ConfirmWithPassword(_)
     ));
 
-    let linked = UsersService::confirm_oidc_link(&db.pool, &identity, existing.id, &password)
-        .await
-        .expect("the right password links the identity");
+    let linked = UsersService::confirm_oidc_link(
+        &db.pool,
+        &identity,
+        existing.id,
+        &password,
+        &linking(false, false),
+    )
+    .await
+    .expect("the right password links the identity");
     assert_eq!(linked.id, existing.id);
 
     // From now on the identity signs in directly, whatever the switches say.
@@ -1701,13 +1756,26 @@ async fn test_oidc_link_cannot_move_an_identity_to_a_second_account() {
         subject: "shared-subject".to_string(),
         email: "first@example.com".to_string(),
         email_verified: true,
+        groups: Vec::new(),
     };
 
-    UsersService::confirm_oidc_link(&db.pool, &identity, first.id, "password-one")
-        .await
-        .unwrap();
-    let moved =
-        UsersService::confirm_oidc_link(&db.pool, &identity, second.id, "password-two").await;
+    UsersService::confirm_oidc_link(
+        &db.pool,
+        &identity,
+        first.id,
+        "password-one",
+        &linking(false, false),
+    )
+    .await
+    .unwrap();
+    let moved = UsersService::confirm_oidc_link(
+        &db.pool,
+        &identity,
+        second.id,
+        "password-two",
+        &linking(false, false),
+    )
+    .await;
 
     assert!(matches!(moved, Err(rustrak::error::AppError::Conflict(_))));
     let owner = oidc_login(
@@ -1841,4 +1909,171 @@ async fn test_oidc_auto_provision_can_be_disabled() {
         Err(rustrak::error::AppError::Forbidden(_))
     ));
     assert_eq!(UsersService::user_count(&db.pool).await.unwrap(), 0);
+}
+
+// =============================================================================
+// OpenID Connect group mapping
+// =============================================================================
+
+/// A login carrying group claims, for the role-mapping tests.
+async fn oidc_login_in_groups(
+    pool: &rustrak::db::DbPool,
+    subject: &str,
+    email: &str,
+    groups: &[&str],
+    policy: OidcLinkPolicy,
+) -> rustrak::error::AppResult<User> {
+    let identity = OidcIdentity {
+        issuer: "https://id.example.com".to_string(),
+        subject: subject.to_string(),
+        email: email.to_string(),
+        email_verified: true,
+        groups: groups.iter().map(|group| group.to_string()).collect(),
+    };
+    match UsersService::find_or_provision_oidc(pool, &identity, policy).await? {
+        OidcOutcome::SignedIn(user) => Ok(user),
+        OidcOutcome::ConfirmWithPassword(user) => {
+            panic!("expected a sign-in, was asked to confirm {}", user.email)
+        }
+    }
+}
+
+#[actix_web::test]
+async fn test_oidc_admin_groups_drive_the_role_both_ways() {
+    let db = TestDb::new().await;
+    // A local administrator owns the install, so the SSO account below is not
+    // the protected primary one.
+    create_test_user(&db.pool, "owner@example.com", "owner-password", true).await;
+    let policy = linking_with_admin_groups(true, true, &["rustrak-admins"]);
+
+    let member = oidc_login_in_groups(
+        &db.pool,
+        "sub-member",
+        "member@example.com",
+        &["users"],
+        policy.clone(),
+    )
+    .await
+    .expect("a provisioned account");
+    assert!(
+        !member.is_admin(),
+        "a group outside the mapping is a member"
+    );
+
+    let promoted = oidc_login_in_groups(
+        &db.pool,
+        "sub-member",
+        "member@example.com",
+        &["users", "rustrak-admins"],
+        policy.clone(),
+    )
+    .await
+    .expect("a returning account");
+    assert!(promoted.is_admin(), "joining the admin group promotes");
+    let stored = UsersService::get_by_id(&db.pool, member.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        stored.is_admin(),
+        "the promotion is persisted, not per-request"
+    );
+
+    let demoted = oidc_login_in_groups(
+        &db.pool,
+        "sub-member",
+        "member@example.com",
+        &["users"],
+        policy.clone(),
+    )
+    .await
+    .expect("a returning account");
+    assert!(!demoted.is_admin(), "leaving the admin group demotes");
+    let stored = UsersService::get_by_id(&db.pool, member.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!stored.is_admin(), "the demotion is persisted too");
+}
+
+#[actix_web::test]
+async fn test_oidc_admin_groups_cannot_demote_the_primary_account() {
+    let db = TestDb::new().await;
+    let policy = linking_with_admin_groups(true, true, &["rustrak-admins"]);
+
+    // The first account is the primary one. Its role is protected everywhere
+    // else, and a claim must not be the way around that.
+    let first = oidc_login_in_groups(
+        &db.pool,
+        "sub-primary",
+        "owner@example.com",
+        &[],
+        policy.clone(),
+    )
+    .await
+    .expect("the first account");
+    assert!(first.is_admin());
+
+    let again = oidc_login_in_groups(&db.pool, "sub-primary", "owner@example.com", &[], policy)
+        .await
+        .expect("the same account logging in again");
+    assert!(
+        again.is_admin(),
+        "an empty group list must not demote the bootstrap superuser"
+    );
+}
+
+#[actix_web::test]
+async fn test_oidc_without_admin_groups_leaves_roles_alone() {
+    let db = TestDb::new().await;
+    let member = create_test_user(&db.pool, "member@example.com", "member-password", false).await;
+
+    let signed_in = oidc_login_in_groups(
+        &db.pool,
+        "sub-member",
+        "member@example.com",
+        &["rustrak-admins"],
+        linking(true, true),
+    )
+    .await
+    .expect("a verified email links the existing account");
+
+    assert_eq!(signed_in.id, member.id);
+    assert!(
+        !signed_in.is_admin(),
+        "no mapping configured means the provider does not decide roles"
+    );
+}
+
+#[actix_web::test]
+async fn test_oidc_group_role_applies_only_after_the_link_is_confirmed() {
+    let db = TestDb::new().await;
+    let password = format!("pass-{}", uuid::Uuid::new_v4());
+    let existing = create_test_user(&db.pool, "owner@example.com", &password, false).await;
+    let policy = linking_with_admin_groups(false, false, &["rustrak-admins"]);
+    let identity = OidcIdentity {
+        issuer: "https://id.example.com".to_string(),
+        subject: "owner-subject".to_string(),
+        email: "owner@example.com".to_string(),
+        email_verified: true,
+        groups: vec!["rustrak-admins".to_string()],
+    };
+
+    // Matching the email alone must not touch the role: proving ownership is
+    // what unlocks the claim.
+    let outcome = UsersService::find_or_provision_oidc(&db.pool, &identity, policy.clone())
+        .await
+        .unwrap();
+    assert!(matches!(outcome, OidcOutcome::ConfirmWithPassword(_)));
+    let before = UsersService::get_by_id(&db.pool, existing.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!before.is_admin(), "an unconfirmed link changes nothing");
+
+    let linked =
+        UsersService::confirm_oidc_link(&db.pool, &identity, existing.id, &password, &policy)
+            .await
+            .expect("the right password links the identity and applies its groups");
+    assert!(linked.is_admin());
 }

@@ -9,16 +9,17 @@ use actix_web::dev::{Service, ServiceResponse};
 use actix_web::{test, web, App, HttpRequest, HttpResponse, HttpServer};
 use base64::Engine;
 use openidconnect::core::{
-    CoreEdDsaPrivateSigningKey, CoreIdToken, CoreIdTokenClaims, CoreIdTokenFields,
-    CoreJsonWebKeySet, CoreJwsSigningAlgorithm, CoreProviderMetadata, CoreResponseType,
-    CoreSubjectIdentifierType, CoreTokenResponse, CoreTokenType,
+    CoreEdDsaPrivateSigningKey, CoreGenderClaim, CoreJsonWebKeySet,
+    CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm, CoreProviderMetadata,
+    CoreResponseType, CoreSubjectIdentifierType, CoreTokenType,
 };
 use openidconnect::{
-    AccessToken, Audience, AuthUrl, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata,
-    EmptyExtraTokenFields, EndUserEmail, IssuerUrl, JsonWebKeyId, JsonWebKeySetUrl, Nonce,
-    PrivateSigningKey, ResponseTypes, StandardClaims, SubjectIdentifier, TokenUrl,
+    AccessToken, Audience, AuthUrl, EmptyAdditionalProviderMetadata, EmptyExtraTokenFields,
+    EndUserEmail, IdToken, IdTokenClaims, IdTokenFields, IssuerUrl, JsonWebKeyId, JsonWebKeySetUrl,
+    Nonce, PrivateSigningKey, ResponseTypes, StandardClaims, StandardTokenResponse,
+    SubjectIdentifier, TokenUrl,
 };
-use rustrak::auth::OidcService;
+use rustrak::auth::{OidcService, SsoClaims};
 use rustrak::config::OidcConfig;
 use rustrak::routes;
 use rustrak::services::UsersService;
@@ -42,6 +43,7 @@ struct ProviderUser {
     subject: String,
     email: String,
     email_verified: bool,
+    groups: Vec<String>,
 }
 
 struct PendingCode {
@@ -142,7 +144,17 @@ impl FakeProvider {
             auto_provision: true,
             require_email_verified: true,
             link_existing_accounts: false,
+            groups_claim: "groups".to_string(),
+            admin_groups: Vec::new(),
+            disable_password_login: false,
         }
+    }
+
+    /// The same provider, mapping one group to the global admin role.
+    fn config_with_admin_group(&self, group: &str) -> OidcConfig {
+        let mut config = self.config();
+        config.admin_groups = vec![group.to_string()];
+        config
     }
 }
 
@@ -219,7 +231,9 @@ async fn token(
 
     let now = chrono::Utc::now();
     let nonce = state.forged_nonce.clone().unwrap_or(pending.nonce);
-    let claims = CoreIdTokenClaims::new(
+    let mut extra = SsoClaims::default();
+    extra.insert("groups", serde_json::json!(state.user.groups));
+    let claims = IdTokenClaims::<SsoClaims, CoreGenderClaim>::new(
         IssuerUrl::new(state.issuer.clone()).unwrap(),
         vec![Audience::new(CLIENT_ID.to_string())],
         now + chrono::Duration::minutes(5),
@@ -227,10 +241,15 @@ async fn token(
         StandardClaims::new(SubjectIdentifier::new(state.user.subject.clone()))
             .set_email(Some(EndUserEmail::new(state.user.email.clone())))
             .set_email_verified(Some(state.user.email_verified)),
-        EmptyAdditionalClaims {},
+        extra,
     )
     .set_nonce(Some(Nonce::new(nonce)));
-    let id_token = CoreIdToken::new(
+    let id_token = IdToken::<
+        SsoClaims,
+        CoreGenderClaim,
+        CoreJweContentEncryptionAlgorithm,
+        CoreJwsSigningAlgorithm,
+    >::new(
         claims,
         state.signing_key.as_ref(),
         CoreJwsSigningAlgorithm::EdDsa,
@@ -239,10 +258,19 @@ async fn token(
     )
     .unwrap();
 
-    HttpResponse::Ok().json(CoreTokenResponse::new(
+    HttpResponse::Ok().json(StandardTokenResponse::<
+        IdTokenFields<
+            SsoClaims,
+            EmptyExtraTokenFields,
+            CoreGenderClaim,
+            CoreJweContentEncryptionAlgorithm,
+            CoreJwsSigningAlgorithm,
+        >,
+        CoreTokenType,
+    >::new(
         AccessToken::new("access-token".to_string()),
         CoreTokenType::Bearer,
-        CoreIdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
+        IdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
     ))
 }
 
@@ -255,6 +283,16 @@ fn person(subject: &str, email: &str) -> ProviderUser {
         subject: subject.to_string(),
         email: email.to_string(),
         email_verified: true,
+        groups: Vec::new(),
+    }
+}
+
+/// The same person, carrying a group list the provider will sign into the ID
+/// token.
+fn person_in_groups(subject: &str, email: &str, groups: &[&str]) -> ProviderUser {
+    ProviderUser {
+        groups: groups.iter().map(|group| group.to_string()).collect(),
+        ..person(subject, email)
     }
 }
 
@@ -734,4 +772,137 @@ async fn test_sso_callback_tells_a_non_browser_client_to_confirm_the_link() {
     let cookie = session_cookie(&resp).expect("the pending link is kept for the client");
     let resp = confirm_link(&app, cookie, "password123").await;
     assert_eq!(resp.status(), 200);
+}
+
+#[actix_web::test]
+async fn test_sso_groups_decide_the_role_of_the_account() {
+    let db = TestDb::new().await;
+    let provider = FakeProvider::start(person_in_groups(
+        "sub-1",
+        "owner@example.com",
+        &["rustrak-admins"],
+    ))
+    .await;
+    let service = OidcService::discover(provider.config_with_admin_group("rustrak-admins"))
+        .await
+        .unwrap();
+    let app = rustrak_app(&db.pool, Some(service)).await;
+
+    let login = start_login(&app).await;
+    let resp = browser_callback(&app, login.cookie, &login.callback_query).await;
+    assert_eq!(resp.status(), 302);
+    let cookie = session_cookie(&resp).expect("the callback signs the browser in");
+    let me = current_user(&app, cookie)
+        .await
+        .expect("the new session is authenticated");
+    assert_eq!(me["role"], "admin", "a member of the admin group is admin");
+
+    provider.set_user(person_in_groups("sub-2", "second@example.com", &["users"]));
+    let login = start_login(&app).await;
+    let resp = browser_callback(&app, login.cookie, &login.callback_query).await;
+    let cookie = session_cookie(&resp).expect("the callback signs the browser in");
+    let me = current_user(&app, cookie)
+        .await
+        .expect("the new session is authenticated");
+    assert_eq!(me["role"], "member", "everyone else is a member");
+
+    provider.set_user(person_in_groups(
+        "sub-2",
+        "second@example.com",
+        &["users", "rustrak-admins"],
+    ));
+    let login = start_login(&app).await;
+    let resp = browser_callback(&app, login.cookie, &login.callback_query).await;
+    let cookie = session_cookie(&resp).expect("the callback signs the browser in");
+    let me = current_user(&app, cookie)
+        .await
+        .expect("the session is authenticated");
+    assert_eq!(
+        me["role"], "admin",
+        "joining the group promotes on the next login"
+    );
+}
+
+#[actix_web::test]
+async fn test_password_login_can_be_disabled_without_blocking_the_superuser() {
+    let db = TestDb::new().await;
+    let primary = create_password_account(&db.pool, "owner@example.com").await;
+    let member = UsersService::create_user(
+        &db.pool,
+        &rustrak::models::CreateUserRequest {
+            email: "member@example.com".to_string(),
+            password: "password123".to_string(),
+        },
+        rustrak::models::UserRole::Member,
+    )
+    .await
+    .unwrap();
+
+    let provider = FakeProvider::start(person("sub-1", "owner@example.com")).await;
+    let mut config = provider.config();
+    config.disable_password_login = true;
+    let service = OidcService::discover(config).await.unwrap();
+    let app = rustrak_app(&db.pool, Some(service)).await;
+
+    let body: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::get()
+            .uri("/auth/sso/config")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(body["enabled"], true);
+    assert_eq!(body["password_login_enabled"], false);
+
+    let denied = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/auth/login")
+            .set_json(serde_json::json!({
+                "email": member.email,
+                "password": "password123",
+            }))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(
+        denied.status(),
+        403,
+        "a non-primary account must not sign in with a password"
+    );
+
+    // The documented break-glass: the account CREATE_SUPERUSER creates.
+    let allowed = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/auth/login")
+            .set_json(serde_json::json!({
+                "email": primary.email,
+                "password": "password123",
+            }))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(
+        allowed.status(),
+        200,
+        "the primary account stays as break-glass"
+    );
+}
+
+#[actix_web::test]
+async fn test_sso_config_says_password_login_is_available_by_default() {
+    let db = TestDb::new().await;
+    let provider = FakeProvider::start(person("sub-1", "owner@example.com")).await;
+    let service = OidcService::discover(provider.config()).await.unwrap();
+    let app = rustrak_app(&db.pool, Some(service)).await;
+
+    let body: Value = test::call_and_read_body_json(
+        &app,
+        test::TestRequest::get()
+            .uri("/auth/sso/config")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(body["password_login_enabled"], true);
 }

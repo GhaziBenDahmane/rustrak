@@ -94,6 +94,7 @@ async fn app_configured(
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(config))
             .app_data(web::Data::new(clients))
+            .app_data(web::Data::new(None::<rustrak::auth::OidcService>))
             .wrap(
                 SessionMiddleware::builder(CookieSessionStore::default(), Key::from(&[0u8; 64]))
                     .cookie_secure(false)

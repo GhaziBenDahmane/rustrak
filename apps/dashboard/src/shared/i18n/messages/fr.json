@@ -1384,6 +1384,7 @@
       "ssoRedirecting": "Redirection...",
       "ssoFailure": "L’authentification unique a échoué. Veuillez réessayer.",
       "or": "ou",
+      "passwordLoginDisabled": "La connexion par mot de passe est désactivée. Utilisez {provider} pour continuer.",
       "invalidCredentials": "E-mail ou mot de passe incorrect",
       "failureNetwork": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
       "failureRateLimited": "Trop de tentatives de connexion. Attendez environ {duration} avant de réessayer.",
