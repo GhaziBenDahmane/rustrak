@@ -1,5 +1,11 @@
 # docs
 
+## 0.16.5
+
+### Patch Changes
+
+- [`c90dcd6`](https://github.com/rustrak/rustrak/commit/c90dcd6b28a7b6a75b3304168c9a1182aaab4bc1) Thanks [@AbianS](https://github.com/AbianS)! - Document the user feedback MCP tools and client methods, and show Open Collective sponsors on the landing page and footer.
+
 ## 0.16.4
 
 ### Patch Changes

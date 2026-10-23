@@ -10,7 +10,7 @@
       "name": "GPL-3.0-only",
       "identifier": "GPL-3.0-only"
     },
-    "version": "0.19.1"
+    "version": "0.20.0"
   },
   "paths": {
     "/api/0/issues/{issue_id}/": {
