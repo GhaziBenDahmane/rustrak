@@ -278,6 +278,12 @@ pub struct ProjectResponse {
     pub id: i32,
     pub name: String,
     pub slug: String,
+    /// The DSN's public key: its 32 hex digits in hyphenated UUID form
+    /// (8-4-4-4-12), not necessarily an RFC 4122 UUID. The DSN carries the
+    /// same key without hyphens.
+    // A key carried over from Sentry is random hex, so the spec must not
+    // promise the version and variant digits a UUID check asserts.
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub sentry_key: Uuid,
     pub dsn: String,
     pub stored_event_count: i32,

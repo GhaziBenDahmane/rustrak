@@ -253,4 +253,50 @@ describe('RustrakClient', () => {
       expect(expectOk(result2).items).toHaveLength(2);
     });
   });
+
+  // A project created with a key carried over from Sentry keeps that key, and
+  // Sentry's keys are random hex: their version and variant digits are not an
+  // RFC 4122 UUID's. The server sends them as they are, so the client must
+  // accept them, or the whole project list fails to load.
+  describe('Project keys', () => {
+    it('accepts a project key that is not an RFC 4122 UUID', async () => {
+      server.use(
+        http.get('http://localhost:8080/api/projects', () =>
+          HttpResponse.json({
+            items: [
+              {
+                id: 1,
+                name: 'Imported',
+                slug: 'imported',
+                sentry_key: 'a1b2c3d4-e5f6-0718-293a-4b5c6d7e8f90',
+                dsn: 'http://a1b2c3d4e5f60718293a4b5c6d7e8f90@localhost:8080/1',
+                stored_event_count: 0,
+                digested_event_count: 0,
+                rate_limited_event_count: 0,
+                rate_limit_per_minute: null,
+                rate_limit_per_hour: null,
+                created_at: '2026-01-20T10:00:00.000Z',
+                updated_at: '2026-01-20T10:00:00.000Z',
+                platform: null,
+              },
+            ],
+            total_count: 1,
+            page: 1,
+            per_page: 20,
+            total_pages: 1,
+          }),
+        ),
+      );
+      const client = new RustrakClient({
+        baseUrl: 'http://localhost:8080',
+        token: 'test-token',
+      });
+
+      const projects = expectOk(await client.projects.list());
+
+      expect(projects.items[0]?.sentry_key).toBe(
+        'a1b2c3d4-e5f6-0718-293a-4b5c6d7e8f90',
+      );
+    });
+  });
 });
