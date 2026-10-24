@@ -8,6 +8,11 @@ ignore = [
     # signatures with the provider's public key and never holds an RSA private
     # key. No patched release exists yet: drop this once `rsa` ships one.
     { id = "RUSTSEC-2023-0071", reason = "only RSA public-key verification is used (OIDC ID tokens)" },
+    # Timing side channels in `crypto-bigint` 0.5, pulled in by `openidconnect`
+    # through `p256`/`p384`. Rustrak only verifies ID token signatures with the
+    # provider's public key; no secret ever goes through it. The fix is 0.7.6,
+    # which `openidconnect` 4 cannot use yet: drop this once it moves to it.
+    { id = "RUSTSEC-2026-0387", reason = "only ECDSA public-key verification is used (OIDC ID tokens)" },
 ]
 [licenses]
 version = 2
