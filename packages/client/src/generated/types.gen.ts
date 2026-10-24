@@ -9,6 +9,15 @@ export type AcceptInvitation = {
     token: string;
 };
 
+export type AcceptInvitationResponse = {
+    /**
+     * Whether the response opened a session. False when password login is
+     * disabled: the account exists, and its owner signs in through SSO.
+     */
+    signed_in: boolean;
+    user: UserResponse;
+};
+
 /**
  * An entry in an issue's activity log. Comments are stored as activity rows of
  * type `note` with `{"text": ...}` in `data` (Sentry models notes as activity).
@@ -7912,9 +7921,9 @@ export type AuthAcceptInvitationError = AuthAcceptInvitationErrors[keyof AuthAcc
 
 export type AuthAcceptInvitationResponses = {
     /**
-     * Invitation accepted, user created and logged in
+     * Invitation accepted and user created; signed in unless password login is disabled
      */
-    201: AuthResponse;
+    201: AcceptInvitationResponse;
 };
 
 export type AuthAcceptInvitationResponse = AuthAcceptInvitationResponses[keyof AuthAcceptInvitationResponses];

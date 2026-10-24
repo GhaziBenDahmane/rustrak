@@ -1,5 +1,6 @@
 import type {
   AcceptInvitation,
+  AcceptInvitationResponse,
   CreateInvitation,
   InvitationResponse,
   LoginRequest,
@@ -97,19 +98,22 @@ export async function logout(): Promise<void> {
 
 /**
  * Accept an invitation by setting a password.
- * On success the backend creates a session, and the browser stores its cookie.
+ * The backend creates a session unless password login is disabled; then the
+ * account exists but `signed_in` is false and the user signs in through SSO.
  */
 export async function acceptInvitation(
   input: AcceptInvitation,
-): Promise<Result<UserResponse, RustrakError>> {
+): Promise<Result<AcceptInvitationResponse, RustrakError>> {
   const client = await createClient();
   const result = await client.auth.acceptInvitation({ body: input });
 
   if (!result.success) return result;
 
-  session.set({ state: 'authenticated', user: result.data.user });
+  if (result.data.signed_in) {
+    session.set({ state: 'authenticated', user: result.data.user });
+  }
 
-  return { success: true, data: result.data.user };
+  return result;
 }
 
 /**

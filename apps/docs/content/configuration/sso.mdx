@@ -211,6 +211,13 @@ login page must not advertise which account that is, it offers one generic
 **Sign in with a password** link that reveals the form; every other account
 gets `403` from it.
 
+Invitations keep working, because without `OIDC_AUTO_PROVISION` they are the
+only way to create an account. Accepting one creates the account with the
+invitation's role but does not sign the browser in: the invitee then signs in
+through the provider. The password they chose is what confirms the link
+between their SSO identity and that account, unless
+`OIDC_LINK_EXISTING_ACCOUNTS` links it on the provider's word.
+
 Rustrak refuses to start when the switch is on without `OIDC_ISSUER_URL`,
 because that combination could not sign anyone in at all.
 

@@ -1434,7 +1434,10 @@
       "accept": "Aceptar y continuar",
       "passwordRequired": "La contraseña es obligatoria",
       "confirmRequired": "Confirma tu contraseña",
-      "passwordsMismatch": "Las contraseñas no coinciden"
+      "passwordsMismatch": "Las contraseñas no coinciden",
+      "createdTitle": "Cuenta creada",
+      "createdUseSso": "El inicio de sesión con contraseña está desactivado en esta instancia. Inicia sesión con el inicio de sesión único, usando el correo al que se envió esta invitación.",
+      "goToLogin": "Ir a iniciar sesión"
     },
     "unavailable": {
       "brandStatement": "Los enlaces caducan",

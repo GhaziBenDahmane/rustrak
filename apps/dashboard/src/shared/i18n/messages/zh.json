@@ -1434,7 +1434,10 @@
       "accept": "接受并继续",
       "passwordRequired": "密码为必填项",
       "confirmRequired": "请确认您的密码",
-      "passwordsMismatch": "两次输入的密码不一致"
+      "passwordsMismatch": "两次输入的密码不一致",
+      "createdTitle": "账户已创建",
+      "createdUseSso": "此实例已禁用密码登录。请使用单点登录，并使用接收此邀请的电子邮件地址。",
+      "goToLogin": "前往登录"
     },
     "unavailable": {
       "brandStatement": "链接会过期",

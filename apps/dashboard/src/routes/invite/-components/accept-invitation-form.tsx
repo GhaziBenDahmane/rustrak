@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslations } from 'use-intl';
 import { z } from 'zod';
@@ -34,6 +34,7 @@ export function AcceptInvitationForm({
   const t = useTranslations('invite');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [awaitingSso, setAwaitingSso] = useState(false);
 
   const acceptSchema = z
     .object({
@@ -60,7 +61,13 @@ export function AcceptInvitationForm({
       const result = await acceptInvitation({ token, password: data.password });
 
       if (result.success) {
-        router.push('/projects');
+        // With password login disabled the account exists but no session was
+        // opened: the way in is the provider, from the login page.
+        if (result.data.signed_in) {
+          router.push('/projects');
+        } else {
+          setAwaitingSso(true);
+        }
       } else {
         form.setError('confirmPassword', {
           type: 'server',
@@ -69,6 +76,26 @@ export function AcceptInvitationForm({
       }
     });
   };
+
+  if (awaitingSso) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">
+            {t('form.createdTitle')}
+          </h1>
+          <p className="text-muted-foreground">{t('form.createdUseSso')}</p>
+        </div>
+        <Button
+          type="button"
+          className="w-full font-extrabold uppercase tracking-widest text-xs py-6"
+          onClick={() => router.push('/login')}
+        >
+          {t('form.goToLogin')}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

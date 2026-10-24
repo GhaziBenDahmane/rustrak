@@ -1434,7 +1434,10 @@
       "accept": "Accepter et continuer",
       "passwordRequired": "Le mot de passe est obligatoire",
       "confirmRequired": "Veuillez confirmer votre mot de passe",
-      "passwordsMismatch": "Les mots de passe ne correspondent pas"
+      "passwordsMismatch": "Les mots de passe ne correspondent pas",
+      "createdTitle": "Compte créé",
+      "createdUseSso": "La connexion par mot de passe est désactivée sur cette instance. Connectez-vous avec l’authentification unique, en utilisant l’adresse e-mail à laquelle cette invitation a été envoyée.",
+      "goToLogin": "Aller à la connexion"
     },
     "unavailable": {
       "brandStatement": "Les liens expirent",

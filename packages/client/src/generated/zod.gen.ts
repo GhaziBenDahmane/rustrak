@@ -1903,6 +1903,11 @@ export const zUserResponse = z.object({
     timezone: z.string().nullable()
 });
 
+export const zAcceptInvitationResponse = z.object({
+    signed_in: z.boolean(),
+    user: zUserResponse
+});
+
 export const zAuthResponse = z.object({
     user: zUserResponse
 });
@@ -3577,9 +3582,9 @@ export const zTokensGetResponse = zAuthTokenCreatedResponse;
 export const zAuthAcceptInvitationBody = zAcceptInvitation;
 
 /**
- * Invitation accepted, user created and logged in
+ * Invitation accepted and user created; signed in unless password login is disabled
  */
-export const zAuthAcceptInvitationResponse = zAuthResponse;
+export const zAuthAcceptInvitationResponse = zAcceptInvitationResponse;
 
 export const zAuthGetInvitationPath = z.object({
     token: z.string()

@@ -890,6 +890,100 @@ async fn test_password_login_can_be_disabled_without_blocking_the_superuser() {
     );
 }
 
+/// Without auto-provisioning an invitation is the only way to create an
+/// account, so SSO-only must still let it be accepted. What it must not do is
+/// sign the browser in on a password: the account comes into being and the
+/// person enters through the provider like everyone else.
+#[actix_web::test]
+async fn test_accepting_an_invitation_under_sso_only_does_not_sign_in() {
+    let db = TestDb::new().await;
+    create_password_account(&db.pool, "owner@example.com").await;
+    sqlx::query(
+        "INSERT INTO invitations (token, email, role, status, expires_at) VALUES ($1, $2, 'member', 'pending', $3)",
+    )
+    .bind("sso-only-invite")
+    .bind("invitee@example.com")
+    .bind(chrono::Utc::now() + chrono::Duration::days(1))
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let provider = FakeProvider::start(person("sub-1", "invitee@example.com")).await;
+    let mut config = provider.config();
+    config.disable_password_login = true;
+    let service = OidcService::discover(config).await.unwrap();
+    let app = rustrak_app(&db.pool, Some(service)).await;
+
+    let resp = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/auth/accept-invitation")
+            .set_json(serde_json::json!({
+                "token": "sso-only-invite",
+                "password": "password123",
+            }))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(resp.status(), 201);
+    let cookie = session_cookie(&resp);
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["user"]["email"], "invitee@example.com");
+    assert_eq!(body["signed_in"], false);
+
+    let mut me = test::TestRequest::get().uri("/auth/me");
+    if let Some(cookie) = cookie {
+        me = me.cookie(cookie);
+    }
+    let me = test::call_service(&app, me.to_request()).await;
+    assert_eq!(me.status(), 401, "no session comes out of a password");
+}
+
+#[actix_web::test]
+async fn test_accepting_an_invitation_signs_in_when_passwords_are_allowed() {
+    let db = TestDb::new().await;
+    create_password_account(&db.pool, "owner@example.com").await;
+    sqlx::query(
+        "INSERT INTO invitations (token, email, role, status, expires_at) VALUES ($1, $2, 'member', 'pending', $3)",
+    )
+    .bind("plain-invite")
+    .bind("invitee@example.com")
+    .bind(chrono::Utc::now() + chrono::Duration::days(1))
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let provider = FakeProvider::start(person("sub-1", "invitee@example.com")).await;
+    let service = OidcService::discover(provider.config()).await.unwrap();
+    let app = rustrak_app(&db.pool, Some(service)).await;
+
+    let resp = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/auth/accept-invitation")
+            .set_json(serde_json::json!({
+                "token": "plain-invite",
+                "password": "password123",
+            }))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(resp.status(), 201);
+    let cookie = session_cookie(&resp).expect("a session cookie");
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["signed_in"], true);
+
+    let me = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/auth/me")
+            .cookie(cookie)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(me.status(), 200);
+}
+
 #[actix_web::test]
 async fn test_sso_config_says_password_login_is_available_by_default() {
     let db = TestDb::new().await;

@@ -439,10 +439,10 @@ impl UsersService {
         if user.role == role.as_str() {
             return Ok(());
         }
-        let (primary,): (Option<i32>,) = sqlx::query_as("SELECT MIN(id) FROM users")
-            .fetch_one(&mut **tx)
-            .await?;
-        if primary == Some(user.id) && user.is_admin() && role == UserRole::Member {
+        if Self::primary_user_id(&mut **tx).await? == Some(user.id)
+            && user.is_admin()
+            && role == UserRole::Member
+        {
             return Ok(());
         }
 
@@ -489,9 +489,15 @@ impl UsersService {
     /// The primary user = the first-registered account (lowest id), i.e. the
     /// bootstrap superuser Rustrak was set up with. It is protected from demotion
     /// and deletion. Returns `None` only when there are no users.
-    pub async fn primary_user_id(pool: &DbPool) -> AppResult<Option<i32>> {
+    ///
+    /// Takes a pool or a transaction, so a write that guards the primary
+    /// account can read it under the same lock.
+    pub async fn primary_user_id<'e, E>(executor: E) -> AppResult<Option<i32>>
+    where
+        E: sqlx::Executor<'e, Database = crate::db::Db>,
+    {
         let row: (Option<i32>,) = sqlx::query_as("SELECT MIN(id) FROM users")
-            .fetch_one(pool)
+            .fetch_one(executor)
             .await?;
 
         Ok(row.0)

@@ -11001,11 +11001,11 @@
         },
         "responses": {
           "201": {
-            "description": "Invitation accepted, user created and logged in",
+            "description": "Invitation accepted and user created; signed in unless password login is disabled",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthResponse"
+                  "$ref": "#/components/schemas/AcceptInvitationResponse"
                 }
               }
             }
@@ -11754,6 +11754,22 @@
           },
           "token": {
             "type": "string"
+          }
+        }
+      },
+      "AcceptInvitationResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "signed_in"
+        ],
+        "properties": {
+          "signed_in": {
+            "type": "boolean",
+            "description": "Whether the response opened a session. False when password login is\ndisabled: the account exists, and its owner signs in through SSO."
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
           }
         }
       },

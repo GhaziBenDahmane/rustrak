@@ -1434,7 +1434,10 @@
       "accept": "Acceptă și continuă",
       "passwordRequired": "Parola este obligatorie",
       "confirmRequired": "Te rugăm să confirmi parola",
-      "passwordsMismatch": "Parolele nu coincid"
+      "passwordsMismatch": "Parolele nu coincid",
+      "createdTitle": "Cont creat",
+      "createdUseSso": "Autentificarea cu parolă este dezactivată pe această instanță. Autentifică-te prin autentificare unică, folosind adresa de e-mail la care a fost trimisă această invitație.",
+      "goToLogin": "Mergi la autentificare"
     },
     "unavailable": {
       "brandStatement": "Linkurile expiră",

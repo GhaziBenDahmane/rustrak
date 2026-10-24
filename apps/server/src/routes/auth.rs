@@ -24,6 +24,15 @@ struct AuthResponse {
 
 #[derive(Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+struct AcceptInvitationResponse {
+    user: UserResponse,
+    /// Whether the response opened a session. False when password login is
+    /// disabled: the account exists, and its owner signs in through SSO.
+    signed_in: bool,
+}
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 struct UserResponse {
     id: i32,
     email: String,
@@ -198,7 +207,7 @@ pub async fn register(
     tag = "Auth",
     request_body = AcceptInvitation,
     responses(
-        (status = 201, description = "Invitation accepted, user created and logged in", body = AuthResponse),
+        (status = 201, description = "Invitation accepted and user created; signed in unless password login is disabled", body = AcceptInvitationResponse),
         (status = 400, description = "Invalid or expired invitation", body = crate::error::ErrorResponse),
     ),
     security(()),
@@ -207,14 +216,32 @@ pub async fn register(
 /// Accept a pending invitation: creates the user (with the invite's email + role) and logs in.
 pub async fn accept_invitation(
     pool: web::Data<crate::db::DbPool>,
+    oidc: web::Data<Option<OidcService>>,
     session: Session,
     req: web::Json<AcceptInvitation>,
 ) -> AppResult<impl Responder> {
     let user = InvitationService::accept(pool.get_ref(), &req.token, &req.password).await?;
 
-    auth::set_user_session(&session, user.id)?;
+    // Under OIDC_DISABLE_PASSWORD_LOGIN the account is still created, since
+    // without auto-provisioning an invitation is the only way to make one, but
+    // the password does not open a session: the person signs in through the
+    // provider, and the password only confirms the SSO link to this account.
+    let signed_in = !password_login_disabled(&oidc);
+    if signed_in {
+        auth::set_user_session(&session, user.id)?;
+    }
 
-    Ok(HttpResponse::Created().json(AuthResponse { user: user.into() }))
+    Ok(HttpResponse::Created().json(AcceptInvitationResponse {
+        user: user.into(),
+        signed_in,
+    }))
+}
+
+/// Whether the operator turned password sign-in off.
+fn password_login_disabled(oidc: &web::Data<Option<OidcService>>) -> bool {
+    oidc.as_ref()
+        .as_ref()
+        .is_some_and(|service| service.password_login_disabled())
 }
 
 #[cfg_attr(feature = "openapi", utoipa::path(
@@ -295,11 +322,9 @@ pub async fn login(
     // CREATE_SUPERUSER created, and blocking it too would leave a provider
     // outage with no way back. The check comes after the password so it does
     // not tell an anonymous caller which account is primary.
-    let sso_only = oidc
-        .as_ref()
-        .as_ref()
-        .is_some_and(|service| service.password_login_disabled());
-    if sso_only && UsersService::primary_user_id(pool.get_ref()).await? != Some(user.id) {
+    if password_login_disabled(&oidc)
+        && UsersService::primary_user_id(pool.get_ref()).await? != Some(user.id)
+    {
         return Err(AppError::Forbidden(
             "Password login is disabled; sign in through SSO".to_string(),
         ));

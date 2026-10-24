@@ -1434,7 +1434,10 @@
       "accept": "Accept & continue",
       "passwordRequired": "Password is required",
       "confirmRequired": "Please confirm your password",
-      "passwordsMismatch": "Passwords do not match"
+      "passwordsMismatch": "Passwords do not match",
+      "createdTitle": "Account created",
+      "createdUseSso": "Password sign-in is disabled on this instance. Sign in with single sign-on, using the email this invitation was sent to.",
+      "goToLogin": "Go to sign in"
     },
     "unavailable": {
       "brandStatement": "Links expire",
