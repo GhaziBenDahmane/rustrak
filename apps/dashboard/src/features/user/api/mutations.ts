@@ -109,8 +109,12 @@ export async function acceptInvitation(
 
   if (!result.success) return result;
 
+  // Not signed in means the server also ended any session this browser had,
+  // so the store must not keep showing that other account.
   if (result.data.signed_in) {
     session.set({ state: 'authenticated', user: result.data.user });
+  } else {
+    session.clear();
   }
 
   return result;

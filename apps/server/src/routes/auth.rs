@@ -226,9 +226,14 @@ pub async fn accept_invitation(
     // without auto-provisioning an invitation is the only way to make one, but
     // the password does not open a session: the person signs in through the
     // provider, and the password only confirms the SSO link to this account.
+    // A session the browser already had belongs to someone else; keeping it
+    // would leave them signed in as that account while the page tells them
+    // to sign in as this one.
     let signed_in = !password_login_disabled(&oidc);
     if signed_in {
         auth::set_user_session(&session, user.id)?;
+    } else {
+        auth::clear_session(&session);
     }
 
     Ok(HttpResponse::Created().json(AcceptInvitationResponse {

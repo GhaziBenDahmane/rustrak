@@ -939,6 +939,70 @@ async fn test_accepting_an_invitation_under_sso_only_does_not_sign_in() {
     assert_eq!(me.status(), 401, "no session comes out of a password");
 }
 
+/// A browser already signed in as someone else must not stay signed in as
+/// them after creating a different account it cannot enter with a password:
+/// the page says "now sign in through SSO" while the cookie still says A.
+#[actix_web::test]
+async fn test_accepting_an_invitation_under_sso_only_ends_an_existing_session() {
+    let db = TestDb::new().await;
+    let primary = create_password_account(&db.pool, "owner@example.com").await;
+    sqlx::query(
+        "INSERT INTO invitations (token, email, role, status, expires_at) VALUES ($1, $2, 'member', 'pending', $3)",
+    )
+    .bind("sso-only-invite")
+    .bind("invitee@example.com")
+    .bind(chrono::Utc::now() + chrono::Duration::days(1))
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let provider = FakeProvider::start(person("sub-1", "invitee@example.com")).await;
+    let mut config = provider.config();
+    config.disable_password_login = true;
+    let service = OidcService::discover(config).await.unwrap();
+    let app = rustrak_app(&db.pool, Some(service)).await;
+
+    // The primary account is the one that may still use its password.
+    let login = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/auth/login")
+            .set_json(serde_json::json!({
+                "email": primary.email,
+                "password": "password123",
+            }))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(login.status(), 200);
+    let signed_in_as_primary = session_cookie(&login).expect("a session cookie");
+
+    let resp = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/auth/accept-invitation")
+            .cookie(signed_in_as_primary.clone())
+            .set_json(serde_json::json!({
+                "token": "sso-only-invite",
+                "password": "password123",
+            }))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(resp.status(), 201);
+    let cookie = session_cookie(&resp).unwrap_or(signed_in_as_primary);
+
+    let me = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/auth/me")
+            .cookie(cookie)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(me.status(), 401, "the previous session must end");
+}
+
 #[actix_web::test]
 async fn test_accepting_an_invitation_signs_in_when_passwords_are_allowed() {
     let db = TestDb::new().await;
